@@ -1,0 +1,31 @@
+id,name
+1,DAG:verify_hyperbrowser_profile_setup
+2,DAG:create_content
+3,DAG:clean_content
+4,DAG:create_automa
+5,DAG:hyperbrowser_profile_setup
+6,DAG:execute_puppeteer
+7,DAG:execute_automa_workflows
+8,DAG:filter_links
+9,DAG:extract_links
+10,DAG:delete_workflows
+11,IndexView
+12,UtilView
+13,LocaleView
+14,Passwords
+15,My Password
+16,My Profile
+17,AuthDBView
+18,Users
+19,List Users
+20,Security
+21,Roles
+22,List Roles
+23,User Stats Chart
+24,User's Statistics
+25,Permissions
+26,Actions
+27,View Menus
+28,Resources
+29,Permission Views
+30,Permission Pairs

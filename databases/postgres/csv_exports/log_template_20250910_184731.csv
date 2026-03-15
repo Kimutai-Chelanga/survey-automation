@@ -1,0 +1,3 @@
+id,filename,elasticsearch_id,created_at
+1,{{ ti.dag_id }}/{{ ti.task_id }}/{{ ts }}/{{ try_number }}.log,{dag_id}-{task_id}-{execution_date}-{try_number},2025-09-10 21:42:41.442425+03
+2,dag_id={{ ti.dag_id }}/run_id={{ ti.run_id }}/task_id={{ ti.task_id }}/{% if ti.map_index >= 0 %}map_index={{ ti.map_index }}/{% endif %}attempt={{ try_number }}.log,{dag_id}-{task_id}-{run_id}-{map_index}-{try_number},2025-09-10 21:42:41.442435+03

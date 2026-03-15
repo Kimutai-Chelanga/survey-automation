@@ -1,0 +1,830 @@
+
+  ____________       _____________
+ ____    |__( )_________  __/__  /________      __
+____  /| |_  /__  ___/_  /_ __  /_  __ \_ | /| / /
+___  ___ |  / _  /   _  __/ _  / / /_/ /_ |/ |/ /
+ _/_/  |_/_/  /_/    /_/    /_/  \____/____/|__/
+w[[34m2026-01-08T16:58:18.349+0300[0m] {[34mexecutor_loader.py:[0m117} INFO[0m - Loaded executor: LocalExecutor[0m
+[[34m2026-01-08T16:58:18.422+0300[0m] {[34mscheduler_job_runner.py:[0m798} INFO[0m - Starting the scheduler[0m
+[[34m2026-01-08T16:58:18.422+0300[0m] {[34mscheduler_job_runner.py:[0m805} INFO[0m - Processing each file at most -1 times[0m
+[[34m2026-01-08T16:58:18.455+0300[0m] {[34mmanager.py:[0m166} INFO[0m - Launched DagFileProcessorManager with pid: 54[0m
+[[34m2026-01-08T16:58:18.457+0300[0m] {[34mscheduler_job_runner.py:[0m1586} INFO[0m - Adopting or resetting orphaned tasks for active dag runs[0m
+[[34m2026-01-08T16:58:18.461+0300[0m] {[34msettings.py:[0m60} INFO[0m - Configured default timezone Timezone('Africa/Nairobi')[0m
+[[34m2026-01-08T17:03:18.538+0300[0m] {[34mscheduler_job_runner.py:[0m1586} INFO[0m - Adopting or resetting orphaned tasks for active dag runs[0m
+[[34m2026-01-08T17:04:26.822+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: create_content_by_account.log_daily_configuration manual__2026-01-08T14:04:24.805889+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:04:26.822+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG create_content_by_account has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:04:26.822+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: create_content_by_account.log_daily_configuration manual__2026-01-08T14:04:24.805889+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:04:26.824+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task log_daily_configuration because previous state change time has not been saved[0m
+[[34m2026-01-08T17:04:26.825+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='create_content_by_account', task_id='log_daily_configuration', run_id='manual__2026-01-08T14:04:24.805889+00:00', try_number=1, map_index=-1) to executor with priority 4 and queue default[0m
+[[34m2026-01-08T17:04:26.825+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'create_content_by_account', 'log_daily_configuration', 'manual__2026-01-08T14:04:24.805889+00:00', '--local', '--subdir', 'DAGS_FOLDER/create_content.py'][0m
+[[34m2026-01-08T17:04:26.827+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'create_content_by_account', 'log_daily_configuration', 'manual__2026-01-08T14:04:24.805889+00:00', '--local', '--subdir', 'DAGS_FOLDER/create_content.py'][0m
+[[34m2026-01-08T17:04:26.869+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/create_content.py[0m
+[[34m2026-01-08T17:04:28.366+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: create_content_by_account.log_daily_configuration manual__2026-01-08T14:04:24.805889+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:04:28.955+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: create_content_by_account.refresh_generation_settings manual__2026-01-08T14:04:24.805889+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:04:28.955+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG create_content_by_account has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:04:28.955+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: create_content_by_account.refresh_generation_settings manual__2026-01-08T14:04:24.805889+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:04:28.957+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task refresh_generation_settings because previous state change time has not been saved[0m
+[[34m2026-01-08T17:04:28.957+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='create_content_by_account', task_id='refresh_generation_settings', run_id='manual__2026-01-08T14:04:24.805889+00:00', try_number=1, map_index=-1) to executor with priority 3 and queue default[0m
+[[34m2026-01-08T17:04:28.957+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'create_content_by_account', 'refresh_generation_settings', 'manual__2026-01-08T14:04:24.805889+00:00', '--local', '--subdir', 'DAGS_FOLDER/create_content.py'][0m
+[[34m2026-01-08T17:04:28.959+0300[0m] {[34mscheduler_job_runner.py:[0m686} INFO[0m - Received executor event with state success for task instance TaskInstanceKey(dag_id='create_content_by_account', task_id='log_daily_configuration', run_id='manual__2026-01-08T14:04:24.805889+00:00', try_number=1, map_index=-1)[0m
+[[34m2026-01-08T17:04:28.959+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'create_content_by_account', 'refresh_generation_settings', 'manual__2026-01-08T14:04:24.805889+00:00', '--local', '--subdir', 'DAGS_FOLDER/create_content.py'][0m
+[[34m2026-01-08T17:04:28.965+0300[0m] {[34mscheduler_job_runner.py:[0m723} INFO[0m - TaskInstance Finished: dag_id=create_content_by_account, task_id=log_daily_configuration, run_id=manual__2026-01-08T14:04:24.805889+00:00, map_index=-1, run_start_date=2026-01-08 14:04:28.531569+00:00, run_end_date=2026-01-08 14:04:28.762090+00:00, run_duration=0.230521, state=success, executor_state=success, try_number=1, max_tries=0, job_id=2, pool=default_pool, queue=default, priority_weight=4, operator=PythonOperator, queued_dttm=2026-01-08 14:04:26.823396+00:00, queued_by_job_id=1, pid=749[0m
+[[34m2026-01-08T17:04:28.986+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/create_content.py[0m
+[[34m2026-01-08T17:04:29.458+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: create_content_by_account.refresh_generation_settings manual__2026-01-08T14:04:24.805889+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:04:29.945+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: create_content_by_account.generate_content_for_today manual__2026-01-08T14:04:24.805889+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:04:29.946+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG create_content_by_account has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:04:29.946+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: create_content_by_account.generate_content_for_today manual__2026-01-08T14:04:24.805889+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:04:29.947+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task generate_content_for_today because previous state change time has not been saved[0m
+[[34m2026-01-08T17:04:29.948+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='create_content_by_account', task_id='generate_content_for_today', run_id='manual__2026-01-08T14:04:24.805889+00:00', try_number=1, map_index=-1) to executor with priority 2 and queue default[0m
+[[34m2026-01-08T17:04:29.948+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'create_content_by_account', 'generate_content_for_today', 'manual__2026-01-08T14:04:24.805889+00:00', '--local', '--subdir', 'DAGS_FOLDER/create_content.py'][0m
+[[34m2026-01-08T17:04:29.950+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'create_content_by_account', 'generate_content_for_today', 'manual__2026-01-08T14:04:24.805889+00:00', '--local', '--subdir', 'DAGS_FOLDER/create_content.py'][0m
+[[34m2026-01-08T17:04:29.986+0300[0m] {[34mscheduler_job_runner.py:[0m686} INFO[0m - Received executor event with state success for task instance TaskInstanceKey(dag_id='create_content_by_account', task_id='refresh_generation_settings', run_id='manual__2026-01-08T14:04:24.805889+00:00', try_number=1, map_index=-1)[0m
+[[34m2026-01-08T17:04:29.989+0300[0m] {[34mscheduler_job_runner.py:[0m723} INFO[0m - TaskInstance Finished: dag_id=create_content_by_account, task_id=refresh_generation_settings, run_id=manual__2026-01-08T14:04:24.805889+00:00, map_index=-1, run_start_date=2026-01-08 14:04:29.630012+00:00, run_end_date=2026-01-08 14:04:29.861684+00:00, run_duration=0.231672, state=success, executor_state=success, try_number=1, max_tries=0, job_id=3, pool=default_pool, queue=default, priority_weight=3, operator=PythonOperator, queued_dttm=2026-01-08 14:04:28.956056+00:00, queued_by_job_id=1, pid=754[0m
+[[34m2026-01-08T17:04:29.976+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/create_content.py[0m
+[[34m2026-01-08T17:04:30.468+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: create_content_by_account.generate_content_for_today manual__2026-01-08T14:04:24.805889+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:04:36.896+0300[0m] {[34mdagrun.py:[0m653} INFO[0m - Marking run <DagRun create_content_by_account @ 2026-01-08 14:04:24.805889+00:00: manual__2026-01-08T14:04:24.805889+00:00, state:running, queued_at: 2026-01-08 14:04:24.825567+00:00. externally triggered: True> successful[0m
+[[34m2026-01-08T17:04:36.896+0300[0m] {[34mdagrun.py:[0m704} INFO[0m - DagRun Finished: dag_id=create_content_by_account, execution_date=2026-01-08 14:04:24.805889+00:00, run_id=manual__2026-01-08T14:04:24.805889+00:00, run_start_date=2026-01-08 14:04:25.736023+00:00, run_end_date=2026-01-08 14:04:36.896791+00:00, run_duration=11.160768, state=success, external_trigger=True, run_type=manual, data_interval_start=2026-01-08 14:04:24.805889+00:00, data_interval_end=2026-01-08 14:04:24.805889+00:00, dag_hash=ba371dd52f82e939e1466c8f27596b9a[0m
+[[34m2026-01-08T17:04:36.905+0300[0m] {[34mscheduler_job_runner.py:[0m686} INFO[0m - Received executor event with state success for task instance TaskInstanceKey(dag_id='create_content_by_account', task_id='generate_content_for_today', run_id='manual__2026-01-08T14:04:24.805889+00:00', try_number=1, map_index=-1)[0m
+[[34m2026-01-08T17:04:36.908+0300[0m] {[34mscheduler_job_runner.py:[0m723} INFO[0m - TaskInstance Finished: dag_id=create_content_by_account, task_id=generate_content_for_today, run_id=manual__2026-01-08T14:04:24.805889+00:00, map_index=-1, run_start_date=2026-01-08 14:04:30.825937+00:00, run_end_date=2026-01-08 14:04:35.836483+00:00, run_duration=5.010546, state=success, executor_state=success, try_number=1, max_tries=0, job_id=4, pool=default_pool, queue=default, priority_weight=2, operator=PythonOperator, queued_dttm=2026-01-08 14:04:29.946932+00:00, queued_by_job_id=1, pid=759[0m
+[[34m2026-01-08T17:05:33.285+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: create_automa_account_centric.generate_automa_workflows_account_centric manual__2026-01-08T14:05:32.291492+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:05:33.286+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG create_automa_account_centric has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:05:33.287+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: create_automa_account_centric.generate_automa_workflows_account_centric manual__2026-01-08T14:05:32.291492+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:05:33.290+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task generate_automa_workflows_account_centric because previous state change time has not been saved[0m
+[[34m2026-01-08T17:05:33.291+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='create_automa_account_centric', task_id='generate_automa_workflows_account_centric', run_id='manual__2026-01-08T14:05:32.291492+00:00', try_number=1, map_index=-1) to executor with priority 1 and queue default[0m
+[[34m2026-01-08T17:05:33.292+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'create_automa_account_centric', 'generate_automa_workflows_account_centric', 'manual__2026-01-08T14:05:32.291492+00:00', '--local', '--subdir', 'DAGS_FOLDER/create_automa.py'][0m
+[[34m2026-01-08T17:05:33.295+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'create_automa_account_centric', 'generate_automa_workflows_account_centric', 'manual__2026-01-08T14:05:32.291492+00:00', '--local', '--subdir', 'DAGS_FOLDER/create_automa.py'][0m
+[[34m2026-01-08T17:05:33.332+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/create_automa.py[0m
+[[34m2026-01-08T17:05:34.272+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: create_automa_account_centric.generate_automa_workflows_account_centric manual__2026-01-08T14:05:32.291492+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:05:35.519+0300[0m] {[34mdagrun.py:[0m653} INFO[0m - Marking run <DagRun create_automa_account_centric @ 2026-01-08 14:05:32.291492+00:00: manual__2026-01-08T14:05:32.291492+00:00, state:running, queued_at: 2026-01-08 14:05:32.309509+00:00. externally triggered: True> successful[0m
+[[34m2026-01-08T17:05:35.519+0300[0m] {[34mdagrun.py:[0m704} INFO[0m - DagRun Finished: dag_id=create_automa_account_centric, execution_date=2026-01-08 14:05:32.291492+00:00, run_id=manual__2026-01-08T14:05:32.291492+00:00, run_start_date=2026-01-08 14:05:33.265951+00:00, run_end_date=2026-01-08 14:05:35.519876+00:00, run_duration=2.253925, state=success, external_trigger=True, run_type=manual, data_interval_start=2026-01-08 14:05:32.291492+00:00, data_interval_end=2026-01-08 14:05:32.291492+00:00, dag_hash=5ac1c77e7ab2702417b0d10a18b91a6c[0m
+[[34m2026-01-08T17:05:35.536+0300[0m] {[34mscheduler_job_runner.py:[0m686} INFO[0m - Received executor event with state success for task instance TaskInstanceKey(dag_id='create_automa_account_centric', task_id='generate_automa_workflows_account_centric', run_id='manual__2026-01-08T14:05:32.291492+00:00', try_number=1, map_index=-1)[0m
+[[34m2026-01-08T17:05:35.539+0300[0m] {[34mscheduler_job_runner.py:[0m723} INFO[0m - TaskInstance Finished: dag_id=create_automa_account_centric, task_id=generate_automa_workflows_account_centric, run_id=manual__2026-01-08T14:05:32.291492+00:00, map_index=-1, run_start_date=2026-01-08 14:05:34.340890+00:00, run_end_date=2026-01-08 14:05:35.145753+00:00, run_duration=0.804863, state=success, executor_state=success, try_number=1, max_tries=0, job_id=5, pool=default_pool, queue=default, priority_weight=1, operator=PythonOperator, queued_dttm=2026-01-08 14:05:33.287507+00:00, queued_by_job_id=1, pid=876[0m
+[[34m2026-01-08T17:05:49.389+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: extract_links_weekly.check_trigger_type manual__2026-01-08T14:05:48.080715+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:05:49.389+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG extract_links_weekly has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:05:49.389+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: extract_links_weekly.check_trigger_type manual__2026-01-08T14:05:48.080715+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:05:49.391+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task check_trigger_type because previous state change time has not been saved[0m
+[[34m2026-01-08T17:05:49.391+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='extract_links_weekly', task_id='check_trigger_type', run_id='manual__2026-01-08T14:05:48.080715+00:00', try_number=1, map_index=-1) to executor with priority 12 and queue default[0m
+[[34m2026-01-08T17:05:49.392+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'extract_links_weekly', 'check_trigger_type', 'manual__2026-01-08T14:05:48.080715+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:05:49.393+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'extract_links_weekly', 'check_trigger_type', 'manual__2026-01-08T14:05:48.080715+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:05:49.419+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/extract_links.py[0m
+[[34m2026-01-08T17:05:49.800+0300[0m] {[34mextract_links.py:[0m37} INFO[0m - Using timezone: Africa/Nairobi[0m
+[[34m2026-01-08T17:05:49.816+0300[0m] {[34mextract_links.py:[0m95} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:05:49.816+0300[0m] {[34mextract_links.py:[0m96} INFO[0m - CHROME PROFILE RESOLVED FOR ACCOUNT_ID=1[0m
+[[34m2026-01-08T17:05:49.817+0300[0m] {[34mextract_links.py:[0m97} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:05:49.817+0300[0m] {[34mextract_links.py:[0m98} INFO[0m -   Account ID: 1[0m
+[[34m2026-01-08T17:05:49.817+0300[0m] {[34mextract_links.py:[0m99} INFO[0m -   Username: haley[0m
+[[34m2026-01-08T17:05:49.817+0300[0m] {[34mextract_links.py:[0m100} INFO[0m -   Profile type: local_chrome[0m
+[[34m2026-01-08T17:05:49.818+0300[0m] {[34mextract_links.py:[0m101} INFO[0m -   Profile directory: account_haley[0m
+[[34m2026-01-08T17:05:49.818+0300[0m] {[34mextract_links.py:[0m102} INFO[0m -   Full path: /workspace/chrome_profiles/account_haley[0m
+[[34m2026-01-08T17:05:49.818+0300[0m] {[34mextract_links.py:[0m103} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:05:49.964+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: extract_links_weekly.check_trigger_type manual__2026-01-08T14:05:48.080715+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:05:51.229+0300[0m] {[34mscheduler_job_runner.py:[0m686} INFO[0m - Received executor event with state success for task instance TaskInstanceKey(dag_id='extract_links_weekly', task_id='check_trigger_type', run_id='manual__2026-01-08T14:05:48.080715+00:00', try_number=1, map_index=-1)[0m
+[[34m2026-01-08T17:05:51.232+0300[0m] {[34mscheduler_job_runner.py:[0m723} INFO[0m - TaskInstance Finished: dag_id=extract_links_weekly, task_id=check_trigger_type, run_id=manual__2026-01-08T14:05:48.080715+00:00, map_index=-1, run_start_date=2026-01-08 14:05:50.053890+00:00, run_end_date=2026-01-08 14:05:50.239361+00:00, run_duration=0.185471, state=success, executor_state=success, try_number=1, max_tries=0, job_id=6, pool=default_pool, queue=default, priority_weight=12, operator=BranchPythonOperator, queued_dttm=2026-01-08 14:05:49.390448+00:00, queued_by_job_id=1, pid=922[0m
+[[34m2026-01-08T17:05:52.363+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: extract_links_weekly.log_weekly_configuration manual__2026-01-08T14:05:48.080715+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:05:52.363+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG extract_links_weekly has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:05:52.363+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: extract_links_weekly.log_weekly_configuration manual__2026-01-08T14:05:48.080715+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:05:52.364+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task log_weekly_configuration because previous state change time has not been saved[0m
+[[34m2026-01-08T17:05:52.365+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='extract_links_weekly', task_id='log_weekly_configuration', run_id='manual__2026-01-08T14:05:48.080715+00:00', try_number=1, map_index=-1) to executor with priority 8 and queue default[0m
+[[34m2026-01-08T17:05:52.365+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'extract_links_weekly', 'log_weekly_configuration', 'manual__2026-01-08T14:05:48.080715+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:05:52.367+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'extract_links_weekly', 'log_weekly_configuration', 'manual__2026-01-08T14:05:48.080715+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:05:52.392+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/extract_links.py[0m
+[[34m2026-01-08T17:05:52.661+0300[0m] {[34mextract_links.py:[0m37} INFO[0m - Using timezone: Africa/Nairobi[0m
+[[34m2026-01-08T17:05:52.671+0300[0m] {[34mextract_links.py:[0m95} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:05:52.672+0300[0m] {[34mextract_links.py:[0m96} INFO[0m - CHROME PROFILE RESOLVED FOR ACCOUNT_ID=1[0m
+[[34m2026-01-08T17:05:52.672+0300[0m] {[34mextract_links.py:[0m97} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:05:52.672+0300[0m] {[34mextract_links.py:[0m98} INFO[0m -   Account ID: 1[0m
+[[34m2026-01-08T17:05:52.672+0300[0m] {[34mextract_links.py:[0m99} INFO[0m -   Username: haley[0m
+[[34m2026-01-08T17:05:52.672+0300[0m] {[34mextract_links.py:[0m100} INFO[0m -   Profile type: local_chrome[0m
+[[34m2026-01-08T17:05:52.672+0300[0m] {[34mextract_links.py:[0m101} INFO[0m -   Profile directory: account_haley[0m
+[[34m2026-01-08T17:05:52.673+0300[0m] {[34mextract_links.py:[0m102} INFO[0m -   Full path: /workspace/chrome_profiles/account_haley[0m
+[[34m2026-01-08T17:05:52.673+0300[0m] {[34mextract_links.py:[0m103} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:05:52.760+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: extract_links_weekly.log_weekly_configuration manual__2026-01-08T14:05:48.080715+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:05:53.491+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: extract_links_weekly.check_execution_window manual__2026-01-08T14:05:48.080715+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:05:53.491+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG extract_links_weekly has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:05:53.491+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: extract_links_weekly.check_execution_window manual__2026-01-08T14:05:48.080715+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:05:53.493+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task check_execution_window because previous state change time has not been saved[0m
+[[34m2026-01-08T17:05:53.493+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='extract_links_weekly', task_id='check_execution_window', run_id='manual__2026-01-08T14:05:48.080715+00:00', try_number=1, map_index=-1) to executor with priority 7 and queue default[0m
+[[34m2026-01-08T17:05:53.493+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'extract_links_weekly', 'check_execution_window', 'manual__2026-01-08T14:05:48.080715+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:05:53.495+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'extract_links_weekly', 'check_execution_window', 'manual__2026-01-08T14:05:48.080715+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:05:53.498+0300[0m] {[34mscheduler_job_runner.py:[0m686} INFO[0m - Received executor event with state success for task instance TaskInstanceKey(dag_id='extract_links_weekly', task_id='log_weekly_configuration', run_id='manual__2026-01-08T14:05:48.080715+00:00', try_number=1, map_index=-1)[0m
+[[34m2026-01-08T17:05:53.501+0300[0m] {[34mscheduler_job_runner.py:[0m723} INFO[0m - TaskInstance Finished: dag_id=extract_links_weekly, task_id=log_weekly_configuration, run_id=manual__2026-01-08T14:05:48.080715+00:00, map_index=-1, run_start_date=2026-01-08 14:05:52.817641+00:00, run_end_date=2026-01-08 14:05:53.003039+00:00, run_duration=0.185398, state=success, executor_state=success, try_number=1, max_tries=0, job_id=7, pool=default_pool, queue=default, priority_weight=8, operator=PythonOperator, queued_dttm=2026-01-08 14:05:52.364009+00:00, queued_by_job_id=1, pid=927[0m
+[[34m2026-01-08T17:05:53.522+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/extract_links.py[0m
+[[34m2026-01-08T17:05:53.812+0300[0m] {[34mextract_links.py:[0m37} INFO[0m - Using timezone: Africa/Nairobi[0m
+[[34m2026-01-08T17:05:53.822+0300[0m] {[34mextract_links.py:[0m95} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:05:53.822+0300[0m] {[34mextract_links.py:[0m96} INFO[0m - CHROME PROFILE RESOLVED FOR ACCOUNT_ID=1[0m
+[[34m2026-01-08T17:05:53.822+0300[0m] {[34mextract_links.py:[0m97} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:05:53.822+0300[0m] {[34mextract_links.py:[0m98} INFO[0m -   Account ID: 1[0m
+[[34m2026-01-08T17:05:53.823+0300[0m] {[34mextract_links.py:[0m99} INFO[0m -   Username: haley[0m
+[[34m2026-01-08T17:05:53.823+0300[0m] {[34mextract_links.py:[0m100} INFO[0m -   Profile type: local_chrome[0m
+[[34m2026-01-08T17:05:53.823+0300[0m] {[34mextract_links.py:[0m101} INFO[0m -   Profile directory: account_haley[0m
+[[34m2026-01-08T17:05:53.823+0300[0m] {[34mextract_links.py:[0m102} INFO[0m -   Full path: /workspace/chrome_profiles/account_haley[0m
+[[34m2026-01-08T17:05:53.823+0300[0m] {[34mextract_links.py:[0m103} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:05:53.920+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: extract_links_weekly.check_execution_window manual__2026-01-08T14:05:48.080715+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:05:54.577+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: extract_links_weekly.verify_cookies_exist manual__2026-01-08T14:05:48.080715+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:05:54.577+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG extract_links_weekly has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:05:54.578+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: extract_links_weekly.verify_cookies_exist manual__2026-01-08T14:05:48.080715+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:05:54.579+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task verify_cookies_exist because previous state change time has not been saved[0m
+[[34m2026-01-08T17:05:54.580+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='extract_links_weekly', task_id='verify_cookies_exist', run_id='manual__2026-01-08T14:05:48.080715+00:00', try_number=1, map_index=-1) to executor with priority 6 and queue default[0m
+[[34m2026-01-08T17:05:54.580+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'extract_links_weekly', 'verify_cookies_exist', 'manual__2026-01-08T14:05:48.080715+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:05:54.584+0300[0m] {[34mscheduler_job_runner.py:[0m686} INFO[0m - Received executor event with state success for task instance TaskInstanceKey(dag_id='extract_links_weekly', task_id='check_execution_window', run_id='manual__2026-01-08T14:05:48.080715+00:00', try_number=1, map_index=-1)[0m
+[[34m2026-01-08T17:05:54.584+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'extract_links_weekly', 'verify_cookies_exist', 'manual__2026-01-08T14:05:48.080715+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:05:54.589+0300[0m] {[34mscheduler_job_runner.py:[0m723} INFO[0m - TaskInstance Finished: dag_id=extract_links_weekly, task_id=check_execution_window, run_id=manual__2026-01-08T14:05:48.080715+00:00, map_index=-1, run_start_date=2026-01-08 14:05:53.987272+00:00, run_end_date=2026-01-08 14:05:54.150939+00:00, run_duration=0.163667, state=success, executor_state=success, try_number=1, max_tries=0, job_id=8, pool=default_pool, queue=default, priority_weight=7, operator=PythonOperator, queued_dttm=2026-01-08 14:05:53.492307+00:00, queued_by_job_id=1, pid=935[0m
+[[34m2026-01-08T17:05:54.627+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/extract_links.py[0m
+[[34m2026-01-08T17:05:54.972+0300[0m] {[34mextract_links.py:[0m37} INFO[0m - Using timezone: Africa/Nairobi[0m
+[[34m2026-01-08T17:05:54.983+0300[0m] {[34mextract_links.py:[0m95} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:05:54.983+0300[0m] {[34mextract_links.py:[0m96} INFO[0m - CHROME PROFILE RESOLVED FOR ACCOUNT_ID=1[0m
+[[34m2026-01-08T17:05:54.984+0300[0m] {[34mextract_links.py:[0m97} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:05:54.984+0300[0m] {[34mextract_links.py:[0m98} INFO[0m -   Account ID: 1[0m
+[[34m2026-01-08T17:05:54.984+0300[0m] {[34mextract_links.py:[0m99} INFO[0m -   Username: haley[0m
+[[34m2026-01-08T17:05:54.984+0300[0m] {[34mextract_links.py:[0m100} INFO[0m -   Profile type: local_chrome[0m
+[[34m2026-01-08T17:05:54.984+0300[0m] {[34mextract_links.py:[0m101} INFO[0m -   Profile directory: account_haley[0m
+[[34m2026-01-08T17:05:54.984+0300[0m] {[34mextract_links.py:[0m102} INFO[0m -   Full path: /workspace/chrome_profiles/account_haley[0m
+[[34m2026-01-08T17:05:54.984+0300[0m] {[34mextract_links.py:[0m103} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:05:55.072+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: extract_links_weekly.verify_cookies_exist manual__2026-01-08T14:05:48.080715+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:05:55.676+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: extract_links_weekly.start_chrome manual__2026-01-08T14:05:48.080715+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:05:55.676+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG extract_links_weekly has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:05:55.676+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: extract_links_weekly.start_chrome manual__2026-01-08T14:05:48.080715+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:05:55.678+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task start_chrome because previous state change time has not been saved[0m
+[[34m2026-01-08T17:05:55.678+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='extract_links_weekly', task_id='start_chrome', run_id='manual__2026-01-08T14:05:48.080715+00:00', try_number=1, map_index=-1) to executor with priority 5 and queue default[0m
+[[34m2026-01-08T17:05:55.679+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'extract_links_weekly', 'start_chrome', 'manual__2026-01-08T14:05:48.080715+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:05:55.681+0300[0m] {[34mscheduler_job_runner.py:[0m686} INFO[0m - Received executor event with state success for task instance TaskInstanceKey(dag_id='extract_links_weekly', task_id='verify_cookies_exist', run_id='manual__2026-01-08T14:05:48.080715+00:00', try_number=1, map_index=-1)[0m
+[[34m2026-01-08T17:05:55.681+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'extract_links_weekly', 'start_chrome', 'manual__2026-01-08T14:05:48.080715+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:05:55.684+0300[0m] {[34mscheduler_job_runner.py:[0m723} INFO[0m - TaskInstance Finished: dag_id=extract_links_weekly, task_id=verify_cookies_exist, run_id=manual__2026-01-08T14:05:48.080715+00:00, map_index=-1, run_start_date=2026-01-08 14:05:55.129628+00:00, run_end_date=2026-01-08 14:05:55.364933+00:00, run_duration=0.235305, state=success, executor_state=success, try_number=1, max_tries=0, job_id=9, pool=default_pool, queue=default, priority_weight=6, operator=BashOperator, queued_dttm=2026-01-08 14:05:54.578638+00:00, queued_by_job_id=1, pid=943[0m
+[[34m2026-01-08T17:05:55.707+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/extract_links.py[0m
+[[34m2026-01-08T17:05:55.980+0300[0m] {[34mextract_links.py:[0m37} INFO[0m - Using timezone: Africa/Nairobi[0m
+[[34m2026-01-08T17:05:55.990+0300[0m] {[34mextract_links.py:[0m95} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:05:55.990+0300[0m] {[34mextract_links.py:[0m96} INFO[0m - CHROME PROFILE RESOLVED FOR ACCOUNT_ID=1[0m
+[[34m2026-01-08T17:05:55.990+0300[0m] {[34mextract_links.py:[0m97} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:05:55.991+0300[0m] {[34mextract_links.py:[0m98} INFO[0m -   Account ID: 1[0m
+[[34m2026-01-08T17:05:55.991+0300[0m] {[34mextract_links.py:[0m99} INFO[0m -   Username: haley[0m
+[[34m2026-01-08T17:05:55.991+0300[0m] {[34mextract_links.py:[0m100} INFO[0m -   Profile type: local_chrome[0m
+[[34m2026-01-08T17:05:55.991+0300[0m] {[34mextract_links.py:[0m101} INFO[0m -   Profile directory: account_haley[0m
+[[34m2026-01-08T17:05:55.991+0300[0m] {[34mextract_links.py:[0m102} INFO[0m -   Full path: /workspace/chrome_profiles/account_haley[0m
+[[34m2026-01-08T17:05:55.991+0300[0m] {[34mextract_links.py:[0m103} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:05:56.077+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: extract_links_weekly.start_chrome manual__2026-01-08T14:05:48.080715+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:06:03.565+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: extract_links_weekly.chrome_health_check manual__2026-01-08T14:05:48.080715+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:06:03.566+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG extract_links_weekly has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:06:03.567+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: extract_links_weekly.chrome_health_check manual__2026-01-08T14:05:48.080715+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:06:03.569+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task chrome_health_check because previous state change time has not been saved[0m
+[[34m2026-01-08T17:06:03.569+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='extract_links_weekly', task_id='chrome_health_check', run_id='manual__2026-01-08T14:05:48.080715+00:00', try_number=1, map_index=-1) to executor with priority 4 and queue default[0m
+[[34m2026-01-08T17:06:03.569+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'extract_links_weekly', 'chrome_health_check', 'manual__2026-01-08T14:05:48.080715+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:06:03.573+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'extract_links_weekly', 'chrome_health_check', 'manual__2026-01-08T14:05:48.080715+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:06:03.574+0300[0m] {[34mscheduler_job_runner.py:[0m686} INFO[0m - Received executor event with state success for task instance TaskInstanceKey(dag_id='extract_links_weekly', task_id='start_chrome', run_id='manual__2026-01-08T14:05:48.080715+00:00', try_number=1, map_index=-1)[0m
+[[34m2026-01-08T17:06:03.583+0300[0m] {[34mscheduler_job_runner.py:[0m723} INFO[0m - TaskInstance Finished: dag_id=extract_links_weekly, task_id=start_chrome, run_id=manual__2026-01-08T14:05:48.080715+00:00, map_index=-1, run_start_date=2026-01-08 14:05:56.135154+00:00, run_end_date=2026-01-08 14:06:02.381452+00:00, run_duration=6.246298, state=success, executor_state=success, try_number=1, max_tries=0, job_id=10, pool=default_pool, queue=default, priority_weight=5, operator=BashOperator, queued_dttm=2026-01-08 14:05:55.677421+00:00, queued_by_job_id=1, pid=966[0m
+[[34m2026-01-08T17:06:03.613+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/extract_links.py[0m
+[[34m2026-01-08T17:06:04.276+0300[0m] {[34mextract_links.py:[0m37} INFO[0m - Using timezone: Africa/Nairobi[0m
+[[34m2026-01-08T17:06:04.290+0300[0m] {[34mextract_links.py:[0m95} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:06:04.291+0300[0m] {[34mextract_links.py:[0m96} INFO[0m - CHROME PROFILE RESOLVED FOR ACCOUNT_ID=1[0m
+[[34m2026-01-08T17:06:04.291+0300[0m] {[34mextract_links.py:[0m97} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:06:04.291+0300[0m] {[34mextract_links.py:[0m98} INFO[0m -   Account ID: 1[0m
+[[34m2026-01-08T17:06:04.292+0300[0m] {[34mextract_links.py:[0m99} INFO[0m -   Username: haley[0m
+[[34m2026-01-08T17:06:04.292+0300[0m] {[34mextract_links.py:[0m100} INFO[0m -   Profile type: local_chrome[0m
+[[34m2026-01-08T17:06:04.292+0300[0m] {[34mextract_links.py:[0m101} INFO[0m -   Profile directory: account_haley[0m
+[[34m2026-01-08T17:06:04.293+0300[0m] {[34mextract_links.py:[0m102} INFO[0m -   Full path: /workspace/chrome_profiles/account_haley[0m
+[[34m2026-01-08T17:06:04.293+0300[0m] {[34mextract_links.py:[0m103} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:06:04.477+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: extract_links_weekly.chrome_health_check manual__2026-01-08T14:05:48.080715+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:06:05.652+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: extract_links_weekly.extract_data manual__2026-01-08T14:05:48.080715+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:06:05.653+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG extract_links_weekly has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:06:05.654+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: extract_links_weekly.extract_data manual__2026-01-08T14:05:48.080715+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:06:05.656+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task extract_data because previous state change time has not been saved[0m
+[[34m2026-01-08T17:06:05.656+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='extract_links_weekly', task_id='extract_data', run_id='manual__2026-01-08T14:05:48.080715+00:00', try_number=1, map_index=-1) to executor with priority 3 and queue default[0m
+[[34m2026-01-08T17:06:05.657+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'extract_links_weekly', 'extract_data', 'manual__2026-01-08T14:05:48.080715+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:06:05.659+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'extract_links_weekly', 'extract_data', 'manual__2026-01-08T14:05:48.080715+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:06:05.661+0300[0m] {[34mscheduler_job_runner.py:[0m686} INFO[0m - Received executor event with state success for task instance TaskInstanceKey(dag_id='extract_links_weekly', task_id='chrome_health_check', run_id='manual__2026-01-08T14:05:48.080715+00:00', try_number=1, map_index=-1)[0m
+[[34m2026-01-08T17:06:05.674+0300[0m] {[34mscheduler_job_runner.py:[0m723} INFO[0m - TaskInstance Finished: dag_id=extract_links_weekly, task_id=chrome_health_check, run_id=manual__2026-01-08T14:05:48.080715+00:00, map_index=-1, run_start_date=2026-01-08 14:06:04.542546+00:00, run_end_date=2026-01-08 14:06:04.721002+00:00, run_duration=0.178456, state=success, executor_state=success, try_number=1, max_tries=0, job_id=11, pool=default_pool, queue=default, priority_weight=4, operator=PythonOperator, queued_dttm=2026-01-08 14:06:03.567911+00:00, queued_by_job_id=1, pid=1230[0m
+[[34m2026-01-08T17:06:05.759+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/extract_links.py[0m
+[[34m2026-01-08T17:06:06.239+0300[0m] {[34mextract_links.py:[0m37} INFO[0m - Using timezone: Africa/Nairobi[0m
+[[34m2026-01-08T17:06:06.250+0300[0m] {[34mextract_links.py:[0m95} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:06:06.250+0300[0m] {[34mextract_links.py:[0m96} INFO[0m - CHROME PROFILE RESOLVED FOR ACCOUNT_ID=1[0m
+[[34m2026-01-08T17:06:06.250+0300[0m] {[34mextract_links.py:[0m97} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:06:06.250+0300[0m] {[34mextract_links.py:[0m98} INFO[0m -   Account ID: 1[0m
+[[34m2026-01-08T17:06:06.250+0300[0m] {[34mextract_links.py:[0m99} INFO[0m -   Username: haley[0m
+[[34m2026-01-08T17:06:06.251+0300[0m] {[34mextract_links.py:[0m100} INFO[0m -   Profile type: local_chrome[0m
+[[34m2026-01-08T17:06:06.251+0300[0m] {[34mextract_links.py:[0m101} INFO[0m -   Profile directory: account_haley[0m
+[[34m2026-01-08T17:06:06.251+0300[0m] {[34mextract_links.py:[0m102} INFO[0m -   Full path: /workspace/chrome_profiles/account_haley[0m
+[[34m2026-01-08T17:06:06.251+0300[0m] {[34mextract_links.py:[0m103} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:06:06.347+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: extract_links_weekly.extract_data manual__2026-01-08T14:05:48.080715+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:06:09.030+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: extract_links_weekly.cleanup_chrome manual__2026-01-08T14:05:48.080715+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:06:09.030+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG extract_links_weekly has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:06:09.031+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: extract_links_weekly.cleanup_chrome manual__2026-01-08T14:05:48.080715+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:06:09.033+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task cleanup_chrome because previous state change time has not been saved[0m
+[[34m2026-01-08T17:06:09.033+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='extract_links_weekly', task_id='cleanup_chrome', run_id='manual__2026-01-08T14:05:48.080715+00:00', try_number=1, map_index=-1) to executor with priority 2 and queue default[0m
+[[34m2026-01-08T17:06:09.033+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'extract_links_weekly', 'cleanup_chrome', 'manual__2026-01-08T14:05:48.080715+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:06:09.037+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'extract_links_weekly', 'cleanup_chrome', 'manual__2026-01-08T14:05:48.080715+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:06:09.040+0300[0m] {[34mscheduler_job_runner.py:[0m686} INFO[0m - Received executor event with state success for task instance TaskInstanceKey(dag_id='extract_links_weekly', task_id='extract_data', run_id='manual__2026-01-08T14:05:48.080715+00:00', try_number=1, map_index=-1)[0m
+[[34m2026-01-08T17:06:09.048+0300[0m] {[34mscheduler_job_runner.py:[0m723} INFO[0m - TaskInstance Finished: dag_id=extract_links_weekly, task_id=extract_data, run_id=manual__2026-01-08T14:05:48.080715+00:00, map_index=-1, run_start_date=2026-01-08 14:06:06.421423+00:00, run_end_date=2026-01-08 14:06:07.458343+00:00, run_duration=1.03692, state=failed, executor_state=success, try_number=1, max_tries=0, job_id=12, pool=default_pool, queue=default, priority_weight=3, operator=BashOperator, queued_dttm=2026-01-08 14:06:05.655166+00:00, queued_by_job_id=1, pid=1380[0m
+[[34m2026-01-08T17:06:09.068+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/extract_links.py[0m
+[[34m2026-01-08T17:06:09.348+0300[0m] {[34mextract_links.py:[0m37} INFO[0m - Using timezone: Africa/Nairobi[0m
+[[34m2026-01-08T17:06:09.358+0300[0m] {[34mextract_links.py:[0m95} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:06:09.358+0300[0m] {[34mextract_links.py:[0m96} INFO[0m - CHROME PROFILE RESOLVED FOR ACCOUNT_ID=1[0m
+[[34m2026-01-08T17:06:09.359+0300[0m] {[34mextract_links.py:[0m97} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:06:09.359+0300[0m] {[34mextract_links.py:[0m98} INFO[0m -   Account ID: 1[0m
+[[34m2026-01-08T17:06:09.359+0300[0m] {[34mextract_links.py:[0m99} INFO[0m -   Username: haley[0m
+[[34m2026-01-08T17:06:09.359+0300[0m] {[34mextract_links.py:[0m100} INFO[0m -   Profile type: local_chrome[0m
+[[34m2026-01-08T17:06:09.359+0300[0m] {[34mextract_links.py:[0m101} INFO[0m -   Profile directory: account_haley[0m
+[[34m2026-01-08T17:06:09.359+0300[0m] {[34mextract_links.py:[0m102} INFO[0m -   Full path: /workspace/chrome_profiles/account_haley[0m
+[[34m2026-01-08T17:06:09.360+0300[0m] {[34mextract_links.py:[0m103} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:06:09.447+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: extract_links_weekly.cleanup_chrome manual__2026-01-08T14:05:48.080715+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:06:10.125+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: extract_links_weekly.trigger_filtering_dag manual__2026-01-08T14:05:48.080715+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:06:10.125+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG extract_links_weekly has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:06:10.126+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: extract_links_weekly.trigger_filtering_dag manual__2026-01-08T14:05:48.080715+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:06:10.127+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task trigger_filtering_dag because previous state change time has not been saved[0m
+[[34m2026-01-08T17:06:10.128+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='extract_links_weekly', task_id='trigger_filtering_dag', run_id='manual__2026-01-08T14:05:48.080715+00:00', try_number=1, map_index=-1) to executor with priority 1 and queue default[0m
+[[34m2026-01-08T17:06:10.128+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'extract_links_weekly', 'trigger_filtering_dag', 'manual__2026-01-08T14:05:48.080715+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:06:10.130+0300[0m] {[34mscheduler_job_runner.py:[0m686} INFO[0m - Received executor event with state success for task instance TaskInstanceKey(dag_id='extract_links_weekly', task_id='cleanup_chrome', run_id='manual__2026-01-08T14:05:48.080715+00:00', try_number=1, map_index=-1)[0m
+[[34m2026-01-08T17:06:10.130+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'extract_links_weekly', 'trigger_filtering_dag', 'manual__2026-01-08T14:05:48.080715+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:06:10.133+0300[0m] {[34mscheduler_job_runner.py:[0m723} INFO[0m - TaskInstance Finished: dag_id=extract_links_weekly, task_id=cleanup_chrome, run_id=manual__2026-01-08T14:05:48.080715+00:00, map_index=-1, run_start_date=2026-01-08 14:06:09.504783+00:00, run_end_date=2026-01-08 14:06:09.668644+00:00, run_duration=0.163861, state=success, executor_state=success, try_number=1, max_tries=0, job_id=13, pool=default_pool, queue=default, priority_weight=2, operator=BashOperator, queued_dttm=2026-01-08 14:06:09.032334+00:00, queued_by_job_id=1, pid=1409[0m
+[[34m2026-01-08T17:06:10.157+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/extract_links.py[0m
+[[34m2026-01-08T17:06:10.471+0300[0m] {[34mextract_links.py:[0m37} INFO[0m - Using timezone: Africa/Nairobi[0m
+[[34m2026-01-08T17:06:10.481+0300[0m] {[34mextract_links.py:[0m95} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:06:10.481+0300[0m] {[34mextract_links.py:[0m96} INFO[0m - CHROME PROFILE RESOLVED FOR ACCOUNT_ID=1[0m
+[[34m2026-01-08T17:06:10.482+0300[0m] {[34mextract_links.py:[0m97} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:06:10.482+0300[0m] {[34mextract_links.py:[0m98} INFO[0m -   Account ID: 1[0m
+[[34m2026-01-08T17:06:10.482+0300[0m] {[34mextract_links.py:[0m99} INFO[0m -   Username: haley[0m
+[[34m2026-01-08T17:06:10.482+0300[0m] {[34mextract_links.py:[0m100} INFO[0m -   Profile type: local_chrome[0m
+[[34m2026-01-08T17:06:10.482+0300[0m] {[34mextract_links.py:[0m101} INFO[0m -   Profile directory: account_haley[0m
+[[34m2026-01-08T17:06:10.483+0300[0m] {[34mextract_links.py:[0m102} INFO[0m -   Full path: /workspace/chrome_profiles/account_haley[0m
+[[34m2026-01-08T17:06:10.483+0300[0m] {[34mextract_links.py:[0m103} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:06:10.568+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: extract_links_weekly.trigger_filtering_dag manual__2026-01-08T14:05:48.080715+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:08:18.573+0300[0m] {[34mscheduler_job_runner.py:[0m1586} INFO[0m - Adopting or resetting orphaned tasks for active dag runs[0m
+[[34m2026-01-08T17:10:43.246+0300[0m] {[34mdagrun.py:[0m632} ERROR[0m - Marking run <DagRun extract_links_weekly @ 2026-01-08 14:05:48.080715+00:00: manual__2026-01-08T14:05:48.080715+00:00, state:running, queued_at: 2026-01-08 14:05:48.816442+00:00. externally triggered: True> failed[0m
+[[34m2026-01-08T17:10:43.246+0300[0m] {[34mdagrun.py:[0m704} INFO[0m - DagRun Finished: dag_id=extract_links_weekly, execution_date=2026-01-08 14:05:48.080715+00:00, run_id=manual__2026-01-08T14:05:48.080715+00:00, run_start_date=2026-01-08 14:05:49.370054+00:00, run_end_date=2026-01-08 14:10:43.246778+00:00, run_duration=293.876724, state=failed, external_trigger=True, run_type=manual, data_interval_start=2026-01-08 14:05:48.080715+00:00, data_interval_end=2026-01-08 14:05:48.080715+00:00, dag_hash=d896854ce45e25bcf16c91795fc57aa5[0m
+[[34m2026-01-08T17:10:43.254+0300[0m] {[34mscheduler_job_runner.py:[0m686} INFO[0m - Received executor event with state success for task instance TaskInstanceKey(dag_id='extract_links_weekly', task_id='trigger_filtering_dag', run_id='manual__2026-01-08T14:05:48.080715+00:00', try_number=1, map_index=-1)[0m
+[[34m2026-01-08T17:10:43.256+0300[0m] {[34mscheduler_job_runner.py:[0m723} INFO[0m - TaskInstance Finished: dag_id=extract_links_weekly, task_id=trigger_filtering_dag, run_id=manual__2026-01-08T14:05:48.080715+00:00, map_index=-1, run_start_date=2026-01-08 14:06:10.644972+00:00, run_end_date=2026-01-08 14:10:37.283418+00:00, run_duration=266.638446, state=failed, executor_state=success, try_number=1, max_tries=0, job_id=14, pool=default_pool, queue=default, priority_weight=1, operator=TriggerDagRunOperator, queued_dttm=2026-01-08 14:06:10.126878+00:00, queued_by_job_id=1, pid=1421[0m
+[[34m2026-01-08T17:12:50.440+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: extract_links_weekly.check_trigger_type manual__2026-01-08T14:12:49.989793+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:12:50.440+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG extract_links_weekly has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:12:50.441+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: extract_links_weekly.check_trigger_type manual__2026-01-08T14:12:49.989793+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:12:50.442+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task check_trigger_type because previous state change time has not been saved[0m
+[[34m2026-01-08T17:12:50.443+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='extract_links_weekly', task_id='check_trigger_type', run_id='manual__2026-01-08T14:12:49.989793+00:00', try_number=1, map_index=-1) to executor with priority 12 and queue default[0m
+[[34m2026-01-08T17:12:50.443+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'extract_links_weekly', 'check_trigger_type', 'manual__2026-01-08T14:12:49.989793+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:12:50.444+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'extract_links_weekly', 'check_trigger_type', 'manual__2026-01-08T14:12:49.989793+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:12:50.470+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/extract_links.py[0m
+[[34m2026-01-08T17:12:50.818+0300[0m] {[34mextract_links.py:[0m37} INFO[0m - Using timezone: Africa/Nairobi[0m
+[[34m2026-01-08T17:12:50.832+0300[0m] {[34mextract_links.py:[0m95} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:12:50.832+0300[0m] {[34mextract_links.py:[0m96} INFO[0m - CHROME PROFILE RESOLVED FOR ACCOUNT_ID=1[0m
+[[34m2026-01-08T17:12:50.832+0300[0m] {[34mextract_links.py:[0m97} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:12:50.833+0300[0m] {[34mextract_links.py:[0m98} INFO[0m -   Account ID: 1[0m
+[[34m2026-01-08T17:12:50.833+0300[0m] {[34mextract_links.py:[0m99} INFO[0m -   Username: haley[0m
+[[34m2026-01-08T17:12:50.833+0300[0m] {[34mextract_links.py:[0m100} INFO[0m -   Profile type: local_chrome[0m
+[[34m2026-01-08T17:12:50.833+0300[0m] {[34mextract_links.py:[0m101} INFO[0m -   Profile directory: account_haley[0m
+[[34m2026-01-08T17:12:50.834+0300[0m] {[34mextract_links.py:[0m102} INFO[0m -   Full path: /workspace/chrome_profiles/account_haley[0m
+[[34m2026-01-08T17:12:50.834+0300[0m] {[34mextract_links.py:[0m103} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:12:50.939+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: extract_links_weekly.check_trigger_type manual__2026-01-08T14:12:49.989793+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:12:51.520+0300[0m] {[34mscheduler_job_runner.py:[0m686} INFO[0m - Received executor event with state success for task instance TaskInstanceKey(dag_id='extract_links_weekly', task_id='check_trigger_type', run_id='manual__2026-01-08T14:12:49.989793+00:00', try_number=1, map_index=-1)[0m
+[[34m2026-01-08T17:12:51.523+0300[0m] {[34mscheduler_job_runner.py:[0m723} INFO[0m - TaskInstance Finished: dag_id=extract_links_weekly, task_id=check_trigger_type, run_id=manual__2026-01-08T14:12:49.989793+00:00, map_index=-1, run_start_date=2026-01-08 14:12:51.014089+00:00, run_end_date=2026-01-08 14:12:51.244786+00:00, run_duration=0.230697, state=success, executor_state=success, try_number=1, max_tries=0, job_id=15, pool=default_pool, queue=default, priority_weight=12, operator=BranchPythonOperator, queued_dttm=2026-01-08 14:12:50.442025+00:00, queued_by_job_id=1, pid=2140[0m
+[[34m2026-01-08T17:12:52.620+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: extract_links_weekly.log_weekly_configuration manual__2026-01-08T14:12:49.989793+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:12:52.621+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG extract_links_weekly has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:12:52.621+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: extract_links_weekly.log_weekly_configuration manual__2026-01-08T14:12:49.989793+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:12:52.623+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task log_weekly_configuration because previous state change time has not been saved[0m
+[[34m2026-01-08T17:12:52.623+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='extract_links_weekly', task_id='log_weekly_configuration', run_id='manual__2026-01-08T14:12:49.989793+00:00', try_number=1, map_index=-1) to executor with priority 8 and queue default[0m
+[[34m2026-01-08T17:12:52.623+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'extract_links_weekly', 'log_weekly_configuration', 'manual__2026-01-08T14:12:49.989793+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:12:52.625+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'extract_links_weekly', 'log_weekly_configuration', 'manual__2026-01-08T14:12:49.989793+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:12:52.653+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/extract_links.py[0m
+[[34m2026-01-08T17:12:52.985+0300[0m] {[34mextract_links.py:[0m37} INFO[0m - Using timezone: Africa/Nairobi[0m
+[[34m2026-01-08T17:12:53.001+0300[0m] {[34mextract_links.py:[0m95} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:12:53.001+0300[0m] {[34mextract_links.py:[0m96} INFO[0m - CHROME PROFILE RESOLVED FOR ACCOUNT_ID=1[0m
+[[34m2026-01-08T17:12:53.001+0300[0m] {[34mextract_links.py:[0m97} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:12:53.002+0300[0m] {[34mextract_links.py:[0m98} INFO[0m -   Account ID: 1[0m
+[[34m2026-01-08T17:12:53.002+0300[0m] {[34mextract_links.py:[0m99} INFO[0m -   Username: haley[0m
+[[34m2026-01-08T17:12:53.002+0300[0m] {[34mextract_links.py:[0m100} INFO[0m -   Profile type: local_chrome[0m
+[[34m2026-01-08T17:12:53.002+0300[0m] {[34mextract_links.py:[0m101} INFO[0m -   Profile directory: account_haley[0m
+[[34m2026-01-08T17:12:53.002+0300[0m] {[34mextract_links.py:[0m102} INFO[0m -   Full path: /workspace/chrome_profiles/account_haley[0m
+[[34m2026-01-08T17:12:53.003+0300[0m] {[34mextract_links.py:[0m103} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:12:53.089+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: extract_links_weekly.log_weekly_configuration manual__2026-01-08T14:12:49.989793+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:12:53.706+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: extract_links_weekly.check_execution_window manual__2026-01-08T14:12:49.989793+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:12:53.707+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG extract_links_weekly has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:12:53.708+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: extract_links_weekly.check_execution_window manual__2026-01-08T14:12:49.989793+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:12:53.709+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task check_execution_window because previous state change time has not been saved[0m
+[[34m2026-01-08T17:12:53.709+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='extract_links_weekly', task_id='check_execution_window', run_id='manual__2026-01-08T14:12:49.989793+00:00', try_number=1, map_index=-1) to executor with priority 7 and queue default[0m
+[[34m2026-01-08T17:12:53.709+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'extract_links_weekly', 'check_execution_window', 'manual__2026-01-08T14:12:49.989793+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:12:53.711+0300[0m] {[34mscheduler_job_runner.py:[0m686} INFO[0m - Received executor event with state success for task instance TaskInstanceKey(dag_id='extract_links_weekly', task_id='log_weekly_configuration', run_id='manual__2026-01-08T14:12:49.989793+00:00', try_number=1, map_index=-1)[0m
+[[34m2026-01-08T17:12:53.711+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'extract_links_weekly', 'check_execution_window', 'manual__2026-01-08T14:12:49.989793+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:12:53.714+0300[0m] {[34mscheduler_job_runner.py:[0m723} INFO[0m - TaskInstance Finished: dag_id=extract_links_weekly, task_id=log_weekly_configuration, run_id=manual__2026-01-08T14:12:49.989793+00:00, map_index=-1, run_start_date=2026-01-08 14:12:53.146371+00:00, run_end_date=2026-01-08 14:12:53.322922+00:00, run_duration=0.176551, state=success, executor_state=success, try_number=1, max_tries=0, job_id=16, pool=default_pool, queue=default, priority_weight=8, operator=PythonOperator, queued_dttm=2026-01-08 14:12:52.622296+00:00, queued_by_job_id=1, pid=2145[0m
+[[34m2026-01-08T17:12:53.741+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/extract_links.py[0m
+[[34m2026-01-08T17:12:54.066+0300[0m] {[34mextract_links.py:[0m37} INFO[0m - Using timezone: Africa/Nairobi[0m
+[[34m2026-01-08T17:12:54.076+0300[0m] {[34mextract_links.py:[0m95} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:12:54.076+0300[0m] {[34mextract_links.py:[0m96} INFO[0m - CHROME PROFILE RESOLVED FOR ACCOUNT_ID=1[0m
+[[34m2026-01-08T17:12:54.076+0300[0m] {[34mextract_links.py:[0m97} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:12:54.076+0300[0m] {[34mextract_links.py:[0m98} INFO[0m -   Account ID: 1[0m
+[[34m2026-01-08T17:12:54.077+0300[0m] {[34mextract_links.py:[0m99} INFO[0m -   Username: haley[0m
+[[34m2026-01-08T17:12:54.077+0300[0m] {[34mextract_links.py:[0m100} INFO[0m -   Profile type: local_chrome[0m
+[[34m2026-01-08T17:12:54.077+0300[0m] {[34mextract_links.py:[0m101} INFO[0m -   Profile directory: account_haley[0m
+[[34m2026-01-08T17:12:54.077+0300[0m] {[34mextract_links.py:[0m102} INFO[0m -   Full path: /workspace/chrome_profiles/account_haley[0m
+[[34m2026-01-08T17:12:54.077+0300[0m] {[34mextract_links.py:[0m103} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:12:54.175+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: extract_links_weekly.check_execution_window manual__2026-01-08T14:12:49.989793+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:12:54.489+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: extract_links_weekly.verify_cookies_exist manual__2026-01-08T14:12:49.989793+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:12:54.489+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG extract_links_weekly has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:12:54.490+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: extract_links_weekly.verify_cookies_exist manual__2026-01-08T14:12:49.989793+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:12:54.491+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task verify_cookies_exist because previous state change time has not been saved[0m
+[[34m2026-01-08T17:12:54.492+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='extract_links_weekly', task_id='verify_cookies_exist', run_id='manual__2026-01-08T14:12:49.989793+00:00', try_number=1, map_index=-1) to executor with priority 6 and queue default[0m
+[[34m2026-01-08T17:12:54.492+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'extract_links_weekly', 'verify_cookies_exist', 'manual__2026-01-08T14:12:49.989793+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:12:54.493+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'extract_links_weekly', 'verify_cookies_exist', 'manual__2026-01-08T14:12:49.989793+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:12:54.534+0300[0m] {[34mscheduler_job_runner.py:[0m686} INFO[0m - Received executor event with state success for task instance TaskInstanceKey(dag_id='extract_links_weekly', task_id='check_execution_window', run_id='manual__2026-01-08T14:12:49.989793+00:00', try_number=1, map_index=-1)[0m
+[[34m2026-01-08T17:12:54.537+0300[0m] {[34mscheduler_job_runner.py:[0m723} INFO[0m - TaskInstance Finished: dag_id=extract_links_weekly, task_id=check_execution_window, run_id=manual__2026-01-08T14:12:49.989793+00:00, map_index=-1, run_start_date=2026-01-08 14:12:54.259698+00:00, run_end_date=2026-01-08 14:12:54.408498+00:00, run_duration=0.1488, state=success, executor_state=success, try_number=1, max_tries=0, job_id=17, pool=default_pool, queue=default, priority_weight=7, operator=PythonOperator, queued_dttm=2026-01-08 14:12:53.708475+00:00, queued_by_job_id=1, pid=2153[0m
+[[34m2026-01-08T17:12:54.520+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/extract_links.py[0m
+[[34m2026-01-08T17:12:54.826+0300[0m] {[34mextract_links.py:[0m37} INFO[0m - Using timezone: Africa/Nairobi[0m
+[[34m2026-01-08T17:12:54.837+0300[0m] {[34mextract_links.py:[0m95} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:12:54.837+0300[0m] {[34mextract_links.py:[0m96} INFO[0m - CHROME PROFILE RESOLVED FOR ACCOUNT_ID=1[0m
+[[34m2026-01-08T17:12:54.838+0300[0m] {[34mextract_links.py:[0m97} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:12:54.838+0300[0m] {[34mextract_links.py:[0m98} INFO[0m -   Account ID: 1[0m
+[[34m2026-01-08T17:12:54.838+0300[0m] {[34mextract_links.py:[0m99} INFO[0m -   Username: haley[0m
+[[34m2026-01-08T17:12:54.838+0300[0m] {[34mextract_links.py:[0m100} INFO[0m -   Profile type: local_chrome[0m
+[[34m2026-01-08T17:12:54.838+0300[0m] {[34mextract_links.py:[0m101} INFO[0m -   Profile directory: account_haley[0m
+[[34m2026-01-08T17:12:54.838+0300[0m] {[34mextract_links.py:[0m102} INFO[0m -   Full path: /workspace/chrome_profiles/account_haley[0m
+[[34m2026-01-08T17:12:54.839+0300[0m] {[34mextract_links.py:[0m103} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:12:54.952+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: extract_links_weekly.verify_cookies_exist manual__2026-01-08T14:12:49.989793+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:12:55.619+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: extract_links_weekly.start_chrome manual__2026-01-08T14:12:49.989793+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:12:55.620+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG extract_links_weekly has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:12:55.621+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: extract_links_weekly.start_chrome manual__2026-01-08T14:12:49.989793+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:12:55.622+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task start_chrome because previous state change time has not been saved[0m
+[[34m2026-01-08T17:12:55.622+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='extract_links_weekly', task_id='start_chrome', run_id='manual__2026-01-08T14:12:49.989793+00:00', try_number=1, map_index=-1) to executor with priority 5 and queue default[0m
+[[34m2026-01-08T17:12:55.623+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'extract_links_weekly', 'start_chrome', 'manual__2026-01-08T14:12:49.989793+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:12:55.625+0300[0m] {[34mscheduler_job_runner.py:[0m686} INFO[0m - Received executor event with state success for task instance TaskInstanceKey(dag_id='extract_links_weekly', task_id='verify_cookies_exist', run_id='manual__2026-01-08T14:12:49.989793+00:00', try_number=1, map_index=-1)[0m
+[[34m2026-01-08T17:12:55.624+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'extract_links_weekly', 'start_chrome', 'manual__2026-01-08T14:12:49.989793+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:12:55.628+0300[0m] {[34mscheduler_job_runner.py:[0m723} INFO[0m - TaskInstance Finished: dag_id=extract_links_weekly, task_id=verify_cookies_exist, run_id=manual__2026-01-08T14:12:49.989793+00:00, map_index=-1, run_start_date=2026-01-08 14:12:55.022607+00:00, run_end_date=2026-01-08 14:12:55.287501+00:00, run_duration=0.264894, state=success, executor_state=success, try_number=1, max_tries=0, job_id=18, pool=default_pool, queue=default, priority_weight=6, operator=BashOperator, queued_dttm=2026-01-08 14:12:54.490946+00:00, queued_by_job_id=1, pid=2161[0m
+[[34m2026-01-08T17:12:55.661+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/extract_links.py[0m
+[[34m2026-01-08T17:12:56.175+0300[0m] {[34mextract_links.py:[0m37} INFO[0m - Using timezone: Africa/Nairobi[0m
+[[34m2026-01-08T17:12:56.186+0300[0m] {[34mextract_links.py:[0m95} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:12:56.186+0300[0m] {[34mextract_links.py:[0m96} INFO[0m - CHROME PROFILE RESOLVED FOR ACCOUNT_ID=1[0m
+[[34m2026-01-08T17:12:56.186+0300[0m] {[34mextract_links.py:[0m97} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:12:56.186+0300[0m] {[34mextract_links.py:[0m98} INFO[0m -   Account ID: 1[0m
+[[34m2026-01-08T17:12:56.187+0300[0m] {[34mextract_links.py:[0m99} INFO[0m -   Username: haley[0m
+[[34m2026-01-08T17:12:56.187+0300[0m] {[34mextract_links.py:[0m100} INFO[0m -   Profile type: local_chrome[0m
+[[34m2026-01-08T17:12:56.187+0300[0m] {[34mextract_links.py:[0m101} INFO[0m -   Profile directory: account_haley[0m
+[[34m2026-01-08T17:12:56.187+0300[0m] {[34mextract_links.py:[0m102} INFO[0m -   Full path: /workspace/chrome_profiles/account_haley[0m
+[[34m2026-01-08T17:12:56.187+0300[0m] {[34mextract_links.py:[0m103} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:12:56.324+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: extract_links_weekly.start_chrome manual__2026-01-08T14:12:49.989793+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:12:56.713+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: extract_links_weekly.chrome_health_check manual__2026-01-08T14:12:49.989793+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:12:56.714+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG extract_links_weekly has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:12:56.715+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: extract_links_weekly.chrome_health_check manual__2026-01-08T14:12:49.989793+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:12:56.716+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task chrome_health_check because previous state change time has not been saved[0m
+[[34m2026-01-08T17:12:56.716+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='extract_links_weekly', task_id='chrome_health_check', run_id='manual__2026-01-08T14:12:49.989793+00:00', try_number=1, map_index=-1) to executor with priority 4 and queue default[0m
+[[34m2026-01-08T17:12:56.717+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'extract_links_weekly', 'chrome_health_check', 'manual__2026-01-08T14:12:49.989793+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:12:56.718+0300[0m] {[34mscheduler_job_runner.py:[0m686} INFO[0m - Received executor event with state success for task instance TaskInstanceKey(dag_id='extract_links_weekly', task_id='start_chrome', run_id='manual__2026-01-08T14:12:49.989793+00:00', try_number=1, map_index=-1)[0m
+[[34m2026-01-08T17:12:56.718+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'extract_links_weekly', 'chrome_health_check', 'manual__2026-01-08T14:12:49.989793+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:12:56.721+0300[0m] {[34mscheduler_job_runner.py:[0m723} INFO[0m - TaskInstance Finished: dag_id=extract_links_weekly, task_id=start_chrome, run_id=manual__2026-01-08T14:12:49.989793+00:00, map_index=-1, run_start_date=2026-01-08 14:12:56.399681+00:00, run_end_date=2026-01-08 14:12:56.606337+00:00, run_duration=0.206656, state=success, executor_state=success, try_number=1, max_tries=0, job_id=19, pool=default_pool, queue=default, priority_weight=5, operator=BashOperator, queued_dttm=2026-01-08 14:12:55.621555+00:00, queued_by_job_id=1, pid=2194[0m
+[[34m2026-01-08T17:12:56.750+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/extract_links.py[0m
+[[34m2026-01-08T17:12:57.044+0300[0m] {[34mextract_links.py:[0m37} INFO[0m - Using timezone: Africa/Nairobi[0m
+[[34m2026-01-08T17:12:57.054+0300[0m] {[34mextract_links.py:[0m95} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:12:57.054+0300[0m] {[34mextract_links.py:[0m96} INFO[0m - CHROME PROFILE RESOLVED FOR ACCOUNT_ID=1[0m
+[[34m2026-01-08T17:12:57.054+0300[0m] {[34mextract_links.py:[0m97} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:12:57.054+0300[0m] {[34mextract_links.py:[0m98} INFO[0m -   Account ID: 1[0m
+[[34m2026-01-08T17:12:57.055+0300[0m] {[34mextract_links.py:[0m99} INFO[0m -   Username: haley[0m
+[[34m2026-01-08T17:12:57.055+0300[0m] {[34mextract_links.py:[0m100} INFO[0m -   Profile type: local_chrome[0m
+[[34m2026-01-08T17:12:57.055+0300[0m] {[34mextract_links.py:[0m101} INFO[0m -   Profile directory: account_haley[0m
+[[34m2026-01-08T17:12:57.055+0300[0m] {[34mextract_links.py:[0m102} INFO[0m -   Full path: /workspace/chrome_profiles/account_haley[0m
+[[34m2026-01-08T17:12:57.055+0300[0m] {[34mextract_links.py:[0m103} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:12:57.150+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: extract_links_weekly.chrome_health_check manual__2026-01-08T14:12:49.989793+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:12:57.794+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: extract_links_weekly.extract_data manual__2026-01-08T14:12:49.989793+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:12:57.795+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG extract_links_weekly has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:12:57.795+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: extract_links_weekly.extract_data manual__2026-01-08T14:12:49.989793+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:12:57.797+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task extract_data because previous state change time has not been saved[0m
+[[34m2026-01-08T17:12:57.797+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='extract_links_weekly', task_id='extract_data', run_id='manual__2026-01-08T14:12:49.989793+00:00', try_number=1, map_index=-1) to executor with priority 3 and queue default[0m
+[[34m2026-01-08T17:12:57.797+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'extract_links_weekly', 'extract_data', 'manual__2026-01-08T14:12:49.989793+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:12:57.799+0300[0m] {[34mscheduler_job_runner.py:[0m686} INFO[0m - Received executor event with state success for task instance TaskInstanceKey(dag_id='extract_links_weekly', task_id='chrome_health_check', run_id='manual__2026-01-08T14:12:49.989793+00:00', try_number=1, map_index=-1)[0m
+[[34m2026-01-08T17:12:57.799+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'extract_links_weekly', 'extract_data', 'manual__2026-01-08T14:12:49.989793+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:12:57.802+0300[0m] {[34mscheduler_job_runner.py:[0m723} INFO[0m - TaskInstance Finished: dag_id=extract_links_weekly, task_id=chrome_health_check, run_id=manual__2026-01-08T14:12:49.989793+00:00, map_index=-1, run_start_date=2026-01-08 14:12:57.222726+00:00, run_end_date=2026-01-08 14:12:57.377950+00:00, run_duration=0.155224, state=success, executor_state=success, try_number=1, max_tries=0, job_id=20, pool=default_pool, queue=default, priority_weight=4, operator=PythonOperator, queued_dttm=2026-01-08 14:12:56.715526+00:00, queued_by_job_id=1, pid=2202[0m
+[[34m2026-01-08T17:12:57.826+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/extract_links.py[0m
+[[34m2026-01-08T17:12:58.114+0300[0m] {[34mextract_links.py:[0m37} INFO[0m - Using timezone: Africa/Nairobi[0m
+[[34m2026-01-08T17:12:58.125+0300[0m] {[34mextract_links.py:[0m95} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:12:58.125+0300[0m] {[34mextract_links.py:[0m96} INFO[0m - CHROME PROFILE RESOLVED FOR ACCOUNT_ID=1[0m
+[[34m2026-01-08T17:12:58.125+0300[0m] {[34mextract_links.py:[0m97} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:12:58.125+0300[0m] {[34mextract_links.py:[0m98} INFO[0m -   Account ID: 1[0m
+[[34m2026-01-08T17:12:58.125+0300[0m] {[34mextract_links.py:[0m99} INFO[0m -   Username: haley[0m
+[[34m2026-01-08T17:12:58.126+0300[0m] {[34mextract_links.py:[0m100} INFO[0m -   Profile type: local_chrome[0m
+[[34m2026-01-08T17:12:58.126+0300[0m] {[34mextract_links.py:[0m101} INFO[0m -   Profile directory: account_haley[0m
+[[34m2026-01-08T17:12:58.126+0300[0m] {[34mextract_links.py:[0m102} INFO[0m -   Full path: /workspace/chrome_profiles/account_haley[0m
+[[34m2026-01-08T17:12:58.126+0300[0m] {[34mextract_links.py:[0m103} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:12:58.212+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: extract_links_weekly.extract_data manual__2026-01-08T14:12:49.989793+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:13:07.227+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: extract_links_weekly.cleanup_chrome manual__2026-01-08T14:12:49.989793+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:13:07.228+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG extract_links_weekly has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:13:07.228+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: extract_links_weekly.cleanup_chrome manual__2026-01-08T14:12:49.989793+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:13:07.230+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task cleanup_chrome because previous state change time has not been saved[0m
+[[34m2026-01-08T17:13:07.231+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='extract_links_weekly', task_id='cleanup_chrome', run_id='manual__2026-01-08T14:12:49.989793+00:00', try_number=1, map_index=-1) to executor with priority 2 and queue default[0m
+[[34m2026-01-08T17:13:07.231+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'extract_links_weekly', 'cleanup_chrome', 'manual__2026-01-08T14:12:49.989793+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:13:07.248+0300[0m] {[34mscheduler_job_runner.py:[0m686} INFO[0m - Received executor event with state success for task instance TaskInstanceKey(dag_id='extract_links_weekly', task_id='extract_data', run_id='manual__2026-01-08T14:12:49.989793+00:00', try_number=1, map_index=-1)[0m
+[[34m2026-01-08T17:13:07.248+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'extract_links_weekly', 'cleanup_chrome', 'manual__2026-01-08T14:12:49.989793+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:13:07.256+0300[0m] {[34mscheduler_job_runner.py:[0m723} INFO[0m - TaskInstance Finished: dag_id=extract_links_weekly, task_id=extract_data, run_id=manual__2026-01-08T14:12:49.989793+00:00, map_index=-1, run_start_date=2026-01-08 14:12:58.269961+00:00, run_end_date=2026-01-08 14:13:06.305539+00:00, run_duration=8.035578, state=success, executor_state=success, try_number=1, max_tries=0, job_id=21, pool=default_pool, queue=default, priority_weight=3, operator=BashOperator, queued_dttm=2026-01-08 14:12:57.796374+00:00, queued_by_job_id=1, pid=2207[0m
+[[34m2026-01-08T17:13:07.282+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/extract_links.py[0m
+[[34m2026-01-08T17:13:07.865+0300[0m] {[34mextract_links.py:[0m37} INFO[0m - Using timezone: Africa/Nairobi[0m
+[[34m2026-01-08T17:13:07.877+0300[0m] {[34mextract_links.py:[0m95} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:13:07.878+0300[0m] {[34mextract_links.py:[0m96} INFO[0m - CHROME PROFILE RESOLVED FOR ACCOUNT_ID=1[0m
+[[34m2026-01-08T17:13:07.878+0300[0m] {[34mextract_links.py:[0m97} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:13:07.878+0300[0m] {[34mextract_links.py:[0m98} INFO[0m -   Account ID: 1[0m
+[[34m2026-01-08T17:13:07.878+0300[0m] {[34mextract_links.py:[0m99} INFO[0m -   Username: haley[0m
+[[34m2026-01-08T17:13:07.878+0300[0m] {[34mextract_links.py:[0m100} INFO[0m -   Profile type: local_chrome[0m
+[[34m2026-01-08T17:13:07.879+0300[0m] {[34mextract_links.py:[0m101} INFO[0m -   Profile directory: account_haley[0m
+[[34m2026-01-08T17:13:07.879+0300[0m] {[34mextract_links.py:[0m102} INFO[0m -   Full path: /workspace/chrome_profiles/account_haley[0m
+[[34m2026-01-08T17:13:07.879+0300[0m] {[34mextract_links.py:[0m103} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:13:08.069+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: extract_links_weekly.cleanup_chrome manual__2026-01-08T14:12:49.989793+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:13:09.421+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: extract_links_weekly.trigger_filtering_dag manual__2026-01-08T14:12:49.989793+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:13:09.421+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG extract_links_weekly has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:13:09.422+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: extract_links_weekly.trigger_filtering_dag manual__2026-01-08T14:12:49.989793+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:13:09.424+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task trigger_filtering_dag because previous state change time has not been saved[0m
+[[34m2026-01-08T17:13:09.424+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='extract_links_weekly', task_id='trigger_filtering_dag', run_id='manual__2026-01-08T14:12:49.989793+00:00', try_number=1, map_index=-1) to executor with priority 1 and queue default[0m
+[[34m2026-01-08T17:13:09.424+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'extract_links_weekly', 'trigger_filtering_dag', 'manual__2026-01-08T14:12:49.989793+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:13:09.427+0300[0m] {[34mscheduler_job_runner.py:[0m686} INFO[0m - Received executor event with state success for task instance TaskInstanceKey(dag_id='extract_links_weekly', task_id='cleanup_chrome', run_id='manual__2026-01-08T14:12:49.989793+00:00', try_number=1, map_index=-1)[0m
+[[34m2026-01-08T17:13:09.427+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'extract_links_weekly', 'trigger_filtering_dag', 'manual__2026-01-08T14:12:49.989793+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:13:09.432+0300[0m] {[34mscheduler_job_runner.py:[0m723} INFO[0m - TaskInstance Finished: dag_id=extract_links_weekly, task_id=cleanup_chrome, run_id=manual__2026-01-08T14:12:49.989793+00:00, map_index=-1, run_start_date=2026-01-08 14:13:08.172485+00:00, run_end_date=2026-01-08 14:13:08.560942+00:00, run_duration=0.388457, state=success, executor_state=success, try_number=1, max_tries=0, job_id=22, pool=default_pool, queue=default, priority_weight=2, operator=BashOperator, queued_dttm=2026-01-08 14:13:07.229553+00:00, queued_by_job_id=1, pid=2288[0m
+[[34m2026-01-08T17:13:09.460+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/extract_links.py[0m
+[[34m2026-01-08T17:13:10.074+0300[0m] {[34mextract_links.py:[0m37} INFO[0m - Using timezone: Africa/Nairobi[0m
+[[34m2026-01-08T17:13:10.088+0300[0m] {[34mextract_links.py:[0m95} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:13:10.088+0300[0m] {[34mextract_links.py:[0m96} INFO[0m - CHROME PROFILE RESOLVED FOR ACCOUNT_ID=1[0m
+[[34m2026-01-08T17:13:10.088+0300[0m] {[34mextract_links.py:[0m97} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:13:10.088+0300[0m] {[34mextract_links.py:[0m98} INFO[0m -   Account ID: 1[0m
+[[34m2026-01-08T17:13:10.088+0300[0m] {[34mextract_links.py:[0m99} INFO[0m -   Username: haley[0m
+[[34m2026-01-08T17:13:10.088+0300[0m] {[34mextract_links.py:[0m100} INFO[0m -   Profile type: local_chrome[0m
+[[34m2026-01-08T17:13:10.089+0300[0m] {[34mextract_links.py:[0m101} INFO[0m -   Profile directory: account_haley[0m
+[[34m2026-01-08T17:13:10.089+0300[0m] {[34mextract_links.py:[0m102} INFO[0m -   Full path: /workspace/chrome_profiles/account_haley[0m
+[[34m2026-01-08T17:13:10.089+0300[0m] {[34mextract_links.py:[0m103} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:13:10.303+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: extract_links_weekly.trigger_filtering_dag manual__2026-01-08T14:12:49.989793+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:13:19.310+0300[0m] {[34mscheduler_job_runner.py:[0m1586} INFO[0m - Adopting or resetting orphaned tasks for active dag runs[0m
+[[34m2026-01-08T17:15:00.777+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: unified_filter_assign_execute.fix_account_ids manual__2026-01-08T14:15:00.390769+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:15:00.777+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG unified_filter_assign_execute has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:15:00.777+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: unified_filter_assign_execute.fix_account_ids manual__2026-01-08T14:15:00.390769+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:15:00.779+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task fix_account_ids because previous state change time has not been saved[0m
+[[34m2026-01-08T17:15:00.779+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='unified_filter_assign_execute', task_id='fix_account_ids', run_id='manual__2026-01-08T14:15:00.390769+00:00', try_number=1, map_index=-1) to executor with priority 6 and queue default[0m
+[[34m2026-01-08T17:15:00.779+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'unified_filter_assign_execute', 'fix_account_ids', 'manual__2026-01-08T14:15:00.390769+00:00', '--local', '--subdir', 'DAGS_FOLDER/filter_and_execute.py'][0m
+[[34m2026-01-08T17:15:00.785+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'unified_filter_assign_execute', 'fix_account_ids', 'manual__2026-01-08T14:15:00.390769+00:00', '--local', '--subdir', 'DAGS_FOLDER/filter_and_execute.py'][0m
+[[34m2026-01-08T17:15:00.861+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/filter_and_execute.py[0m
+[[34m2026-01-08T17:15:01.849+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: unified_filter_assign_execute.fix_account_ids manual__2026-01-08T14:15:00.390769+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:15:02.440+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: unified_filter_assign_execute.process_and_assign manual__2026-01-08T14:15:00.390769+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:15:02.441+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG unified_filter_assign_execute has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:15:02.441+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: unified_filter_assign_execute.process_and_assign manual__2026-01-08T14:15:00.390769+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:15:02.442+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task process_and_assign because previous state change time has not been saved[0m
+[[34m2026-01-08T17:15:02.443+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='unified_filter_assign_execute', task_id='process_and_assign', run_id='manual__2026-01-08T14:15:00.390769+00:00', try_number=1, map_index=-1) to executor with priority 5 and queue default[0m
+[[34m2026-01-08T17:15:02.443+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'unified_filter_assign_execute', 'process_and_assign', 'manual__2026-01-08T14:15:00.390769+00:00', '--local', '--subdir', 'DAGS_FOLDER/filter_and_execute.py'][0m
+[[34m2026-01-08T17:15:02.445+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'unified_filter_assign_execute', 'process_and_assign', 'manual__2026-01-08T14:15:00.390769+00:00', '--local', '--subdir', 'DAGS_FOLDER/filter_and_execute.py'][0m
+[[34m2026-01-08T17:15:02.445+0300[0m] {[34mscheduler_job_runner.py:[0m686} INFO[0m - Received executor event with state success for task instance TaskInstanceKey(dag_id='unified_filter_assign_execute', task_id='fix_account_ids', run_id='manual__2026-01-08T14:15:00.390769+00:00', try_number=1, map_index=-1)[0m
+[[34m2026-01-08T17:15:02.448+0300[0m] {[34mscheduler_job_runner.py:[0m723} INFO[0m - TaskInstance Finished: dag_id=unified_filter_assign_execute, task_id=fix_account_ids, run_id=manual__2026-01-08T14:15:00.390769+00:00, map_index=-1, run_start_date=2026-01-08 14:15:01.942515+00:00, run_end_date=2026-01-08 14:15:02.143767+00:00, run_duration=0.201252, state=success, executor_state=success, try_number=1, max_tries=0, job_id=24, pool=default_pool, queue=default, priority_weight=6, operator=PythonOperator, queued_dttm=2026-01-08 14:15:00.778070+00:00, queued_by_job_id=1, pid=2494[0m
+[[34m2026-01-08T17:15:02.471+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/filter_and_execute.py[0m
+[[34m2026-01-08T17:15:02.887+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: unified_filter_assign_execute.process_and_assign manual__2026-01-08T14:15:00.390769+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:15:03.539+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: unified_filter_assign_execute.trigger_executor manual__2026-01-08T14:15:00.390769+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:15:03.539+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG unified_filter_assign_execute has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:15:03.539+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: unified_filter_assign_execute.trigger_executor manual__2026-01-08T14:15:00.390769+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:15:03.541+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task trigger_executor because previous state change time has not been saved[0m
+[[34m2026-01-08T17:15:03.541+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='unified_filter_assign_execute', task_id='trigger_executor', run_id='manual__2026-01-08T14:15:00.390769+00:00', try_number=1, map_index=-1) to executor with priority 4 and queue default[0m
+[[34m2026-01-08T17:15:03.541+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'unified_filter_assign_execute', 'trigger_executor', 'manual__2026-01-08T14:15:00.390769+00:00', '--local', '--subdir', 'DAGS_FOLDER/filter_and_execute.py'][0m
+[[34m2026-01-08T17:15:03.544+0300[0m] {[34mscheduler_job_runner.py:[0m686} INFO[0m - Received executor event with state success for task instance TaskInstanceKey(dag_id='unified_filter_assign_execute', task_id='process_and_assign', run_id='manual__2026-01-08T14:15:00.390769+00:00', try_number=1, map_index=-1)[0m
+[[34m2026-01-08T17:15:03.544+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'unified_filter_assign_execute', 'trigger_executor', 'manual__2026-01-08T14:15:00.390769+00:00', '--local', '--subdir', 'DAGS_FOLDER/filter_and_execute.py'][0m
+[[34m2026-01-08T17:15:03.548+0300[0m] {[34mscheduler_job_runner.py:[0m723} INFO[0m - TaskInstance Finished: dag_id=unified_filter_assign_execute, task_id=process_and_assign, run_id=manual__2026-01-08T14:15:00.390769+00:00, map_index=-1, run_start_date=2026-01-08 14:15:02.951618+00:00, run_end_date=2026-01-08 14:15:03.162902+00:00, run_duration=0.211284, state=success, executor_state=success, try_number=1, max_tries=0, job_id=25, pool=default_pool, queue=default, priority_weight=5, operator=PythonOperator, queued_dttm=2026-01-08 14:15:02.441786+00:00, queued_by_job_id=1, pid=2499[0m
+[[34m2026-01-08T17:15:03.576+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/filter_and_execute.py[0m
+[[34m2026-01-08T17:15:03.953+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: unified_filter_assign_execute.trigger_executor manual__2026-01-08T14:15:00.390769+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:15:07.895+0300[0m] {[34mscheduler_job_runner.py:[0m1412} INFO[0m - DAG unified_filter_assign_execute scheduling was skipped, probably because the DAG record was locked[0m
+[[34m2026-01-08T17:15:19.257+0300[0m] {[34mserve_logs.py:[0m103} WARNING[0m - The signature of the request was wrong[0m
+Traceback (most recent call last):
+  File "/home/airflow/.local/lib/python3.10/site-packages/airflow/utils/serve_logs.py", line 85, in validate_pre_signed_url
+    payload = signer.verify_token(auth)
+  File "/home/airflow/.local/lib/python3.10/site-packages/airflow/utils/jwt_signer.py", line 72, in verify_token
+    payload = jwt.decode(
+  File "/home/airflow/.local/lib/python3.10/site-packages/jwt/api_jwt.py", line 210, in decode
+    decoded = self.decode_complete(
+  File "/home/airflow/.local/lib/python3.10/site-packages/jwt/api_jwt.py", line 151, in decode_complete
+    decoded = api_jws.decode_complete(
+  File "/home/airflow/.local/lib/python3.10/site-packages/jwt/api_jws.py", line 209, in decode_complete
+    self._verify_signature(signing_input, header, signature, key, algorithms)
+  File "/home/airflow/.local/lib/python3.10/site-packages/jwt/api_jws.py", line 310, in _verify_signature
+    raise InvalidSignatureError("Signature verification failed")
+jwt.exceptions.InvalidSignatureError: Signature verification failed
+[[34m2026-01-08T17:15:22.522+0300[0m] {[34mserve_logs.py:[0m103} WARNING[0m - The signature of the request was wrong[0m
+Traceback (most recent call last):
+  File "/home/airflow/.local/lib/python3.10/site-packages/airflow/utils/serve_logs.py", line 85, in validate_pre_signed_url
+    payload = signer.verify_token(auth)
+  File "/home/airflow/.local/lib/python3.10/site-packages/airflow/utils/jwt_signer.py", line 72, in verify_token
+    payload = jwt.decode(
+  File "/home/airflow/.local/lib/python3.10/site-packages/jwt/api_jwt.py", line 210, in decode
+    decoded = self.decode_complete(
+  File "/home/airflow/.local/lib/python3.10/site-packages/jwt/api_jwt.py", line 151, in decode_complete
+    decoded = api_jws.decode_complete(
+  File "/home/airflow/.local/lib/python3.10/site-packages/jwt/api_jws.py", line 209, in decode_complete
+    self._verify_signature(signing_input, header, signature, key, algorithms)
+  File "/home/airflow/.local/lib/python3.10/site-packages/jwt/api_jws.py", line 310, in _verify_signature
+    raise InvalidSignatureError("Signature verification failed")
+jwt.exceptions.InvalidSignatureError: Signature verification failed
+[[34m2026-01-08T17:15:25.787+0300[0m] {[34mserve_logs.py:[0m103} WARNING[0m - The signature of the request was wrong[0m
+Traceback (most recent call last):
+  File "/home/airflow/.local/lib/python3.10/site-packages/airflow/utils/serve_logs.py", line 85, in validate_pre_signed_url
+    payload = signer.verify_token(auth)
+  File "/home/airflow/.local/lib/python3.10/site-packages/airflow/utils/jwt_signer.py", line 72, in verify_token
+    payload = jwt.decode(
+  File "/home/airflow/.local/lib/python3.10/site-packages/jwt/api_jwt.py", line 210, in decode
+    decoded = self.decode_complete(
+  File "/home/airflow/.local/lib/python3.10/site-packages/jwt/api_jwt.py", line 151, in decode_complete
+    decoded = api_jws.decode_complete(
+  File "/home/airflow/.local/lib/python3.10/site-packages/jwt/api_jws.py", line 209, in decode_complete
+    self._verify_signature(signing_input, header, signature, key, algorithms)
+  File "/home/airflow/.local/lib/python3.10/site-packages/jwt/api_jws.py", line 310, in _verify_signature
+    raise InvalidSignatureError("Signature verification failed")
+jwt.exceptions.InvalidSignatureError: Signature verification failed
+[[34m2026-01-08T17:15:32.352+0300[0m] {[34mserve_logs.py:[0m103} WARNING[0m - The signature of the request was wrong[0m
+Traceback (most recent call last):
+  File "/home/airflow/.local/lib/python3.10/site-packages/airflow/utils/serve_logs.py", line 85, in validate_pre_signed_url
+    payload = signer.verify_token(auth)
+  File "/home/airflow/.local/lib/python3.10/site-packages/airflow/utils/jwt_signer.py", line 72, in verify_token
+    payload = jwt.decode(
+  File "/home/airflow/.local/lib/python3.10/site-packages/jwt/api_jwt.py", line 210, in decode
+    decoded = self.decode_complete(
+  File "/home/airflow/.local/lib/python3.10/site-packages/jwt/api_jwt.py", line 151, in decode_complete
+    decoded = api_jws.decode_complete(
+  File "/home/airflow/.local/lib/python3.10/site-packages/jwt/api_jws.py", line 209, in decode_complete
+    self._verify_signature(signing_input, header, signature, key, algorithms)
+  File "/home/airflow/.local/lib/python3.10/site-packages/jwt/api_jws.py", line 310, in _verify_signature
+    raise InvalidSignatureError("Signature verification failed")
+jwt.exceptions.InvalidSignatureError: Signature verification failed
+[[34m2026-01-08T17:15:35.966+0300[0m] {[34mserve_logs.py:[0m103} WARNING[0m - The signature of the request was wrong[0m
+Traceback (most recent call last):
+  File "/home/airflow/.local/lib/python3.10/site-packages/airflow/utils/serve_logs.py", line 85, in validate_pre_signed_url
+    payload = signer.verify_token(auth)
+  File "/home/airflow/.local/lib/python3.10/site-packages/airflow/utils/jwt_signer.py", line 72, in verify_token
+    payload = jwt.decode(
+  File "/home/airflow/.local/lib/python3.10/site-packages/jwt/api_jwt.py", line 210, in decode
+    decoded = self.decode_complete(
+  File "/home/airflow/.local/lib/python3.10/site-packages/jwt/api_jwt.py", line 151, in decode_complete
+    decoded = api_jws.decode_complete(
+  File "/home/airflow/.local/lib/python3.10/site-packages/jwt/api_jws.py", line 209, in decode_complete
+    self._verify_signature(signing_input, header, signature, key, algorithms)
+  File "/home/airflow/.local/lib/python3.10/site-packages/jwt/api_jws.py", line 310, in _verify_signature
+    raise InvalidSignatureError("Signature verification failed")
+jwt.exceptions.InvalidSignatureError: Signature verification failed
+[[34m2026-01-08T17:15:39.219+0300[0m] {[34mserve_logs.py:[0m103} WARNING[0m - The signature of the request was wrong[0m
+Traceback (most recent call last):
+  File "/home/airflow/.local/lib/python3.10/site-packages/airflow/utils/serve_logs.py", line 85, in validate_pre_signed_url
+    payload = signer.verify_token(auth)
+  File "/home/airflow/.local/lib/python3.10/site-packages/airflow/utils/jwt_signer.py", line 72, in verify_token
+    payload = jwt.decode(
+  File "/home/airflow/.local/lib/python3.10/site-packages/jwt/api_jwt.py", line 210, in decode
+    decoded = self.decode_complete(
+  File "/home/airflow/.local/lib/python3.10/site-packages/jwt/api_jwt.py", line 151, in decode_complete
+    decoded = api_jws.decode_complete(
+  File "/home/airflow/.local/lib/python3.10/site-packages/jwt/api_jws.py", line 209, in decode_complete
+    self._verify_signature(signing_input, header, signature, key, algorithms)
+  File "/home/airflow/.local/lib/python3.10/site-packages/jwt/api_jws.py", line 310, in _verify_signature
+    raise InvalidSignatureError("Signature verification failed")
+jwt.exceptions.InvalidSignatureError: Signature verification failed
+[[34m2026-01-08T17:15:42.441+0300[0m] {[34mserve_logs.py:[0m103} WARNING[0m - The signature of the request was wrong[0m
+Traceback (most recent call last):
+  File "/home/airflow/.local/lib/python3.10/site-packages/airflow/utils/serve_logs.py", line 85, in validate_pre_signed_url
+    payload = signer.verify_token(auth)
+  File "/home/airflow/.local/lib/python3.10/site-packages/airflow/utils/jwt_signer.py", line 72, in verify_token
+    payload = jwt.decode(
+  File "/home/airflow/.local/lib/python3.10/site-packages/jwt/api_jwt.py", line 210, in decode
+    decoded = self.decode_complete(
+  File "/home/airflow/.local/lib/python3.10/site-packages/jwt/api_jwt.py", line 151, in decode_complete
+    decoded = api_jws.decode_complete(
+  File "/home/airflow/.local/lib/python3.10/site-packages/jwt/api_jws.py", line 209, in decode_complete
+    self._verify_signature(signing_input, header, signature, key, algorithms)
+  File "/home/airflow/.local/lib/python3.10/site-packages/jwt/api_jws.py", line 310, in _verify_signature
+    raise InvalidSignatureError("Signature verification failed")
+jwt.exceptions.InvalidSignatureError: Signature verification failed
+[[34m2026-01-08T17:16:10.549+0300[0m] {[34mscheduler_job_runner.py:[0m686} INFO[0m - Received executor event with state success for task instance TaskInstanceKey(dag_id='unified_filter_assign_execute', task_id='trigger_executor', run_id='manual__2026-01-08T14:15:00.390769+00:00', try_number=1, map_index=-1)[0m
+[[34m2026-01-08T17:16:10.552+0300[0m] {[34mscheduler_job_runner.py:[0m723} INFO[0m - TaskInstance Finished: dag_id=unified_filter_assign_execute, task_id=trigger_executor, run_id=manual__2026-01-08T14:15:00.390769+00:00, map_index=-1, run_start_date=2026-01-08 14:15:04.016959+00:00, run_end_date=2026-01-08 14:16:02.646520+00:00, run_duration=58.629561, state=failed, executor_state=success, try_number=1, max_tries=0, job_id=26, pool=default_pool, queue=default, priority_weight=4, operator=TriggerDagRunOperator, queued_dttm=2026-01-08 14:15:03.540329+00:00, queued_by_job_id=1, pid=2507[0m
+[[34m2026-01-08T17:16:11.406+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: unified_filter_assign_execute.send_backup_email manual__2026-01-08T14:15:00.390769+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:16:11.406+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG unified_filter_assign_execute has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:16:11.406+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: unified_filter_assign_execute.send_backup_email manual__2026-01-08T14:15:00.390769+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:16:11.408+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task send_backup_email because previous state change time has not been saved[0m
+[[34m2026-01-08T17:16:11.408+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='unified_filter_assign_execute', task_id='send_backup_email', run_id='manual__2026-01-08T14:15:00.390769+00:00', try_number=1, map_index=-1) to executor with priority 2 and queue default[0m
+[[34m2026-01-08T17:16:11.408+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'unified_filter_assign_execute', 'send_backup_email', 'manual__2026-01-08T14:15:00.390769+00:00', '--local', '--subdir', 'DAGS_FOLDER/filter_and_execute.py'][0m
+[[34m2026-01-08T17:16:11.410+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'unified_filter_assign_execute', 'send_backup_email', 'manual__2026-01-08T14:15:00.390769+00:00', '--local', '--subdir', 'DAGS_FOLDER/filter_and_execute.py'][0m
+[[34m2026-01-08T17:16:11.435+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/filter_and_execute.py[0m
+[[34m2026-01-08T17:16:11.854+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: unified_filter_assign_execute.send_backup_email manual__2026-01-08T14:15:00.390769+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:16:13.793+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: unified_filter_assign_execute.cleanup_old_backups manual__2026-01-08T14:15:00.390769+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:16:13.793+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG unified_filter_assign_execute has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:16:13.793+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: unified_filter_assign_execute.cleanup_old_backups manual__2026-01-08T14:15:00.390769+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:16:13.794+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task cleanup_old_backups because previous state change time has not been saved[0m
+[[34m2026-01-08T17:16:13.794+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='unified_filter_assign_execute', task_id='cleanup_old_backups', run_id='manual__2026-01-08T14:15:00.390769+00:00', try_number=1, map_index=-1) to executor with priority 1 and queue default[0m
+[[34m2026-01-08T17:16:13.795+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'unified_filter_assign_execute', 'cleanup_old_backups', 'manual__2026-01-08T14:15:00.390769+00:00', '--local', '--subdir', 'DAGS_FOLDER/filter_and_execute.py'][0m
+[[34m2026-01-08T17:16:13.796+0300[0m] {[34mscheduler_job_runner.py:[0m686} INFO[0m - Received executor event with state success for task instance TaskInstanceKey(dag_id='unified_filter_assign_execute', task_id='send_backup_email', run_id='manual__2026-01-08T14:15:00.390769+00:00', try_number=1, map_index=-1)[0m
+[[34m2026-01-08T17:16:13.796+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'unified_filter_assign_execute', 'cleanup_old_backups', 'manual__2026-01-08T14:15:00.390769+00:00', '--local', '--subdir', 'DAGS_FOLDER/filter_and_execute.py'][0m
+[[34m2026-01-08T17:16:13.799+0300[0m] {[34mscheduler_job_runner.py:[0m723} INFO[0m - TaskInstance Finished: dag_id=unified_filter_assign_execute, task_id=send_backup_email, run_id=manual__2026-01-08T14:15:00.390769+00:00, map_index=-1, run_start_date=2026-01-08 14:16:12.036660+00:00, run_end_date=2026-01-08 14:16:13.182263+00:00, run_duration=1.145603, state=success, executor_state=success, try_number=1, max_tries=0, job_id=27, pool=default_pool, queue=default, priority_weight=2, operator=PythonOperator, queued_dttm=2026-01-08 14:16:11.407200+00:00, queued_by_job_id=1, pid=2643[0m
+[[34m2026-01-08T17:16:13.821+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/filter_and_execute.py[0m
+[[34m2026-01-08T17:16:14.218+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: unified_filter_assign_execute.cleanup_old_backups manual__2026-01-08T14:15:00.390769+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:16:14.866+0300[0m] {[34mdagrun.py:[0m653} INFO[0m - Marking run <DagRun unified_filter_assign_execute @ 2026-01-08 14:15:00.390769+00:00: manual__2026-01-08T14:15:00.390769+00:00, state:running, queued_at: 2026-01-08 14:15:00.398672+00:00. externally triggered: True> successful[0m
+[[34m2026-01-08T17:16:14.867+0300[0m] {[34mdagrun.py:[0m704} INFO[0m - DagRun Finished: dag_id=unified_filter_assign_execute, execution_date=2026-01-08 14:15:00.390769+00:00, run_id=manual__2026-01-08T14:15:00.390769+00:00, run_start_date=2026-01-08 14:15:00.732701+00:00, run_end_date=2026-01-08 14:16:14.867169+00:00, run_duration=74.134468, state=success, external_trigger=True, run_type=manual, data_interval_start=2026-01-08 14:15:00.390769+00:00, data_interval_end=2026-01-08 14:15:00.390769+00:00, dag_hash=86ff7dafc2c5da8e429a882db638e50b[0m
+[[34m2026-01-08T17:16:14.880+0300[0m] {[34mscheduler_job_runner.py:[0m686} INFO[0m - Received executor event with state success for task instance TaskInstanceKey(dag_id='unified_filter_assign_execute', task_id='cleanup_old_backups', run_id='manual__2026-01-08T14:15:00.390769+00:00', try_number=1, map_index=-1)[0m
+[[34m2026-01-08T17:16:14.883+0300[0m] {[34mscheduler_job_runner.py:[0m723} INFO[0m - TaskInstance Finished: dag_id=unified_filter_assign_execute, task_id=cleanup_old_backups, run_id=manual__2026-01-08T14:15:00.390769+00:00, map_index=-1, run_start_date=2026-01-08 14:16:14.280739+00:00, run_end_date=2026-01-08 14:16:14.418430+00:00, run_duration=0.137691, state=success, executor_state=success, try_number=1, max_tries=0, job_id=28, pool=default_pool, queue=default, priority_weight=1, operator=PythonOperator, queued_dttm=2026-01-08 14:16:13.793938+00:00, queued_by_job_id=1, pid=2645[0m
+[[34m2026-01-08T17:16:50.820+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: unified_filter_assign_execute.fix_account_ids manual__2026-01-08T14:16:50.515978+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:16:50.821+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG unified_filter_assign_execute has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:16:50.821+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: unified_filter_assign_execute.fix_account_ids manual__2026-01-08T14:16:50.515978+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:16:50.822+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task fix_account_ids because previous state change time has not been saved[0m
+[[34m2026-01-08T17:16:50.823+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='unified_filter_assign_execute', task_id='fix_account_ids', run_id='manual__2026-01-08T14:16:50.515978+00:00', try_number=1, map_index=-1) to executor with priority 5 and queue default[0m
+[[34m2026-01-08T17:16:50.823+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'unified_filter_assign_execute', 'fix_account_ids', 'manual__2026-01-08T14:16:50.515978+00:00', '--local', '--subdir', 'DAGS_FOLDER/filter_and_execute.py'][0m
+[[34m2026-01-08T17:16:50.825+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'unified_filter_assign_execute', 'fix_account_ids', 'manual__2026-01-08T14:16:50.515978+00:00', '--local', '--subdir', 'DAGS_FOLDER/filter_and_execute.py'][0m
+[[34m2026-01-08T17:16:50.851+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/filter_and_execute.py[0m
+[[34m2026-01-08T17:16:51.314+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: unified_filter_assign_execute.fix_account_ids manual__2026-01-08T14:16:50.515978+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:16:52.796+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: unified_filter_assign_execute.process_and_assign manual__2026-01-08T14:16:50.515978+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:16:52.797+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG unified_filter_assign_execute has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:16:52.797+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: unified_filter_assign_execute.process_and_assign manual__2026-01-08T14:16:50.515978+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:16:52.798+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task process_and_assign because previous state change time has not been saved[0m
+[[34m2026-01-08T17:16:52.799+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='unified_filter_assign_execute', task_id='process_and_assign', run_id='manual__2026-01-08T14:16:50.515978+00:00', try_number=1, map_index=-1) to executor with priority 4 and queue default[0m
+[[34m2026-01-08T17:16:52.799+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'unified_filter_assign_execute', 'process_and_assign', 'manual__2026-01-08T14:16:50.515978+00:00', '--local', '--subdir', 'DAGS_FOLDER/filter_and_execute.py'][0m
+[[34m2026-01-08T17:16:52.801+0300[0m] {[34mscheduler_job_runner.py:[0m686} INFO[0m - Received executor event with state success for task instance TaskInstanceKey(dag_id='unified_filter_assign_execute', task_id='fix_account_ids', run_id='manual__2026-01-08T14:16:50.515978+00:00', try_number=1, map_index=-1)[0m
+[[34m2026-01-08T17:16:52.801+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'unified_filter_assign_execute', 'process_and_assign', 'manual__2026-01-08T14:16:50.515978+00:00', '--local', '--subdir', 'DAGS_FOLDER/filter_and_execute.py'][0m
+[[34m2026-01-08T17:16:52.805+0300[0m] {[34mscheduler_job_runner.py:[0m723} INFO[0m - TaskInstance Finished: dag_id=unified_filter_assign_execute, task_id=fix_account_ids, run_id=manual__2026-01-08T14:16:50.515978+00:00, map_index=-1, run_start_date=2026-01-08 14:16:51.432876+00:00, run_end_date=2026-01-08 14:16:51.823667+00:00, run_duration=0.390791, state=success, executor_state=success, try_number=1, max_tries=0, job_id=29, pool=default_pool, queue=default, priority_weight=5, operator=PythonOperator, queued_dttm=2026-01-08 14:16:50.821726+00:00, queued_by_job_id=1, pid=2707[0m
+[[34m2026-01-08T17:16:52.833+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/filter_and_execute.py[0m
+[[34m2026-01-08T17:16:53.238+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: unified_filter_assign_execute.process_and_assign manual__2026-01-08T14:16:50.515978+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:16:53.996+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: unified_filter_assign_execute.create_backup manual__2026-01-08T14:16:50.515978+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:16:53.996+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG unified_filter_assign_execute has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:16:53.997+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: unified_filter_assign_execute.create_backup manual__2026-01-08T14:16:50.515978+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:16:53.998+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task create_backup because previous state change time has not been saved[0m
+[[34m2026-01-08T17:16:53.998+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='unified_filter_assign_execute', task_id='create_backup', run_id='manual__2026-01-08T14:16:50.515978+00:00', try_number=1, map_index=-1) to executor with priority 3 and queue default[0m
+[[34m2026-01-08T17:16:53.998+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'unified_filter_assign_execute', 'create_backup', 'manual__2026-01-08T14:16:50.515978+00:00', '--local', '--subdir', 'DAGS_FOLDER/filter_and_execute.py'][0m
+[[34m2026-01-08T17:16:54.001+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'unified_filter_assign_execute', 'create_backup', 'manual__2026-01-08T14:16:50.515978+00:00', '--local', '--subdir', 'DAGS_FOLDER/filter_and_execute.py'][0m
+[[34m2026-01-08T17:16:54.002+0300[0m] {[34mscheduler_job_runner.py:[0m686} INFO[0m - Received executor event with state success for task instance TaskInstanceKey(dag_id='unified_filter_assign_execute', task_id='process_and_assign', run_id='manual__2026-01-08T14:16:50.515978+00:00', try_number=1, map_index=-1)[0m
+[[34m2026-01-08T17:16:54.011+0300[0m] {[34mscheduler_job_runner.py:[0m723} INFO[0m - TaskInstance Finished: dag_id=unified_filter_assign_execute, task_id=process_and_assign, run_id=manual__2026-01-08T14:16:50.515978+00:00, map_index=-1, run_start_date=2026-01-08 14:16:53.415417+00:00, run_end_date=2026-01-08 14:16:53.669616+00:00, run_duration=0.254199, state=success, executor_state=success, try_number=1, max_tries=0, job_id=30, pool=default_pool, queue=default, priority_weight=4, operator=PythonOperator, queued_dttm=2026-01-08 14:16:52.797697+00:00, queued_by_job_id=1, pid=2712[0m
+[[34m2026-01-08T17:16:54.034+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/filter_and_execute.py[0m
+[[34m2026-01-08T17:16:54.529+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: unified_filter_assign_execute.create_backup manual__2026-01-08T14:16:50.515978+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:16:56.138+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: unified_filter_assign_execute.send_backup_email manual__2026-01-08T14:16:50.515978+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:16:56.138+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG unified_filter_assign_execute has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:16:56.138+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: unified_filter_assign_execute.send_backup_email manual__2026-01-08T14:16:50.515978+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:16:56.140+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task send_backup_email because previous state change time has not been saved[0m
+[[34m2026-01-08T17:16:56.140+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='unified_filter_assign_execute', task_id='send_backup_email', run_id='manual__2026-01-08T14:16:50.515978+00:00', try_number=1, map_index=-1) to executor with priority 2 and queue default[0m
+[[34m2026-01-08T17:16:56.140+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'unified_filter_assign_execute', 'send_backup_email', 'manual__2026-01-08T14:16:50.515978+00:00', '--local', '--subdir', 'DAGS_FOLDER/filter_and_execute.py'][0m
+[[34m2026-01-08T17:16:56.142+0300[0m] {[34mscheduler_job_runner.py:[0m686} INFO[0m - Received executor event with state success for task instance TaskInstanceKey(dag_id='unified_filter_assign_execute', task_id='create_backup', run_id='manual__2026-01-08T14:16:50.515978+00:00', try_number=1, map_index=-1)[0m
+[[34m2026-01-08T17:16:56.142+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'unified_filter_assign_execute', 'send_backup_email', 'manual__2026-01-08T14:16:50.515978+00:00', '--local', '--subdir', 'DAGS_FOLDER/filter_and_execute.py'][0m
+[[34m2026-01-08T17:16:56.145+0300[0m] {[34mscheduler_job_runner.py:[0m723} INFO[0m - TaskInstance Finished: dag_id=unified_filter_assign_execute, task_id=create_backup, run_id=manual__2026-01-08T14:16:50.515978+00:00, map_index=-1, run_start_date=2026-01-08 14:16:54.598831+00:00, run_end_date=2026-01-08 14:16:55.393115+00:00, run_duration=0.794284, state=success, executor_state=success, try_number=1, max_tries=0, job_id=31, pool=default_pool, queue=default, priority_weight=3, operator=PythonOperator, queued_dttm=2026-01-08 14:16:53.997469+00:00, queued_by_job_id=1, pid=2720[0m
+[[34m2026-01-08T17:16:56.169+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/filter_and_execute.py[0m
+[[34m2026-01-08T17:16:56.562+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: unified_filter_assign_execute.send_backup_email manual__2026-01-08T14:16:50.515978+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:16:59.917+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: unified_filter_assign_execute.cleanup_old_backups manual__2026-01-08T14:16:50.515978+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:16:59.917+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG unified_filter_assign_execute has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:16:59.917+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: unified_filter_assign_execute.cleanup_old_backups manual__2026-01-08T14:16:50.515978+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:16:59.919+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task cleanup_old_backups because previous state change time has not been saved[0m
+[[34m2026-01-08T17:16:59.919+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='unified_filter_assign_execute', task_id='cleanup_old_backups', run_id='manual__2026-01-08T14:16:50.515978+00:00', try_number=1, map_index=-1) to executor with priority 1 and queue default[0m
+[[34m2026-01-08T17:16:59.919+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'unified_filter_assign_execute', 'cleanup_old_backups', 'manual__2026-01-08T14:16:50.515978+00:00', '--local', '--subdir', 'DAGS_FOLDER/filter_and_execute.py'][0m
+[[34m2026-01-08T17:16:59.922+0300[0m] {[34mscheduler_job_runner.py:[0m686} INFO[0m - Received executor event with state success for task instance TaskInstanceKey(dag_id='unified_filter_assign_execute', task_id='send_backup_email', run_id='manual__2026-01-08T14:16:50.515978+00:00', try_number=1, map_index=-1)[0m
+[[34m2026-01-08T17:16:59.922+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'unified_filter_assign_execute', 'cleanup_old_backups', 'manual__2026-01-08T14:16:50.515978+00:00', '--local', '--subdir', 'DAGS_FOLDER/filter_and_execute.py'][0m
+[[34m2026-01-08T17:16:59.926+0300[0m] {[34mscheduler_job_runner.py:[0m723} INFO[0m - TaskInstance Finished: dag_id=unified_filter_assign_execute, task_id=send_backup_email, run_id=manual__2026-01-08T14:16:50.515978+00:00, map_index=-1, run_start_date=2026-01-08 14:16:56.630739+00:00, run_end_date=2026-01-08 14:16:59.460864+00:00, run_duration=2.830125, state=success, executor_state=success, try_number=1, max_tries=0, job_id=32, pool=default_pool, queue=default, priority_weight=2, operator=PythonOperator, queued_dttm=2026-01-08 14:16:56.139184+00:00, queued_by_job_id=1, pid=2733[0m
+[[34m2026-01-08T17:16:59.948+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/filter_and_execute.py[0m
+[[34m2026-01-08T17:17:00.332+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: unified_filter_assign_execute.cleanup_old_backups manual__2026-01-08T14:16:50.515978+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:17:00.992+0300[0m] {[34mdagrun.py:[0m653} INFO[0m - Marking run <DagRun unified_filter_assign_execute @ 2026-01-08 14:16:50.515978+00:00: manual__2026-01-08T14:16:50.515978+00:00, state:running, queued_at: 2026-01-08 14:16:50.523271+00:00. externally triggered: True> successful[0m
+[[34m2026-01-08T17:17:00.992+0300[0m] {[34mdagrun.py:[0m704} INFO[0m - DagRun Finished: dag_id=unified_filter_assign_execute, execution_date=2026-01-08 14:16:50.515978+00:00, run_id=manual__2026-01-08T14:16:50.515978+00:00, run_start_date=2026-01-08 14:16:50.798898+00:00, run_end_date=2026-01-08 14:17:00.992686+00:00, run_duration=10.193788, state=success, external_trigger=True, run_type=manual, data_interval_start=2026-01-08 14:16:50.515978+00:00, data_interval_end=2026-01-08 14:16:50.515978+00:00, dag_hash=f224a5e7be6d44bd4034e7483e9ca860[0m
+[[34m2026-01-08T17:17:01.007+0300[0m] {[34mscheduler_job_runner.py:[0m686} INFO[0m - Received executor event with state success for task instance TaskInstanceKey(dag_id='unified_filter_assign_execute', task_id='cleanup_old_backups', run_id='manual__2026-01-08T14:16:50.515978+00:00', try_number=1, map_index=-1)[0m
+[[34m2026-01-08T17:17:01.010+0300[0m] {[34mscheduler_job_runner.py:[0m723} INFO[0m - TaskInstance Finished: dag_id=unified_filter_assign_execute, task_id=cleanup_old_backups, run_id=manual__2026-01-08T14:16:50.515978+00:00, map_index=-1, run_start_date=2026-01-08 14:17:00.400925+00:00, run_end_date=2026-01-08 14:17:00.550739+00:00, run_duration=0.149814, state=success, executor_state=success, try_number=1, max_tries=0, job_id=33, pool=default_pool, queue=default, priority_weight=1, operator=PythonOperator, queued_dttm=2026-01-08 14:16:59.918329+00:00, queued_by_job_id=1, pid=2744[0m
+[[34m2026-01-08T17:18:19.347+0300[0m] {[34mscheduler_job_runner.py:[0m1586} INFO[0m - Adopting or resetting orphaned tasks for active dag runs[0m
+
+  ____________       _____________
+ ____    |__( )_________  __/__  /________      __
+____  /| |_  /__  ___/_  /_ __  /_  __ \_ | /| / /
+___  ___ |  / _  /   _  __/ _  / / /_/ /_ |/ |/ /
+ _/_/  |_/_/  /_/    /_/    /_/  \____/____/|__/
+[[34m2026-01-08T17:35:14.573+0300[0m] {[34mexecutor_loader.py:[0m117} INFO[0m - Loaded executor: LocalExecutor[0m
+[[34m2026-01-08T17:35:14.657+0300[0m] {[34mscheduler_job_runner.py:[0m798} INFO[0m - Starting the scheduler[0m
+[[34m2026-01-08T17:35:14.657+0300[0m] {[34mscheduler_job_runner.py:[0m805} INFO[0m - Processing each file at most -1 times[0m
+[[34m2026-01-08T17:35:14.697+0300[0m] {[34mmanager.py:[0m166} INFO[0m - Launched DagFileProcessorManager with pid: 102[0m
+[[34m2026-01-08T17:35:14.700+0300[0m] {[34mscheduler_job_runner.py:[0m1586} INFO[0m - Adopting or resetting orphaned tasks for active dag runs[0m
+[[34m2026-01-08T17:35:14.704+0300[0m] {[34msettings.py:[0m60} INFO[0m - Configured default timezone Timezone('Africa/Nairobi')[0m
+[[34m2026-01-08T17:35:14.730+0300[0m] {[34mscheduler_job_runner.py:[0m1609} INFO[0m - Marked 1 SchedulerJob instances as failed[0m
+[[34m2026-01-08T17:35:14.876+0300[0m] {[34mscheduler_job_runner.py:[0m1650} INFO[0m - Reset the following 1 orphaned TaskInstances:
+	<TaskInstance: extract_links_weekly.trigger_filtering_dag manual__2026-01-08T14:12:49.989793+00:00 [running]>[0m
+[[34m2026-01-08T17:35:15.440+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: extract_links_weekly.trigger_filtering_dag manual__2026-01-08T14:12:49.989793+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:35:15.440+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG extract_links_weekly has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:35:15.440+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: extract_links_weekly.trigger_filtering_dag manual__2026-01-08T14:12:49.989793+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:35:15.442+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='extract_links_weekly', task_id='trigger_filtering_dag', run_id='manual__2026-01-08T14:12:49.989793+00:00', try_number=2, map_index=-1) to executor with priority 1 and queue default[0m
+[[34m2026-01-08T17:35:15.443+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'extract_links_weekly', 'trigger_filtering_dag', 'manual__2026-01-08T14:12:49.989793+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:35:15.446+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'extract_links_weekly', 'trigger_filtering_dag', 'manual__2026-01-08T14:12:49.989793+00:00', '--local', '--subdir', 'DAGS_FOLDER/extract_links.py'][0m
+[[34m2026-01-08T17:35:15.553+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/extract_links.py[0m
+[[34m2026-01-08T17:35:23.887+0300[0m] {[34mextract_links.py:[0m37} INFO[0m - Using timezone: Africa/Nairobi[0m
+[[34m2026-01-08T17:35:24.038+0300[0m] {[34mextract_links.py:[0m95} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:35:24.038+0300[0m] {[34mextract_links.py:[0m96} INFO[0m - CHROME PROFILE RESOLVED FOR ACCOUNT_ID=1[0m
+[[34m2026-01-08T17:35:24.038+0300[0m] {[34mextract_links.py:[0m97} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:35:24.038+0300[0m] {[34mextract_links.py:[0m98} INFO[0m -   Account ID: 1[0m
+[[34m2026-01-08T17:35:24.039+0300[0m] {[34mextract_links.py:[0m99} INFO[0m -   Username: haley[0m
+[[34m2026-01-08T17:35:24.039+0300[0m] {[34mextract_links.py:[0m100} INFO[0m -   Profile type: local_chrome[0m
+[[34m2026-01-08T17:35:24.042+0300[0m] {[34mextract_links.py:[0m101} INFO[0m -   Profile directory: account_haley[0m
+[[34m2026-01-08T17:35:24.042+0300[0m] {[34mextract_links.py:[0m102} INFO[0m -   Full path: /workspace/chrome_profiles/account_haley[0m
+[[34m2026-01-08T17:35:24.043+0300[0m] {[34mextract_links.py:[0m103} INFO[0m - ================================================================================[0m
+[[34m2026-01-08T17:35:24.751+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: extract_links_weekly.trigger_filtering_dag manual__2026-01-08T14:12:49.989793+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:40:14.994+0300[0m] {[34mscheduler_job_runner.py:[0m1586} INFO[0m - Adopting or resetting orphaned tasks for active dag runs[0m
+[[34m2026-01-08T17:45:15.031+0300[0m] {[34mscheduler_job_runner.py:[0m1586} INFO[0m - Adopting or resetting orphaned tasks for active dag runs[0m
+[[34m2026-01-08T17:47:19.889+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: unified_filter_assign_execute.fix_account_ids manual__2026-01-08T14:47:19.481979+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:47:19.889+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG unified_filter_assign_execute has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:47:19.890+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: unified_filter_assign_execute.fix_account_ids manual__2026-01-08T14:47:19.481979+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:47:19.891+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task fix_account_ids because previous state change time has not been saved[0m
+[[34m2026-01-08T17:47:19.891+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='unified_filter_assign_execute', task_id='fix_account_ids', run_id='manual__2026-01-08T14:47:19.481979+00:00', try_number=1, map_index=-1) to executor with priority 5 and queue default[0m
+[[34m2026-01-08T17:47:19.891+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'unified_filter_assign_execute', 'fix_account_ids', 'manual__2026-01-08T14:47:19.481979+00:00', '--local', '--subdir', 'DAGS_FOLDER/filter_and_execute.py'][0m
+[[34m2026-01-08T17:47:19.893+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'unified_filter_assign_execute', 'fix_account_ids', 'manual__2026-01-08T14:47:19.481979+00:00', '--local', '--subdir', 'DAGS_FOLDER/filter_and_execute.py'][0m
+[[34m2026-01-08T17:47:19.917+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/filter_and_execute.py[0m
+[[34m2026-01-08T17:47:20.412+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: unified_filter_assign_execute.fix_account_ids manual__2026-01-08T14:47:19.481979+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:47:20.975+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: unified_filter_assign_execute.process_and_assign manual__2026-01-08T14:47:19.481979+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:47:20.976+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG unified_filter_assign_execute has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:47:20.976+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: unified_filter_assign_execute.process_and_assign manual__2026-01-08T14:47:19.481979+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:47:20.977+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task process_and_assign because previous state change time has not been saved[0m
+[[34m2026-01-08T17:47:20.977+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='unified_filter_assign_execute', task_id='process_and_assign', run_id='manual__2026-01-08T14:47:19.481979+00:00', try_number=1, map_index=-1) to executor with priority 4 and queue default[0m
+[[34m2026-01-08T17:47:20.978+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'unified_filter_assign_execute', 'process_and_assign', 'manual__2026-01-08T14:47:19.481979+00:00', '--local', '--subdir', 'DAGS_FOLDER/filter_and_execute.py'][0m
+[[34m2026-01-08T17:47:20.979+0300[0m] {[34mscheduler_job_runner.py:[0m686} INFO[0m - Received executor event with state success for task instance TaskInstanceKey(dag_id='unified_filter_assign_execute', task_id='fix_account_ids', run_id='manual__2026-01-08T14:47:19.481979+00:00', try_number=1, map_index=-1)[0m
+[[34m2026-01-08T17:47:20.979+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'unified_filter_assign_execute', 'process_and_assign', 'manual__2026-01-08T14:47:19.481979+00:00', '--local', '--subdir', 'DAGS_FOLDER/filter_and_execute.py'][0m
+[[34m2026-01-08T17:47:20.985+0300[0m] {[34mscheduler_job_runner.py:[0m723} INFO[0m - TaskInstance Finished: dag_id=unified_filter_assign_execute, task_id=fix_account_ids, run_id=manual__2026-01-08T14:47:19.481979+00:00, map_index=-1, run_start_date=2026-01-08 14:47:20.501415+00:00, run_end_date=2026-01-08 14:47:20.750248+00:00, run_duration=0.248833, state=success, executor_state=success, try_number=1, max_tries=0, job_id=36, pool=default_pool, queue=default, priority_weight=5, operator=PythonOperator, queued_dttm=2026-01-08 14:47:19.890513+00:00, queued_by_job_id=34, pid=1342[0m
+[[34m2026-01-08T17:47:21.007+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/filter_and_execute.py[0m
+[[34m2026-01-08T17:47:21.354+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: unified_filter_assign_execute.process_and_assign manual__2026-01-08T14:47:19.481979+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:47:22.064+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: unified_filter_assign_execute.create_backup manual__2026-01-08T14:47:19.481979+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:47:22.065+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG unified_filter_assign_execute has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:47:22.065+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: unified_filter_assign_execute.create_backup manual__2026-01-08T14:47:19.481979+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:47:22.066+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task create_backup because previous state change time has not been saved[0m
+[[34m2026-01-08T17:47:22.067+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='unified_filter_assign_execute', task_id='create_backup', run_id='manual__2026-01-08T14:47:19.481979+00:00', try_number=1, map_index=-1) to executor with priority 3 and queue default[0m
+[[34m2026-01-08T17:47:22.067+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'unified_filter_assign_execute', 'create_backup', 'manual__2026-01-08T14:47:19.481979+00:00', '--local', '--subdir', 'DAGS_FOLDER/filter_and_execute.py'][0m
+[[34m2026-01-08T17:47:22.068+0300[0m] {[34mscheduler_job_runner.py:[0m686} INFO[0m - Received executor event with state success for task instance TaskInstanceKey(dag_id='unified_filter_assign_execute', task_id='process_and_assign', run_id='manual__2026-01-08T14:47:19.481979+00:00', try_number=1, map_index=-1)[0m
+[[34m2026-01-08T17:47:22.068+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'unified_filter_assign_execute', 'create_backup', 'manual__2026-01-08T14:47:19.481979+00:00', '--local', '--subdir', 'DAGS_FOLDER/filter_and_execute.py'][0m
+[[34m2026-01-08T17:47:22.071+0300[0m] {[34mscheduler_job_runner.py:[0m723} INFO[0m - TaskInstance Finished: dag_id=unified_filter_assign_execute, task_id=process_and_assign, run_id=manual__2026-01-08T14:47:19.481979+00:00, map_index=-1, run_start_date=2026-01-08 14:47:21.415215+00:00, run_end_date=2026-01-08 14:47:21.663598+00:00, run_duration=0.248383, state=success, executor_state=success, try_number=1, max_tries=0, job_id=37, pool=default_pool, queue=default, priority_weight=4, operator=PythonOperator, queued_dttm=2026-01-08 14:47:20.976749+00:00, queued_by_job_id=34, pid=1347[0m
+[[34m2026-01-08T17:47:22.090+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/filter_and_execute.py[0m
+[[34m2026-01-08T17:47:22.435+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: unified_filter_assign_execute.create_backup manual__2026-01-08T14:47:19.481979+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:47:25.982+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: unified_filter_assign_execute.send_backup_email manual__2026-01-08T14:47:19.481979+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:47:25.982+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG unified_filter_assign_execute has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:47:25.982+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: unified_filter_assign_execute.send_backup_email manual__2026-01-08T14:47:19.481979+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:47:25.984+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task send_backup_email because previous state change time has not been saved[0m
+[[34m2026-01-08T17:47:25.984+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='unified_filter_assign_execute', task_id='send_backup_email', run_id='manual__2026-01-08T14:47:19.481979+00:00', try_number=1, map_index=-1) to executor with priority 2 and queue default[0m
+[[34m2026-01-08T17:47:25.984+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'unified_filter_assign_execute', 'send_backup_email', 'manual__2026-01-08T14:47:19.481979+00:00', '--local', '--subdir', 'DAGS_FOLDER/filter_and_execute.py'][0m
+[[34m2026-01-08T17:47:25.986+0300[0m] {[34mscheduler_job_runner.py:[0m686} INFO[0m - Received executor event with state success for task instance TaskInstanceKey(dag_id='unified_filter_assign_execute', task_id='create_backup', run_id='manual__2026-01-08T14:47:19.481979+00:00', try_number=1, map_index=-1)[0m
+[[34m2026-01-08T17:47:25.986+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'unified_filter_assign_execute', 'send_backup_email', 'manual__2026-01-08T14:47:19.481979+00:00', '--local', '--subdir', 'DAGS_FOLDER/filter_and_execute.py'][0m
+[[34m2026-01-08T17:47:25.989+0300[0m] {[34mscheduler_job_runner.py:[0m723} INFO[0m - TaskInstance Finished: dag_id=unified_filter_assign_execute, task_id=create_backup, run_id=manual__2026-01-08T14:47:19.481979+00:00, map_index=-1, run_start_date=2026-01-08 14:47:22.496728+00:00, run_end_date=2026-01-08 14:47:25.213635+00:00, run_duration=2.716907, state=success, executor_state=success, try_number=1, max_tries=0, job_id=38, pool=default_pool, queue=default, priority_weight=3, operator=PythonOperator, queued_dttm=2026-01-08 14:47:22.065973+00:00, queued_by_job_id=34, pid=1355[0m
+[[34m2026-01-08T17:47:26.011+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/filter_and_execute.py[0m
+[[34m2026-01-08T17:47:26.482+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: unified_filter_assign_execute.send_backup_email manual__2026-01-08T14:47:19.481979+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:47:29.979+0300[0m] {[34mscheduler_job_runner.py:[0m414} INFO[0m - 1 tasks up for execution:
+	<TaskInstance: unified_filter_assign_execute.cleanup_old_backups manual__2026-01-08T14:47:19.481979+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:47:29.979+0300[0m] {[34mscheduler_job_runner.py:[0m477} INFO[0m - DAG unified_filter_assign_execute has 0/16 running and queued tasks[0m
+[[34m2026-01-08T17:47:29.980+0300[0m] {[34mscheduler_job_runner.py:[0m593} INFO[0m - Setting the following tasks to queued state:
+	<TaskInstance: unified_filter_assign_execute.cleanup_old_backups manual__2026-01-08T14:47:19.481979+00:00 [scheduled]>[0m
+[[34m2026-01-08T17:47:29.981+0300[0m] {[34mtaskinstance.py:[0m1439} WARNING[0m - cannot record scheduled_duration for task cleanup_old_backups because previous state change time has not been saved[0m
+[[34m2026-01-08T17:47:29.981+0300[0m] {[34mscheduler_job_runner.py:[0m636} INFO[0m - Sending TaskInstanceKey(dag_id='unified_filter_assign_execute', task_id='cleanup_old_backups', run_id='manual__2026-01-08T14:47:19.481979+00:00', try_number=1, map_index=-1) to executor with priority 1 and queue default[0m
+[[34m2026-01-08T17:47:29.981+0300[0m] {[34mbase_executor.py:[0m144} INFO[0m - Adding to queue: ['airflow', 'tasks', 'run', 'unified_filter_assign_execute', 'cleanup_old_backups', 'manual__2026-01-08T14:47:19.481979+00:00', '--local', '--subdir', 'DAGS_FOLDER/filter_and_execute.py'][0m
+[[34m2026-01-08T17:47:29.983+0300[0m] {[34mscheduler_job_runner.py:[0m686} INFO[0m - Received executor event with state success for task instance TaskInstanceKey(dag_id='unified_filter_assign_execute', task_id='send_backup_email', run_id='manual__2026-01-08T14:47:19.481979+00:00', try_number=1, map_index=-1)[0m
+[[34m2026-01-08T17:47:29.983+0300[0m] {[34mlocal_executor.py:[0m86} INFO[0m - QueuedLocalWorker running ['airflow', 'tasks', 'run', 'unified_filter_assign_execute', 'cleanup_old_backups', 'manual__2026-01-08T14:47:19.481979+00:00', '--local', '--subdir', 'DAGS_FOLDER/filter_and_execute.py'][0m
+[[34m2026-01-08T17:47:29.986+0300[0m] {[34mscheduler_job_runner.py:[0m723} INFO[0m - TaskInstance Finished: dag_id=unified_filter_assign_execute, task_id=send_backup_email, run_id=manual__2026-01-08T14:47:19.481979+00:00, map_index=-1, run_start_date=2026-01-08 14:47:26.544811+00:00, run_end_date=2026-01-08 14:47:29.819676+00:00, run_duration=3.274865, state=success, executor_state=success, try_number=1, max_tries=0, job_id=39, pool=default_pool, queue=default, priority_weight=2, operator=PythonOperator, queued_dttm=2026-01-08 14:47:25.983287+00:00, queued_by_job_id=34, pid=1378[0m
+[[34m2026-01-08T17:47:30.007+0300[0m] {[34mdagbag.py:[0m539} INFO[0m - Filling up the DagBag from /opt/***/dags/filter_and_execute.py[0m
+[[34m2026-01-08T17:47:30.380+0300[0m] {[34mtask_command.py:[0m415} INFO[0m - Running <TaskInstance: unified_filter_assign_execute.cleanup_old_backups manual__2026-01-08T14:47:19.481979+00:00 [queued]> on host 31485e2bbde1[0m
+[[34m2026-01-08T17:47:31.058+0300[0m] {[34mdagrun.py:[0m653} INFO[0m - Marking run <DagRun unified_filter_assign_execute @ 2026-01-08 14:47:19.481979+00:00: manual__2026-01-08T14:47:19.481979+00:00, state:running, queued_at: 2026-01-08 14:47:19.496744+00:00. externally triggered: True> successful[0m
+[[34m2026-01-08T17:47:31.059+0300[0m] {[34mdagrun.py:[0m704} INFO[0m - DagRun Finished: dag_id=unified_filter_assign_execute, execution_date=2026-01-08 14:47:19.481979+00:00, run_id=manual__2026-01-08T14:47:19.481979+00:00, run_start_date=2026-01-08 14:47:19.863169+00:00, run_end_date=2026-01-08 14:47:31.059375+00:00, run_duration=11.196206, state=success, external_trigger=True, run_type=manual, data_interval_start=2026-01-08 14:47:19.481979+00:00, data_interval_end=2026-01-08 14:47:19.481979+00:00, dag_hash=f224a5e7be6d44bd4034e7483e9ca860[0m
+[[34m2026-01-08T17:47:31.076+0300[0m] {[34mscheduler_job_runner.py:[0m686} INFO[0m - Received executor event with state success for task instance TaskInstanceKey(dag_id='unified_filter_assign_execute', task_id='cleanup_old_backups', run_id='manual__2026-01-08T14:47:19.481979+00:00', try_number=1, map_index=-1)[0m
+[[34m2026-01-08T17:47:31.078+0300[0m] {[34mscheduler_job_runner.py:[0m723} INFO[0m - TaskInstance Finished: dag_id=unified_filter_assign_execute, task_id=cleanup_old_backups, run_id=manual__2026-01-08T14:47:19.481979+00:00, map_index=-1, run_start_date=2026-01-08 14:47:30.442299+00:00, run_end_date=2026-01-08 14:47:30.570683+00:00, run_duration=0.128384, state=success, executor_state=success, try_number=1, max_tries=0, job_id=40, pool=default_pool, queue=default, priority_weight=1, operator=PythonOperator, queued_dttm=2026-01-08 14:47:29.980690+00:00, queued_by_job_id=34, pid=1380[0m

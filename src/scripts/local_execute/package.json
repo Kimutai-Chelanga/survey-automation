@@ -1,0 +1,45 @@
+{
+  "name": "local-chrome-workflow-orchestrator",
+  "version": "1.0.0",
+  "description": "Local Chrome Smart Workflow Orchestrator - Processes workflows using persistent local Chrome profiles with daily settings integration",
+  "main": "local-orchestrator.js",
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node local-orchestrator.js",
+    "orchestrator": "node dynamic-orchestrator.js",
+    "dev": "NODE_ENV=development node local-orchestrator.js",
+    "dev:orchestrator": "NODE_ENV=development node dynamic-orchestrator.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "clean": "echo \"Cleaning temporary files...\" && rm -rf temp_* 2>/dev/null || true",
+    "debug": "NODE_ENV=development node --inspect dynamic-orchestrator.js",
+    "debug:orchestrator": "NODE_ENV=development node --trace-warnings dynamic-orchestrator.js"
+  },
+  "keywords": [
+    "chrome",
+    "automation",
+    "puppeteer",
+    "workflow",
+    "orchestrator",
+    "mongodb",
+    "postgresql",
+    "airflow",
+    "dynamic-orchestrator",
+    "execution-engine"
+  ],
+  "author": "Data Team",
+  "license": "MIT",
+  "dependencies": {
+    "mongodb": "^7.0.0",
+    "node-fetch": "^2.7.0",
+    "pg": "^8.16.3",
+    "puppeteer-core": "^24.32.0",
+    "ws": "^8.19.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/pg": "^8.11.10"
+  }
+}

@@ -1,0 +1,3416 @@
+fileloc_hash,fileloc,last_updated,source_code
+39511773339100336,/opt/airflow/dags/clean_content.py,2025-09-10 21:42:45.308066+03,"import logging
+from airflow import DAG
+from airflow.operators.python import PythonOperator
+from datetime import datetime
+from core.database.postgres import (
+    replies as pg_replies,
+    messages as pg_messages,
+    retweets as pg_retweets,
+)
+
+logger = logging.getLogger(__name__)
+
+DEFAULT_ARGS = {
+    'owner': 'airflow',
+    'depends_on_past': False,
+    'email_on_failure': False,
+    'email_on_retry': False,
+    'retries': 0,  # Changed from 1 to 0 - no retries
+    'max_active_runs': 1,  # Added to ensure only one instance can run
+}
+
+def clean_content():
+    """"""Delete all replies, messages, and retweets from the PostgreSQL database.""""""
+    try:
+        # Delete all replies
+        replies_deleted = pg_replies.delete_all()
+        logger.info(f""Deleted {replies_deleted} replies from PostgreSQL."")
+        
+        # Delete all messages
+        messages_deleted = pg_messages.delete_all()
+        logger.info(f""Deleted {messages_deleted} messages from PostgreSQL."")
+        
+        # Delete all retweets
+        retweets_deleted = pg_retweets.delete_all()
+        logger.info(f""Deleted {retweets_deleted} retweets from PostgreSQL."")
+        
+        logger.info(
+            f""Clean Content completed: deleted {replies_deleted} replies, ""
+            f""{messages_deleted} messages, and {retweets_deleted} retweets.""
+        )
+        
+    except Exception as e:
+        logger.error(f""❌ Error during content cleanup: {e}"")
+        raise
+
+with DAG(
+    'clean_content',
+    default_args=DEFAULT_ARGS,
+    description='Delete all replies, messages, and retweets from PostgreSQL',
+    schedule_interval=None,
+    start_date=datetime(2025, 8, 6),
+    catchup=False,
+    max_active_runs=1  # Added to DAG level as well for extra safety
+) as dag:
+    
+    clean_content_task = PythonOperator(
+        task_id='clean_content',
+        python_callable=clean_content,
+        provide_context=True,
+        dag=dag,
+    )"
+46512119450334317,/opt/airflow/dags/profile_verification.py,2025-09-10 21:42:45.308213+03,"from airflow import DAG
+from airflow.operators.python_operator import PythonOperator
+from airflow.utils.dates import days_ago
+from airflow.models import Variable
+import os
+import logging
+import json
+import time
+from datetime import datetime, timedelta
+from pymongo import MongoClient
+
+# Hyperbrowser imports
+from hyperbrowser import Hyperbrowser
+from hyperbrowser.models import (
+    CreateSessionParams,
+    StartBrowserUseTaskParams
+)
+
+# Default arguments for the verification DAG
+default_args = {
+    'owner': 'data-team',
+    'depends_on_past': False,
+    'start_date': days_ago(1),
+    'email_on_failure': False,
+    'email_on_retry': False,
+    'retries': 1,
+    'retry_delay': timedelta(minutes=2)
+}
+
+# Initialize the verification DAG
+verification_dag = DAG(
+    'verify_hyperbrowser_profile_setup',
+    default_args=default_args,
+    description='Verify that Hyperbrowser profile is properly configured with Automa for workflow execution',
+    schedule_interval=None,  # Manual trigger only
+    catchup=False,
+    tags=['verification', 'hyperbrowser', 'automa', 'profile', 'testing']
+)
+
+# Configuration
+HYPERBROWSER_API_KEY = os.environ.get('HYPERBROWSER_API_KEY')
+MONGODB_URI = os.environ.get('MONGODB_URI', 'mongodb://admin:admin123@mongodb:27017/messages_db?authSource=admin')
+
+def get_profile_id(**context):
+    """"""Get the profile ID from Airflow Variables or environment""""""
+    
+    # Try Airflow Variables first (set by setup DAG)
+    try:
+        profile_id = Variable.get('HYPERBROWSER_PROFILE_ID')
+        logging.info(f""✅ Found profile ID in Airflow Variables: {profile_id}"")
+        source = 'airflow_variables'
+    except Exception:
+        # Fallback to environment variable
+        profile_id = os.environ.get('HYPERBROWSER_PROFILE_ID')
+        if profile_id:
+            logging.info(f""✅ Found profile ID in environment: {profile_id}"")
+            source = 'environment'
+        else:
+            logging.error(""❌ No profile ID found in Airflow Variables or environment"")
+            raise ValueError(
+                ""No HYPERBROWSER_PROFILE_ID found. ""
+                ""Please run the 'hyperbrowser_profile_setup' DAG first, ""
+                ""or set HYPERBROWSER_PROFILE_ID in your environment.""
+            )
+    
+    if not HYPERBROWSER_API_KEY:
+        raise ValueError(""HYPERBROWSER_API_KEY environment variable is not set"")
+    
+    # Verify profile exists
+    try:
+        hb_client = Hyperbrowser(api_key=HYPERBROWSER_API_KEY)
+        profile = hb_client.profiles.get(profile_id)
+        logging.info(f""✅ Profile {profile_id} exists and is accessible"")
+    except Exception as e:
+        logging.error(f""❌ Profile {profile_id} not accessible: {e}"")
+        raise ValueError(f""Profile {profile_id} does not exist or is not accessible"")
+    
+    context['task_instance'].xcom_push(key='profile_id', value=profile_id)
+    context['task_instance'].xcom_push(key='profile_source', value=source)
+    
+    return {
+        'profile_id': profile_id,
+        'source': source,
+        'profile_accessible': True
+    }
+
+def test_profile_session_creation(**context):
+    """"""Test that we can create sessions using the profile""""""
+    
+    profile_id = context['task_instance'].xcom_pull(
+        task_ids='get_profile_id',
+        key='profile_id'
+    )
+    
+    logging.info(f""🧪 Testing session creation with profile: {profile_id}"")
+    
+    try:
+        hb_client = Hyperbrowser(api_key=HYPERBROWSER_API_KEY)
+        
+        # Create test session using the profile (no persistChanges needed for verification)
+        session_params = CreateSessionParams(
+            viewport={'width': 1920, 'height': 1080},
+            stealth=True,
+            profile={
+                'id': profile_id
+                # No persistChanges - just using existing profile state
+            }
+        )
+        
+        session_response = hb_client.sessions.create(session_params)
+        test_session_id = session_response.id
+        
+        logging.info(f""✅ Test session created successfully: {test_session_id}"")
+        
+        # Store session info for next tasks
+        context['task_instance'].xcom_push(key='test_session_id', value=test_session_id)
+        context['task_instance'].xcom_push(key='session_created', value=True)
+        
+        return {
+            'profile_id': profile_id,
+            'test_session_id': test_session_id,
+            'session_created': True,
+            'session_status': getattr(session_response, 'status', 'created')
+        }
+        
+    except Exception as e:
+        logging.error(f""❌ Failed to create test session: {e}"")
+        context['task_instance'].xcom_push(key='session_created', value=False)
+        raise
+
+def verify_automa_extension(**context):
+    """"""Verify that Automa extension is available and functional""""""
+    
+    test_session_id = context['task_instance'].xcom_pull(
+        task_ids='test_profile_session_creation',
+        key='test_session_id'
+    )
+    
+    if not test_session_id:
+        raise ValueError(""No test session ID found"")
+    
+    logging.info(f""🔍 Verifying Automa extension in session: {test_session_id}"")
+    
+    try:
+        hb_client = Hyperbrowser(api_key=HYPERBROWSER_API_KEY)
+        
+        # Use Browser Use to check Automa extension
+        verification_task = """"""
+        Please verify the Automa extension setup:
+        
+        1. EXTENSION PRESENCE:
+           - Look for the Automa extension icon in the browser toolbar
+           - The icon should be visible and clickable
+           - Report if the extension appears to be installed
+        
+        2. EXTENSION FUNCTIONALITY:
+           - Click on the Automa extension icon
+           - Check if the Automa dashboard/interface opens
+           - Look for options like ""Workflows"", ""Run"", ""Import"", etc.
+           - Report what you see in the Automa interface
+        
+        3. WORKFLOW AVAILABILITY:
+           - Look for any existing workflows in Automa
+           - Check if there are options to import or create new workflows
+           - Report the number of workflows found (if any)
+        
+        4. LOGIN STATUS CHECK:
+           - Open a new tab and navigate to twitter.com or x.com
+           - Check if you're already logged in (profile should have login state)
+           - Report the login status without actually logging in
+        
+        5. OVERALL STATUS:
+           - Summarize the overall readiness of the profile for workflow execution
+           - Note any issues or missing configurations
+           - Provide a clear pass/fail assessment
+        
+        This is a verification test - be thorough and provide detailed feedback.
+        """"""
+        
+        browser_use_params = StartBrowserUseTaskParams(
+            session_id=test_session_id,
+            task=verification_task,
+            llm=""gpt-4o"",
+            max_steps=15,
+            keep_browser_open=False
+        )
+        
+        logging.info(""🤖 Starting Automa extension verification..."")
+        
+        start_time = time.time()
+        browser_use_response = hb_client.agents.browser_use.start_and_wait(browser_use_params)
+        verification_time = time.time() - start_time
+        
+        verification_success = False
+        verification_result = ""Verification failed - no response""
+        steps_taken = 0
+        issues_found = []
+        
+        if browser_use_response and hasattr(browser_use_response, 'data') and browser_use_response.data:
+            data = browser_use_response.data
+            verification_result = getattr(data, 'final_result', 'No result available')
+            steps_taken = getattr(data, 'steps_taken', 0)
+            
+            # Analyze verification result
+            result_lower = str(verification_result).lower()
+            
+            # Check for positive indicators
+            success_indicators = [
+                'automa extension', 'extension found', 'extension installed',
+                'dashboard opens', 'workflows available', 'logged in',
+                'ready for execution', 'pass', 'working correctly'
+            ]
+            
+            # Check for negative indicators
+            failure_indicators = [
+                'extension not found', 'extension missing', 'not installed',
+                'dashboard not opening', 'no workflows', 'not logged in',
+                'not ready', 'fail', 'error', 'missing'
+            ]
+            
+            found_success = [ind for ind in success_indicators if ind in result_lower]
+            found_failures = [ind for ind in failure_indicators if ind in result_lower]
+            
+            if found_success and not found_failures:
+                verification_success = True
+                logging.info(f""✅ Automa extension verification passed!"")
+                logging.info(f""🔍 Success indicators: {', '.join(found_success)}"")
+            elif found_failures:
+                issues_found = found_failures
+                logging.warning(f""❌ Automa extension verification failed!"")
+                logging.warning(f""🚨 Issues found: {', '.join(found_failures)}"")
+            else:
+                logging.warning(f""⚠️  Automa extension verification inconclusive"")
+        
+        logging.info(f""📋 Verification result: {verification_result}"")
+        logging.info(f""🔢 Steps taken: {steps_taken}"")
+        logging.info(f""⏱️  Verification time: {verification_time:.2f} seconds"")
+        
+        # Clean up test session
+        try:
+            hb_client.sessions.stop(test_session_id)
+            logging.info(f""🧹 Test session {test_session_id} cleaned up"")
+        except Exception as e:
+            logging.warning(f""⚠️  Could not clean up test session: {e}"")
+        
+        # Store verification results
+        context['task_instance'].xcom_push(key='verification_success', value=verification_success)
+        context['task_instance'].xcom_push(key='verification_result', value=verification_result)
+        context['task_instance'].xcom_push(key='verification_steps', value=steps_taken)
+        context['task_instance'].xcom_push(key='verification_time', value=verification_time)
+        context['task_instance'].xcom_push(key='issues_found', value=issues_found)
+        
+        return {
+            'verification_success': verification_success,
+            'verification_result': verification_result,
+            'steps_taken': steps_taken,
+            'verification_time': verification_time,
+            'issues_found': issues_found,
+            'session_cleaned': True
+        }
+        
+    except Exception as e:
+        logging.error(f""❌ Automa extension verification failed: {e}"")
+        
+        # Try to clean up session even on failure
+        try:
+            hb_client = Hyperbrowser(api_key=HYPERBROWSER_API_KEY)
+            hb_client.sessions.stop(test_session_id)
+        except Exception:
+            pass
+        
+        raise
+
+def test_workflow_execution_readiness(**context):
+    """"""Test that the profile is ready for actual workflow execution""""""
+    
+    profile_id = context['task_instance'].xcom_pull(
+        task_ids='get_profile_id',
+        key='profile_id'
+    )
+    
+    verification_success = context['task_instance'].xcom_pull(
+        task_ids='verify_automa_extension',
+        key='verification_success'
+    )
+    
+    if not verification_success:
+        logging.warning(""⚠️  Skipping workflow readiness test - Automa extension verification failed"")
+        context['task_instance'].xcom_push(key='workflow_readiness', value=False)
+        context['task_instance'].xcom_push(key='readiness_reason', value='automa_verification_failed')
+        return {
+            'workflow_readiness': False,
+            'reason': 'automa_verification_failed',
+            'recommendation': 'Fix Automa extension issues first'
+        }
+    
+    logging.info(f""🎯 Testing workflow execution readiness for profile: {profile_id}"")
+    
+    try:
+        hb_client = Hyperbrowser(api_key=HYPERBROWSER_API_KEY)
+        
+        # Create another test session for workflow readiness
+        session_params = CreateSessionParams(
+            viewport={'width': 1920, 'height': 1080},
+            stealth=True,
+            profile={'id': profile_id}
+        )
+        
+        session_response = hb_client.sessions.create(session_params)
+        readiness_session_id = session_response.id
+        
+        logging.info(f""✅ Readiness test session created: {readiness_session_id}"")
+        
+        # Test workflow execution simulation
+        readiness_task = """"""
+        Please test the readiness for automated workflow execution:
+        
+        1. AUTOMA WORKFLOW TEST:
+           - Click on the Automa extension
+           - Look for any existing workflows
+           - If workflows exist, try to run one (but stop before it actually executes)
+           - If no workflows exist, check that you can access the import/create options
+           - Report the workflow management capabilities
+        
+        2. LOGIN PERSISTENCE TEST:
+           - Navigate to Twitter/X (twitter.com or x.com)
+           - Check if login sessions are persistent from the profile
+           - Navigate to any other services that workflows might use
+           - Report login status for each service
+        
+        3. BROWSER AUTOMATION READINESS:
+           - Test basic browser interactions (clicking, typing, navigation)
+           - Verify that the browser responds normally to automation
+           - Check if any security restrictions or CAPTCHAs appear
+           - Report overall browser automation readiness
+        
+        4. PERFORMANCE CHECK:
+           - Test page load speeds on common sites
+           - Check if browser extensions load quickly
+           - Verify that the profile doesn't cause slowdowns
+           - Report performance observations
+        
+        5. READINESS ASSESSMENT:
+           - Provide a clear READY/NOT_READY assessment
+           - List any blockers that would prevent automated workflows
+           - Suggest next steps if not ready
+           - Give confidence level for production workflow execution
+        
+        This is the final readiness check before production use.
+        """"""
+        
+        browser_use_params = StartBrowserUseTaskParams(
+            session_id=readiness_session_id,
+            task=readiness_task,
+            llm=""gpt-4o"",
+            max_steps=20,
+            keep_browser_open=False
+        )
+        
+        logging.info(""🎯 Starting workflow execution readiness test..."")
+        
+        start_time = time.time()
+        browser_use_response = hb_client.agents.browser_use.start_and_wait(browser_use_params)
+        readiness_time = time.time() - start_time
+        
+        workflow_ready = False
+        readiness_result = ""Readiness test failed - no response""
+        steps_taken = 0
+        confidence_level = ""low""
+        blockers = []
+        
+        if browser_use_response and hasattr(browser_use_response, 'data') and browser_use_response.data:
+            data = browser_use_response.data
+            readiness_result = getattr(data, 'final_result', 'No result available')
+            steps_taken = getattr(data, 'steps_taken', 0)
+            
+            result_lower = str(readiness_result).lower()
+            
+            # Check for readiness indicators
+            ready_indicators = [
+                'ready', 'ready for production', 'workflows available',
+                'logged in', 'automation ready', 'no blockers'
+            ]
+            
+            not_ready_indicators = [
+                'not ready', 'not_ready', 'blockers found', 'login required',
+                'workflows missing', 'issues found', 'captcha', 'blocked'
+            ]
+            
+            # Confidence level assessment
+            high_confidence = ['high confidence', 'very ready', 'fully ready', 'production ready']
+            medium_confidence = ['medium confidence', 'mostly ready', 'should work']
+            
+            found_ready = [ind for ind in ready_indicators if ind in result_lower]
+            found_not_ready = [ind for ind in not_ready_indicators if ind in result_lower]
+            
+            if found_ready and not found_not_ready:
+                workflow_ready = True
+                if any(conf in result_lower for conf in high_confidence):
+                    confidence_level = ""high""
+                elif any(conf in result_lower for conf in medium_confidence):
+                    confidence_level = ""medium""
+                else:
+                    confidence_level = ""medium""
+                    
+                logging.info(f""✅ Workflow execution readiness: READY"")
+                logging.info(f""🎯 Confidence level: {confidence_level}"")
+                logging.info(f""🔍 Ready indicators: {', '.join(found_ready)}"")
+            else:
+                blockers = found_not_ready
+                logging.warning(f""❌ Workflow execution readiness: NOT READY"")
+                logging.warning(f""🚨 Blockers found: {', '.join(found_not_ready)}"")
+        
+        logging.info(f""📋 Readiness result: {readiness_result}"")
+        logging.info(f""🔢 Steps taken: {steps_taken}"")
+        logging.info(f""⏱️  Readiness test time: {readiness_time:.2f} seconds"")
+        
+        # Clean up readiness test session
+        try:
+            hb_client.sessions.stop(readiness_session_id)
+            logging.info(f""🧹 Readiness test session cleaned up"")
+        except Exception as e:
+            logging.warning(f""⚠️  Could not clean up readiness session: {e}"")
+        
+        # Store readiness results
+        context['task_instance'].xcom_push(key='workflow_readiness', value=workflow_ready)
+        context['task_instance'].xcom_push(key='readiness_result', value=readiness_result)
+        context['task_instance'].xcom_push(key='readiness_steps', value=steps_taken)
+        context['task_instance'].xcom_push(key='readiness_time', value=readiness_time)
+        context['task_instance'].xcom_push(key='confidence_level', value=confidence_level)
+        context['task_instance'].xcom_push(key='blockers_found', value=blockers)
+        
+        return {
+            'workflow_readiness': workflow_ready,
+            'readiness_result': readiness_result,
+            'steps_taken': steps_taken,
+            'readiness_time': readiness_time,
+            'confidence_level': confidence_level,
+            'blockers_found': blockers
+        }
+        
+    except Exception as e:
+        logging.error(f""❌ Workflow readiness test failed: {e}"")
+        raise
+
+def generate_verification_report(**context):
+    """"""Generate comprehensive verification report and recommendations""""""
+    
+    # Gather all results from previous tasks
+    profile_data = context['task_instance'].xcom_pull(task_ids='get_profile_id')
+    session_data = context['task_instance'].xcom_pull(task_ids='test_profile_session_creation')
+    extension_data = context['task_instance'].xcom_pull(task_ids='verify_automa_extension')
+    readiness_data = context['task_instance'].xcom_pull(task_ids='test_workflow_execution_readiness')
+    
+    profile_id = profile_data.get('profile_id')
+    verification_success = extension_data.get('verification_success', False)
+    workflow_readiness = readiness_data.get('workflow_readiness', False)
+    confidence_level = readiness_data.get('confidence_level', 'low')
+    
+    logging.info(""📊 HYPERBROWSER PROFILE VERIFICATION REPORT"")
+    logging.info(""=""*80)
+    
+    logging.info(f""🆔 Profile ID: {profile_id}"")
+    logging.info(f""📍 Profile Source: {profile_data.get('source', 'unknown')}"")
+    logging.info(f""🌐 Session Creation: {'✅ Success' if session_data.get('session_created') else '❌ Failed'}"")
+    logging.info(f""🔧 Automa Extension: {'✅ Verified' if verification_success else '❌ Issues Found'}"")
+    logging.info(f""🎯 Workflow Readiness: {'✅ Ready' if workflow_readiness else '❌ Not Ready'}"")
+    logging.info(f""📊 Confidence Level: {confidence_level.upper()}"")
+    
+    # Overall status
+    overall_status = ""READY"" if verification_success and workflow_readiness else ""NOT_READY""
+    logging.info(f""🎉 OVERALL STATUS: {overall_status}"")
+    
+    logging.info(""\n📋 DETAILED RESULTS:"")
+    logging.info(""-"" * 40)
+    
+    if extension_data.get('verification_result'):
+        result_preview = extension_data['verification_result'][:300] + ""..."" if len(extension_data['verification_result']) > 300 else extension_data['verification_result']
+        logging.info(f""🔧 Automa Verification: {result_preview}"")
+    
+    if readiness_data.get('readiness_result'):
+        result_preview = readiness_data['readiness_result'][:300] + ""..."" if len(readiness_data['readiness_result']) > 300 else readiness_data['readiness_result']
+        logging.info(f""🎯 Readiness Assessment: {result_preview}"")
+    
+    # Issues and blockers
+    issues = extension_data.get('issues_found', [])
+    blockers = readiness_data.get('blockers_found', [])
+    
+    if issues or blockers:
+        logging.info(""\n🚨 ISSUES FOUND:"")
+        logging.info(""-"" * 40)
+        for issue in issues:
+            logging.info(f""❌ {issue}"")
+        for blocker in blockers:
+            logging.info(f""🚫 {blocker}"")
+    
+    # Recommendations
+    logging.info(""\n💡 RECOMMENDATIONS:"")
+    logging.info(""-"" * 40)
+    
+    if overall_status == ""READY"":
+        logging.info(""✅ Your profile is ready for production workflow execution!"")
+        logging.info(""🚀 You can now deploy your workflow execution DAG"")
+        logging.info(""📊 Monitor your first few workflow runs for any issues"")
+        if confidence_level == ""medium"":
+            logging.info(""⚠️  Consider running additional manual tests to increase confidence"")
+    else:
+        logging.info(""❌ Profile setup needs attention before production use:"")
+        
+        if not verification_success:
+            logging.info(""🔧 Fix Automa extension issues:"")
+            logging.info(""   - Ensure extension is properly installed"")
+            logging.info(""   - Import/create your workflows manually"")
+            logging.info(""   - Test workflow execution in the browser"")
+        
+        if not workflow_readiness:
+            logging.info(""🎯 Address workflow readiness issues:"")
+            logging.info(""   - Complete required service logins"")
+            logging.info(""   - Test automated browser interactions"")
+            logging.info(""   - Resolve any security restrictions or CAPTCHAs"")
+        
+        logging.info(""🔄 Re-run this verification DAG after making fixes"")
+    
+    # Next steps
+    logging.info(""\n🔄 NEXT STEPS:"")
+    logging.info(""-"" * 40)
+    
+    if overall_status == ""READY"":
+        logging.info(""1. 🚀 Deploy your production workflow execution DAG"")
+        logging.info(""2. 🧪 Run a few test workflows to validate everything works"")
+        logging.info(""3. 📊 Set up monitoring for workflow execution metrics"")
+        logging.info(""4. 📈 Scale up your workflow automation as needed"")
+    else:
+        logging.info(""1. 🔧 Address the issues identified in this report"")
+        logging.info(""2. 🌐 Access your profile session to make manual corrections"")
+        logging.info(""3. 🔄 Re-run this verification DAG to confirm fixes"")
+        logging.info(""4. 🚀 Proceed with production deployment once verified"")
+    
+    logging.info(""\n📞 SUPPORT:"")
+    logging.info(""-"" * 40)
+    logging.info(""🌐 Hyperbrowser Documentation: https://docs.hyperbrowser.ai/"")
+    logging.info(""🔧 Automa Extension: https://chromewebstore.google.com/detail/automa/infppggnoaenmfagbfknfkancpbljcca"")
+    logging.info(""📧 If you need help, review the setup logs and documentation"")
+    
+    logging.info(""=""*80)
+    
+    # Store verification report in MongoDB
+    try:
+        from pymongo import MongoClient
+        client = MongoClient(MONGODB_URI)
+        db = client.get_default_database()
+        
+        verification_report = {
+            'verification_type': 'hyperbrowser_profile',
+            'profile_id': profile_id,
+            'overall_status': overall_status,
+            'verification_success': verification_success,
+            'workflow_readiness': workflow_readiness,
+            'confidence_level': confidence_level,
+            'issues_found': issues,
+            'blockers_found': blockers,
+            'session_creation_success': session_data.get('session_created', False),
+            'verification_completed_at': datetime.now(),
+            'dag_run_id': context.get('dag_run').run_id,
+            'detailed_results': {
+                'extension_verification': extension_data,
+                'readiness_assessment': readiness_data
+            },
+            'recommendations': {
+                'ready_for_production': overall_status == ""READY"",
+                'next_action': 'deploy_production' if overall_status == ""READY"" else 'fix_issues'
+            }
+        }
+        
+        result = db.hyperbrowser_verification.insert_one(verification_report)
+        logging.info(f""💾 Verification report stored in MongoDB: {result.inserted_id}"")
+        client.close()
+        
+    except Exception as e:
+        logging.warning(f""⚠️  Could not store verification report in MongoDB: {e}"")
+    
+    # Store final report in XCom
+    report_summary = {
+        'overall_status': overall_status,
+        'profile_id': profile_id,
+        'ready_for_production': overall_status == ""READY"",
+        'confidence_level': confidence_level,
+        'verification_success': verification_success,
+        'workflow_readiness': workflow_readiness,
+        'issues_count': len(issues) + len(blockers)
+    }
+    
+    context['task_instance'].xcom_push(key='verification_report', value=report_summary)
+    
+    return report_summary
+
+# Define verification tasks
+get_profile_task = PythonOperator(
+    task_id='get_profile_id',
+    python_callable=get_profile_id,
+    dag=verification_dag,
+)
+
+test_session_task = PythonOperator(
+    task_id='test_profile_session_creation',
+    python_callable=test_profile_session_creation,
+    dag=verification_dag,
+)
+
+verify_extension_task = PythonOperator(
+    task_id='verify_automa_extension',
+    python_callable=verify_automa_extension,
+    dag=verification_dag,
+)
+
+test_readiness_task = PythonOperator(
+    task_id='test_workflow_execution_readiness',
+    python_callable=test_workflow_execution_readiness,
+    dag=verification_dag,
+)
+
+report_task = PythonOperator(
+    task_id='generate_verification_report',
+    python_callable=generate_verification_report,
+    dag=verification_dag,
+)
+
+# Define verification task dependencies
+get_profile_task >> test_session_task >> verify_extension_task >> test_readiness_task >> report_task"
+44742161154062717,/opt/airflow/dags/extract_links.py,2025-09-10 21:42:45.308322+03,"from airflow import DAG
+from airflow.operators.bash import BashOperator
+from airflow.operators.python import PythonOperator
+from datetime import datetime, timedelta
+import requests
+import time
+import os
+import pytz
+from dotenv import load_dotenv
+import logging
+from streamlit.ui.settings.settings_manager import get_system_setting
+
+logger = logging.getLogger(__name__)
+
+# Load environment variables for timezone
+load_dotenv()
+
+# Get timezone from environment variable, default to Kenya timezone
+timezone_str = os.getenv(""DAG_TIMEZONE"", ""Africa/Nairobi"")
+try:
+    dag_timezone = pytz.timezone(timezone_str)
+    logger.info(f""🌍 Using timezone: {timezone_str}"")
+except pytz.UnknownTimeZoneError:
+    logger.warning(f""⚠️ Unknown timezone '{timezone_str}', falling back to Africa/Nairobi"")
+    dag_timezone = pytz.timezone(""Africa/Nairobi"")
+
+# Parse start date
+automa_start_date_str = os.getenv(""AUTOMA_DAG_START_DATE"", ""2025-06-27"")
+try:
+    start_date_naive = datetime.strptime(automa_start_date_str, ""%Y-%m-%d"")
+    start_date = dag_timezone.localize(start_date_naive)
+    logger.info(f""📅 Automa DAG start date: {start_date}"")
+except ValueError:
+    logger.warning(f""⚠️ Invalid start date format '{automa_start_date_str}', using default"")
+    start_date = dag_timezone.localize(datetime(2025, 6, 27))
+
+# Default args - NO RETRIES, NO DELAYS
+default_args = {
+    'owner': 'airflow',
+    'start_date': start_date,
+    'retries': 0,  # Changed from 2 to 0 - no retries
+    'max_active_tis_per_dag': 1,
+}
+
+# Create the DAG description
+dag_description = f""Manual Automa workflow with Chrome debugging and data extraction - No retries ({timezone_str})""
+
+dag = DAG(
+    dag_id='extract_links',
+    default_args=default_args,
+    description=dag_description,
+    schedule_interval=None,  # Changed from automa_schedule to None - manual only
+    catchup=False,
+    max_active_runs=1,
+    user_defined_macros={
+        ""timezone"": dag_timezone,
+    },
+)
+
+dag.timezone = dag_timezone
+
+def check_chrome_health():
+    """"""Check Chrome health with proper timezone logging""""""
+    current_time = datetime.now(dag_timezone)
+    logger.info(f""🕐 Chrome health check starting at {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}"")
+    
+    max_retries = 5
+    for attempt in range(max_retries):
+        try:
+            response = requests.get('http://localhost:9222/json/version', timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                print(f""✅ Chrome is healthy: {data.get('Product', 'Unknown version')}"")
+                return True
+        except Exception as e:
+            print(f""Attempt {attempt + 1}/{max_retries} failed: {e}"")
+            if attempt < max_retries - 1:
+                time.sleep(2)
+    raise Exception(""Chrome health check failed after all retries"")
+
+# Task 1: Start Chrome with Automa extension
+start_chrome = BashOperator(
+    task_id='start_chrome',
+    bash_command=f'''
+        set -e
+
+        echo ""🚀 Enhanced Chrome cleanup process...""
+        echo ""🌍 Running in timezone: {timezone_str}""
+        echo ""🕐 Current time: $(TZ={timezone_str} date)""
+        
+        # Kill all Chrome processes more aggressively
+        pkill -f ""google-chrome"" 2>/dev/null || true
+        pkill -f ""chrome"" 2>/dev/null || true
+        pkill -f ""Xvfb"" 2>/dev/null || true
+        
+        # Wait for processes to die
+        sleep 3
+        
+        # Force kill if still running
+        pkill -9 -f ""google-chrome"" 2>/dev/null || true
+        pkill -9 -f ""chrome"" 2>/dev/null || true
+        pkill -9 -f ""Xvfb"" 2>/dev/null || true
+        
+        # Clean up any lock files in the profile directory
+        CHROME_PROFILE_DIR=""/opt/airflow/chrome_persistent_profile""
+        if [ -d ""$CHROME_PROFILE_DIR"" ]; then
+            echo ""🧹 Cleaning Chrome profile locks...""
+            rm -rf ""$CHROME_PROFILE_DIR/SingletonLock"" 2>/dev/null || true
+            rm -rf ""$CHROME_PROFILE_DIR/Singleton*"" 2>/dev/null || true
+            rm -rf ""$CHROME_PROFILE_DIR/lockfile"" 2>/dev/null || true
+            rm -rf ""$CHROME_PROFILE_DIR/Default/Preferences"" 2>/dev/null || true
+            
+            # Clean up any other lock files
+            find ""$CHROME_PROFILE_DIR"" -name ""*lock*"" -type f -delete 2>/dev/null || true
+            find ""$CHROME_PROFILE_DIR"" -name ""*Lock*"" -type f -delete 2>/dev/null || true
+        fi
+        
+        echo ""✅ Chrome cleanup completed""
+
+        export DISPLAY=:99
+        export XDG_RUNTIME_DIR=/tmp/runtime-airflow
+        mkdir -p ""$XDG_RUNTIME_DIR""
+
+        echo ""🖥️ Starting Xvfb...""
+        nohup Xvfb :99 -screen 0 1920x1080x24 -ac +extension RANDR +extension GLX +render -noreset -dpi 96 > /tmp/xvfb.log 2>&1 &
+        XVFB_PID=$!
+        sleep 5
+
+
+        # Ensure profile directory exists and is clean
+        mkdir -p ""$CHROME_PROFILE_DIR""
+        chmod 755 ""$CHROME_PROFILE_DIR""
+        echo ""📁 Using persistent profile: $CHROME_PROFILE_DIR""
+
+        echo ""🌐 Starting Chrome with Automa...""
+        nohup google-chrome-stable \
+            --no-sandbox \
+            --disable-setuid-sandbox \
+            --disable-gpu \
+            --disable-software-rasterizer \
+            --disable-dev-shm-usage \
+            --disable-default-apps \
+            --disable-component-update \
+            --user-data-dir=""$CHROME_PROFILE_DIR"" \
+            --disable-extensions-except=""$AUTOMA_DIR"" \
+            --load-extension=""$AUTOMA_DIR"" \
+            --remote-debugging-port=9222 \
+            --remote-debugging-address=0.0.0.0 \
+            --disable-features=UseOzonePlatform,VizDisplayCompositor,TranslateUI \
+            --disable-background-timer-throttling \
+            --disable-backgrounding-occluded-windows \
+            --disable-renderer-backgrounding \
+            --disable-field-trial-config \
+            --disable-back-forward-cache \
+            --disable-ipc-flooding-protection \
+            --window-size=1920,1080 \
+            --no-first-run \
+            --no-default-browser-check \
+            --display=:99 \
+            --headless=new \
+            --disable-web-security \
+            --disable-features=VizDisplayCompositor \
+            chrome-extension://infppggnoaenmfagbfknfkancpbljcca/newtab.html > /tmp/chrome.log 2>&1 &
+
+        CHROME_PID=$!
+        echo ""$CHROME_PID"" > /tmp/chrome.pid
+        echo ""$XVFB_PID"" > /tmp/xvfb.pid
+
+        echo ""⏳ Waiting for Chrome to start...""
+        TIMEOUT=45
+        COUNTER=0
+        while [ $COUNTER -lt $TIMEOUT ]; do
+            if curl -sf http://localhost:9222/json/version > /dev/null 2>&1; then
+                echo ""✅ Chrome is ready""
+                break
+            fi
+            if ! kill -0 ""$CHROME_PID"" 2>/dev/null; then
+                echo ""❌ Chrome died unexpectedly""
+                echo ""Chrome log contents:""
+                cat /tmp/chrome.log || echo ""No Chrome log available""
+                exit 1
+            fi
+            echo ""Waiting... ($COUNTER/$TIMEOUT)""
+            sleep 2
+            COUNTER=$((COUNTER + 1))
+        done
+
+        if [ $COUNTER -eq $TIMEOUT ]; then
+            echo ""❌ Chrome failed to respond in time""
+            echo ""Chrome log contents:""
+            cat /tmp/chrome.log || echo ""No Chrome log available""
+            exit 1
+        fi
+
+        echo ""✅ Chrome with extensions started successfully""
+        echo ""🕐 Chrome started at: $(TZ={timezone_str} date)""
+        sleep 10
+    ''',
+    dag=dag,
+)
+
+# Task 2: Health check
+chrome_health_check = PythonOperator(
+    task_id='chrome_health_check',
+    python_callable=check_chrome_health,
+    dag=dag,
+)
+
+# Task 3: Wait period
+wait_period = BashOperator(
+    task_id='wait_period',
+    bash_command=f'''
+        echo ""⏳ Waiting for workflow results to settle...""
+        echo ""🕐 Wait started at: $(TZ={timezone_str} date)""
+        sleep 30
+        echo ""✅ Wait period completed""
+        echo ""🕐 Wait ended at: $(TZ={timezone_str} date)""
+    ''',
+    dag=dag,
+)
+
+# Task 4: Extract data
+extract_data = BashOperator(
+    task_id='extract_data',
+    bash_command=f'''
+        set -e
+        echo ""🔍 Starting data extraction...""
+        echo ""🕐 Extraction started at: $(TZ={timezone_str} date)""
+
+        if ! curl -sf http://localhost:9222/json/version > /dev/null; then
+            echo ""❌ Chrome is not responding""
+            exit 1
+        fi
+
+        cd /opt/airflow/src/scripts/extraction || {{
+            echo ""❌ Extraction scripts directory not found""
+            exit 1
+        }}
+
+        export MONGODB_URI=""{{{{ var.value.MONGODB_URI }}}}""
+        export NODE_ENV=production
+        export CHROME_DEBUG_PORT=9222
+
+        echo ""🔍 Executing data extraction...""
+        timeout 180 node main.js || {{
+            EXIT_CODE=$?
+            if [ $EXIT_CODE -eq 124 ]; then
+                echo ""❌ Data extraction timed out after 180 seconds""
+            else
+                echo ""❌ Data extraction failed with exit code: $EXIT_CODE""
+            fi
+            exit 1
+        }}
+
+        echo ""✅ Data extraction completed successfully""
+        echo ""🕐 Extraction completed at: $(TZ={timezone_str} date)""
+    ''',
+    dag=dag,
+)
+
+# Task 5: Enhanced cleanup
+cleanup_chrome = BashOperator(
+    task_id='cleanup_chrome',
+    trigger_rule='all_done',
+    bash_command=f'''
+        echo ""🧹 Starting enhanced cleanup...""
+        echo ""🕐 Cleanup started at: $(TZ={timezone_str} date)""
+
+        # Kill Chrome processes
+        if [ -f /tmp/chrome.pid ]; then
+            CHROME_PID=$(cat /tmp/chrome.pid)
+            echo ""Killing Chrome process $CHROME_PID""
+            kill -TERM ""$CHROME_PID"" 2>/dev/null || true
+            sleep 5
+            kill -KILL ""$CHROME_PID"" 2>/dev/null || true
+            rm -f /tmp/chrome.pid
+        fi
+
+        # Kill Xvfb processes
+        if [ -f /tmp/xvfb.pid ]; then
+            XVFB_PID=$(cat /tmp/xvfb.pid)
+            echo ""Killing Xvfb process $XVFB_PID""
+            kill -TERM ""$XVFB_PID"" 2>/dev/null || true
+            sleep 2
+            kill -KILL ""$XVFB_PID"" 2>/dev/null || true
+            rm -f /tmp/xvfb.pid
+        fi
+
+        # Force kill any remaining processes
+        pkill -f ""google-chrome"" 2>/dev/null || true
+        pkill -f ""chrome"" 2>/dev/null || true
+        pkill -f ""Xvfb"" 2>/dev/null || true
+        
+        # Wait and force kill
+        sleep 2
+        pkill -9 -f ""google-chrome"" 2>/dev/null || true
+        pkill -9 -f ""chrome"" 2>/dev/null || true
+        pkill -9 -f ""Xvfb"" 2>/dev/null || true
+
+        # Clean up profile locks again
+        CHROME_PROFILE_DIR=""/opt/airflow/chrome_persistent_profile""
+        if [ -d ""$CHROME_PROFILE_DIR"" ]; then
+            echo ""🧹 Final cleanup of Chrome profile locks...""
+            rm -rf ""$CHROME_PROFILE_DIR/SingletonLock"" 2>/dev/null || true
+            rm -rf ""$CHROME_PROFILE_DIR/Singleton*"" 2>/dev/null || true
+            rm -rf ""$CHROME_PROFILE_DIR/lockfile"" 2>/dev/null || true
+            find ""$CHROME_PROFILE_DIR"" -name ""*lock*"" -type f -delete 2>/dev/null || true
+            find ""$CHROME_PROFILE_DIR"" -name ""*Lock*"" -type f -delete 2>/dev/null || true
+        fi
+
+        # Clean up temporary files
+        rm -rf /tmp/runtime-airflow 2>/dev/null || true
+        rm -f /tmp/chrome.log 2>/dev/null || true
+        rm -f /tmp/xvfb.log 2>/dev/null || true
+
+        echo ""✅ Enhanced cleanup completed""
+        echo ""🕐 Cleanup completed at: $(TZ={timezone_str} date)""
+    ''',
+    dag=dag,
+)
+
+# Set task dependencies - NO TRIGGER TASK
+start_chrome >> chrome_health_check >> wait_period >> extract_data >> cleanup_chrome"
+33626262383211500,/opt/airflow/dags/create_content.py,2025-09-10 21:42:45.308422+03,"import os
+import sys
+import logging
+from datetime import datetime, timedelta
+from airflow import DAG
+from airflow.operators.python import PythonOperator
+from dotenv import load_dotenv
+import google.generativeai as genai
+import pytz
+from dateutil.parser import parse
+
+# Add src to PYTHONPATH
+sys.path.append('/opt/airflow/src')
+
+# Import database functions
+from core.database.postgres.replies import save_replies_to_db
+from core.database.postgres.messages import save_messages_to_db
+from core.database.postgres.retweets import save_retweets_to_db
+
+# Import settings and DAG configuration
+from streamlit.ui.settings.settings_manager import get_system_setting
+from streamlit.ui.settings.dag_config import DAGConfig, create_settings_refresh_task
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+def generate_content(content_type: str):
+    """"""Generic function to generate content using Gemini API and save to database""""""
+    load_dotenv()
+    logger.info(f""📌 Starting {content_type} generation task"")
+    
+    # Get API key
+    key = os.getenv(""GEMINI_API_KEY"")
+    if not key:
+        raise Exception(""GEMINI_API_KEY not found in environment variables"")
+
+    # Get number of items from centralized settings
+    processing_config = DAGConfig.get_processing_config()
+    if content_type == ""replies"":
+        num_items = processing_config['num_replies']
+        logger.info(f""📊 Configured to generate {num_items} {content_type}"")
+    elif content_type == ""messages"":
+        num_items = processing_config['num_messages']
+        logger.info(f""📊 Configured to generate {num_items} {content_type}"")
+    elif content_type == ""retweets"":
+        num_items = processing_config['num_retweets']
+        logger.info(f""📊 Configured to generate {num_items} {content_type}"")
+    else:
+        raise Exception(f""Unknown content type: {content_type}"")
+
+    # Configure Gemini API
+    genai.configure(api_key=key)
+    model = genai.GenerativeModel(""gemini-2.5-flash"")
+    
+    # Load prompt template - map content types to their prompt file names
+    prompt_file_map = {
+        ""replies"": ""reply.txt"",
+        ""messages"": ""message.txt"", 
+        ""retweets"": ""retweet.txt""
+    }
+    prompt_filename = prompt_file_map.get(content_type)
+    if not prompt_filename:
+        raise Exception(f""Unknown content type: {content_type}"")
+    
+    prompt_path = f'/opt/airflow/src/prompts/{prompt_filename}'
+    try:
+        with open(prompt_path, 'r') as f:
+            prompt_template = f.read().strip()
+        logger.info(f""✅ {content_type.capitalize()} prompt template loaded successfully"")
+    except FileNotFoundError:
+        raise Exception(f""Prompt template file not found at {prompt_path}"")
+
+    # Use the prompt template as-is, only inject the number if needed
+    # Check if the prompt already contains placeholders for quantity
+    if ""{num_items}"" in prompt_template or ""{quantity}"" in prompt_template or ""{count}"" in prompt_template:
+        # Replace common placeholders with actual number
+        full_prompt = prompt_template.replace(""{num_items}"", str(num_items))
+        full_prompt = full_prompt.replace(""{quantity}"", str(num_items))
+        full_prompt = full_prompt.replace(""{count}"", str(num_items))
+        logger.info(f""🔧 Replaced quantity placeholders with {num_items}"")
+    else:
+        # Use prompt as-is - assume it already has the right instructions
+        full_prompt = prompt_template
+        logger.info(f""📋 Using prompt template as-is (no quantity placeholders found)"")
+    
+    logger.info(f""🤖 Generating {content_type} with Gemini API..."")
+    
+    # Generate content with Gemini
+    try:
+        response = model.generate_content(full_prompt)
+        if not response.text:
+            raise Exception(""Empty response from Gemini API"")
+        logger.info(f""✅ {content_type.capitalize()} generated successfully"")
+    except Exception as e:
+        raise Exception(f""Failed to generate {content_type} with Gemini: {str(e)}"")
+
+    # Parse response and extract content
+    lines = response.text.splitlines()
+    content_items = []
+    
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+            
+        # Skip common intro/outro phrases
+        skip_phrases = [
+            ""here are"", ""below are"", ""i've created"", ""i've generated"",
+            ""these are"", ""the following"", ""list of"", ""examples of""
+        ]
+        if any(phrase in line.lower() for phrase in skip_phrases):
+            continue
+            
+        # Extract numbered list items
+        if line and (line[0].isdigit() or line.startswith('•') or line.startswith('-')):
+            # Remove numbering and bullet points
+            cleaned = line.lstrip(""0123456789.-•"").strip()
+            if len(cleaned) > 10 and not cleaned.lower().startswith(('note:', 'please', 'remember')):
+                content_items.append(cleaned)
+                
+        # Stop when we have enough items
+        if len(content_items) >= num_items:
+            break
+    
+    if not content_items:
+        raise Exception(f""No valid {content_type} parsed from API response. Raw response: {response.text[:200]}..."")
+    
+    logger.info(f""📝 Parsed {len(content_items)} valid {content_type} from API response"")
+    
+    # Log first few items for debugging
+    for i, item in enumerate(content_items[:3]):
+        logger.info(f""Sample {content_type} {i+1}: {item[:100]}..."")
+    
+    # Save to database based on content type
+    inserted_count = 0
+    if content_type == ""replies"":
+        inserted_count = save_replies_to_db(content_items)
+    elif content_type == ""messages"":
+        inserted_count = save_messages_to_db(content_items)
+    elif content_type == ""retweets"":
+        inserted_count = save_retweets_to_db(content_items)
+    
+    if inserted_count == 0:
+        raise Exception(f""Failed to save any {content_type} to database"")
+    
+    success_message = f""Successfully generated and saved {inserted_count} {content_type} with used=FALSE status.""
+    logger.info(f""✅ {success_message}"")
+    return success_message
+
+def generate_replies():
+    """"""Generate replies using Gemini API and save to database""""""
+    return generate_content(""replies"")
+
+def generate_messages():
+    """"""Generate messages using Gemini API and save to database""""""
+    return generate_content(""messages"")
+
+def generate_retweets():
+    """"""Generate retweets using Gemini API and save to database""""""
+    return generate_content(""retweets"")
+
+# Load environment variables
+load_dotenv()
+
+# Manual configuration - NO SCHEDULE, NO RETRIES, NO TRIGGERS
+default_args = {
+    'owner': 'airflow',
+    'start_date': datetime(2025, 6, 27),
+    'retries': 0,  # No retries
+    # No retry_delay since retries = 0
+}
+
+# Set timezone
+timezone_str = ""Africa/Nairobi""
+try:
+    dag_timezone = pytz.timezone(timezone_str)
+    logger.info(f""🌍 Using timezone: {timezone_str}"")
+except pytz.UnknownTimeZoneError:
+    logger.warning(f""⚠️ Unknown timezone '{timezone_str}', falling back to Africa/Nairobi"")
+    dag_timezone = pytz.timezone(""Africa/Nairobi"")
+
+# Create the DAG - MANUAL ONLY, NO TRIGGERS
+dag_description = f""Manual content generation via Gemini API - No retries, no triggers ({timezone_str})""
+
+with DAG(
+    ""create_content"",
+    default_args=default_args,
+    description=dag_description,
+    schedule_interval=None,  # Manual only
+    catchup=False,
+    max_active_runs=1,
+    tags=['content', 'gemini', 'manual', 'no-retries'],
+    user_defined_macros={
+        ""timezone"": dag_timezone,
+    },
+) as dag:
+    # Set the DAG timezone
+    dag.timezone = dag_timezone
+    
+    # Task to refresh settings at the start of the DAG
+    refresh_settings_task = create_settings_refresh_task()
+
+    # Content generation tasks
+    generate_replies_task = PythonOperator(
+        task_id=""generate_replies"",
+        python_callable=generate_replies,
+    )
+
+    generate_messages_task = PythonOperator(
+        task_id=""generate_messages"",
+        python_callable=generate_messages,
+    )
+
+    generate_retweets_task = PythonOperator(
+        task_id=""generate_retweets"",
+        python_callable=generate_retweets,
+    )
+
+    # Dependencies - NO TRIGGER TASK
+    refresh_settings_task >> [generate_replies_task, generate_messages_task, generate_retweets_task]"
+16118913671551286,/opt/airflow/dags/delete_workflows.py,2025-09-10 21:42:45.308507+03,"import logging
+from airflow import DAG
+from airflow.operators.python import PythonOperator
+from datetime import datetime
+from core.database.mongodb import (
+    replies_workflows as pg_replies_workflows,
+    messages_workflows as pg_messages_workflows,
+    retweets_workflows as pg_retweets_workflows,
+)
+
+logger = logging.getLogger(__name__)
+
+DEFAULT_ARGS = {
+    'owner': 'airflow',
+    'depends_on_past': False,
+    'email_on_failure': False,
+    'email_on_retry': False,
+    'retries': 1,
+}
+
+def delete_workflows():
+    """"""Delete all workflows from the MongoDB workflows collections.""""""
+    try:
+        # Delete all reply workflows
+        replies_workflows_deleted = pg_replies_workflows.delete_all()
+        logger.info(f""Deleted {replies_workflows_deleted} reply workflows from MongoDB."")
+        
+        # Delete all message workflows
+        messages_workflows_deleted = pg_messages_workflows.delete_all()
+        logger.info(f""Deleted {messages_workflows_deleted} message workflows from MongoDB."")
+        
+        # Delete all retweet workflows
+        retweets_workflows_deleted = pg_retweets_workflows.delete_all()
+        logger.info(f""Deleted {retweets_workflows_deleted} retweet workflows from MongoDB."")
+        
+        logger.info(
+            f""Delete Workflows completed: deleted {replies_workflows_deleted} reply workflows, ""
+            f""{messages_workflows_deleted} message workflows, and ""
+            f""{retweets_workflows_deleted} retweet workflows.""
+        )
+        
+    except Exception as e:
+        logger.error(f""❌ Error during workflows cleanup: {e}"")
+        raise
+
+with DAG(
+    'delete_workflows',
+    default_args=DEFAULT_ARGS,
+    description='Delete all reply, message, and retweet workflows from MongoDB',
+    schedule_interval=None,
+    start_date=datetime(2025, 8, 6),
+    catchup=False,
+) as dag:
+    
+    delete_workflows_task = PythonOperator(
+        task_id='delete_workflows',
+        python_callable=delete_workflows,
+        provide_context=True,
+        dag=dag,
+    )"
+40706780599665155,/opt/airflow/dags/filter_links.py,2025-09-10 21:42:45.308637+03,"import sys
+from airflow import DAG
+from datetime import datetime, timezone
+from airflow.operators.python import PythonOperator
+sys.path.append('/opt/airflow/src')
+
+from dag_components.filtering_dag.config import DEFAULT_ARGS, logger
+from dag_components.filtering_dag.db_utils import get_mongo_connection
+from dag_components.filtering_dag.twitter_utils import create_twitter_instance, get_tweet_timestamp, find_tweet_timestamp
+from dag_components.filtering_dag.workflow_manager import (
+    get_available_workflows_for_links,
+    update_workflow_with_link,
+    get_workflow_link_status,
+    reset_workflow_links
+)
+from dag_components.filtering_dag.tracking import create_workflow_execution_record
+from core.database.postgres.connection import get_postgres_connection
+from streamlit.ui.settings.settings_manager import get_system_setting
+
+def update_tweeted_time_and_workflows(**kwargs):
+    """"""Update tweeted_time in PostgreSQL and integrate with MongoDB workflows""""""
+    try:
+        mongo_db = get_mongo_connection()
+        settings = get_system_setting('extraction_processing_settings', {
+            'content_to_filter': 5
+        })
+        
+        # Get workflow statistics before processing
+        workflow_stats_before = get_workflow_link_status(mongo_db)
+        logger.info(f""Workflow status before processing: {workflow_stats_before}"")
+
+        # Get available workflows and validate
+        available_workflows = get_available_workflows_for_links(mongo_db)
+        logger.info(f""Available workflows found: {len(available_workflows)}"")
+        
+        if not available_workflows:
+            logger.error(""NO WORKFLOWS AVAILABLE - cannot assign links to workflows"")
+            logger.info(""This explains why no links are being marked as used"")
+            # Still process timestamps, just won't assign workflows
+        else:
+            for wf in available_workflows:
+                logger.info(f""  - {wf['workflow_id']} ({wf['workflow_type']})"")
+
+        # Adjust content_limit to ensure all workflow types are covered
+        content_limit = max(settings.get('content_to_filter', 5), len(available_workflows))
+        logger.info(f""Using content_to_filter: {content_limit} (latest {content_limit} links)"")
+
+        with get_postgres_connection() as conn:
+            with conn.cursor() as cursor:
+                # Log table schema for debugging
+                cursor.execute(""SELECT column_name FROM information_schema.columns WHERE table_name = 'links' ORDER BY ordinal_position"")
+                columns = cursor.fetchall()
+                logger.info(f""Links table columns: {[col['column_name'] for col in columns]}"")
+
+                # Log counts for debugging
+                cursor.execute(""SELECT COUNT(*) FROM links"")
+                total_links = cursor.fetchone()['count']
+                logger.info(f""Total links in table: {total_links}"")
+
+                cursor.execute(""SELECT COUNT(*) FROM links WHERE tweeted_time IS NULL"")
+                null_timestamp_count = cursor.fetchone()['count']
+                logger.info(f""Links with tweeted_time IS NULL: {null_timestamp_count}"")
+
+                cursor.execute(""SELECT COUNT(*) FROM links WHERE tweet_id IS NOT NULL AND tweet_id != ''"")
+                valid_tweet_id_count = cursor.fetchone()['count']
+                logger.info(f""Links with valid tweet_id: {valid_tweet_id_count}"")
+
+                cursor.execute(""SELECT COUNT(*) FROM links WHERE tweet_id ~ '^[0-9]+$'"")
+                numeric_tweet_id_count = cursor.fetchone()['count']
+                logger.info(f""Links with numeric tweet_id: {numeric_tweet_id_count}"")
+
+                cursor.execute(""SELECT COUNT(*) FROM links WHERE used = FALSE"")
+                unused_links_count = cursor.fetchone()['count']
+                logger.info(f""Links with used = FALSE: {unused_links_count}"")
+
+                # Find all links that need timestamp updates and are not used
+                query = """"""
+                    SELECT links_id::integer, tweet_id::text, link
+                    FROM links
+                    WHERE tweeted_time IS NULL
+                    AND tweet_id IS NOT NULL
+                    AND tweet_id != ''
+                    AND tweet_id ~ '^[0-9]+$'
+                    AND used = FALSE
+                    ORDER BY links_id
+                """"""
+                cursor.execute(query)
+                links_to_update = cursor.fetchall()
+                
+                if not links_to_update:
+                    logger.info(""No links with null tweeted_time, valid numeric tweet_id, and used = FALSE found."")
+                    cursor.execute(""SELECT links_id, tweet_id, link, tweeted_time, used, filtered FROM links LIMIT 5"")
+                    sample_links = cursor.fetchall()
+                    logger.info(f""Sample links: {sample_links}"")
+                    return
+
+                logger.info(f""Found {len(links_to_update)} links to process: {[row['links_id'] for row in links_to_update]}"")
+
+                # Group workflows by type for equitable distribution
+                workflows_by_type = {
+                    'replies': [w for w in available_workflows if w['workflow_type'] == 'replies'],
+                    'messages': [w for w in available_workflows if w['workflow_type'] == 'messages'],
+                    'retweets': [w for w in available_workflows if w['workflow_type'] == 'retweets']
+                }
+                logger.info(f""Workflows by type: { {k: len(v) for k, v in workflows_by_type.items()} }"")
+                
+                # Check if we have workflows for assignment
+                has_workflows_for_assignment = any(workflows_by_type.values())
+                if not has_workflows_for_assignment:
+                    logger.warning(""No workflows available by type. Links will be processed but not assigned to workflows."")
+
+                twitter_object = None
+                processed_count = 0
+                updated_count = 0
+                workflow_updated_count = 0
+                link_timestamps = []
+
+                # Process all links to get timestamps
+                for row in links_to_update:
+                    link_id = row['links_id']
+                    tweet_id = row['tweet_id']
+                    link_url = row['link']
+                    
+                    try:
+                        logger.debug(f""Processing link_id: {link_id}, tweet_id: {tweet_id}, link: {link_url}"")
+                        
+                        if not isinstance(link_id, int):
+                            logger.warning(f""Invalid link_id type: {link_id}"")
+                            continue
+                            
+                        tweet_id_str = str(tweet_id).strip()
+                        if not tweet_id_str.isdigit():
+                            logger.warning(f""Invalid tweet_id format: '{tweet_id_str}' for link_id {link_id}"")
+                            continue
+                            
+                        tweet_id_int = int(tweet_id_str)
+                        timestamp = -1
+                        
+                        if tweet_id_int > 29700859247:
+                            timestamp = find_tweet_timestamp(tweet_id)
+                            logger.debug(f""find_tweet_timestamp for tweet_id {tweet_id}: {timestamp}"")
+                            if timestamp == -1:
+                                if twitter_object is None:
+                                    twitter_object = create_twitter_instance()
+                                timestamp = get_tweet_timestamp(tweet_id, twitter_object)
+                                logger.debug(f""get_tweet_timestamp for tweet_id {tweet_id}: {timestamp}"")
+                        else:
+                            if twitter_object is None:
+                                twitter_object = create_twitter_instance()
+                            timestamp = get_tweet_timestamp(tweet_id, twitter_object)
+                            logger.debug(f""get_tweet_timestamp for tweet_id {tweet_id}: {timestamp}"")
+                        
+                        processed_count += 1
+
+                        if timestamp != -1:
+                            tweet_datetime = datetime.fromtimestamp(timestamp)
+                            link_timestamps.append({
+                                'link_id': link_id,
+                                'tweet_id': tweet_id,
+                                'link_url': link_url,
+                                'timestamp': timestamp,
+                                'tweet_datetime': tweet_datetime
+                            })
+                        else:
+                            logger.warning(f""Could not determine timestamp for tweet_id {tweet_id}, link_id {link_id}"")
+                            
+                    except Exception as e:
+                        logger.error(f""Error processing link_id {link_id}, tweet_id: {tweet_id}: {e}"")
+                        continue
+
+                # Sort by timestamp (newest first) and select the latest N links
+                link_timestamps.sort(key=lambda x: x['timestamp'], reverse=True)
+                selected_links = link_timestamps[:content_limit]
+                
+                logger.info(f""Selected {len(selected_links)} latest links out of {len(link_timestamps)} processed"")
+
+                # Process all links but only update workflows for selected ones
+                workflow_type_order = ['replies', 'messages', 'retweets'] if has_workflows_for_assignment else []
+                current_utc_time = datetime.now(timezone.utc)
+                
+                for i, link_data in enumerate(link_timestamps):
+                    link_id = link_data['link_id']
+                    tweet_id = link_data['tweet_id']
+                    link_url = link_data['link_url']
+                    timestamp = link_data['timestamp']
+                    tweet_datetime = link_data['tweet_datetime']
+                    within_limit = link_data in selected_links
+
+                    try:
+                        workflow_update_success = False
+                        selected_workflow = None
+                        execution_record_id = None
+                        
+                        # Try to assign workflow if within limit and workflows are available
+                        if within_limit and has_workflows_for_assignment:
+                            # Select workflow type in round-robin order
+                            current_type = workflow_type_order[i % len(workflow_type_order)]
+                            type_workflows = workflows_by_type[current_type]
+                            
+                            if not type_workflows:
+                                logger.warning(f""No workflows available for type {current_type}"")
+                            else:
+                                selected_workflow = type_workflows[i % len(type_workflows)]
+                                logger.info(f""Assigning link {link_url} to {current_type} workflow {selected_workflow['workflow_id']}"")
+                                
+                                try:
+                                    workflow_update_success = update_workflow_with_link(
+                                        mongo_db,
+                                        selected_workflow['workflow_id'],
+                                        selected_workflow['workflow_type'],
+                                        link_url,
+                                        link_id,
+                                        None,  # postgres_user_id
+                                        None   # content_text
+                                    )
+                                    
+                                    if workflow_update_success:
+                                        execution_record_id = create_workflow_execution_record(
+                                            mongo_db,
+                                            selected_workflow['automa_workflow_id'],
+                                            selected_workflow['workflow_type'],
+                                            link_id,
+                                            link_url,
+                                            selected_workflow['automa_workflow_id']
+                                        )
+                                        workflow_updated_count += 1
+                                        logger.info(f""Successfully updated workflow and created execution record"")
+                                    else:
+                                        logger.warning(f""Failed to update workflow {selected_workflow['workflow_id']} with link"")
+                                        
+                                except Exception as workflow_error:
+                                    logger.error(f""Error updating workflow: {workflow_error}"")
+                                    workflow_update_success = False
+                        
+                        # Update PostgreSQL record based on results
+                        if within_limit and workflow_update_success:
+                            # Successfully processed within limit - mark as used and filtered
+                            update_query = """"""
+                                UPDATE links
+                                SET tweeted_time = to_timestamp(%s),
+                                    tweeted_date = %s::date,
+                                    within_limit = %s,
+                                    used = %s,
+                                    used_time = %s,
+                                    filtered = %s,
+                                    filtered_time = %s,
+                                    workflow_id = %s,
+                                    processed_by_workflow = %s,
+                                    workflow_processed_time = %s,
+                                    workflow_status = %s
+                                WHERE links_id = %s
+                            """"""
+                            cursor.execute(update_query, (
+                                timestamp,
+                                tweet_datetime.strftime('%Y-%m-%d'),
+                                True,  # within_limit
+                                True,  # used - successfully assigned to workflow
+                                current_utc_time,  # used_time
+                                True,  # filtered - within selected timeframe
+                                current_utc_time,  # filtered_time
+                                selected_workflow['workflow_id'],
+                                True,  # processed_by_workflow
+                                current_utc_time,  # workflow_processed_time
+                                'completed',  # workflow_status
+                                link_id
+                            ))
+                            
+                        elif within_limit and not workflow_update_success and has_workflows_for_assignment:
+                            # Within limit but workflow failed - mark as filtered but not used
+                            update_query = """"""
+                                UPDATE links
+                                SET tweeted_time = to_timestamp(%s),
+                                    tweeted_date = %s::date,
+                                    within_limit = %s,
+                                    used = %s,
+                                    filtered = %s,
+                                    filtered_time = %s,
+                                    workflow_id = %s,
+                                    processed_by_workflow = %s,
+                                    workflow_status = %s
+                                WHERE links_id = %s
+                            """"""
+                            cursor.execute(update_query, (
+                                timestamp,
+                                tweet_datetime.strftime('%Y-%m-%d'),
+                                True,  # within_limit
+                                False,  # used - failed to assign workflow
+                                True,  # filtered - still within timeframe
+                                current_utc_time,  # filtered_time
+                                selected_workflow['workflow_id'] if selected_workflow else None,
+                                False,  # processed_by_workflow
+                                'failed',  # workflow_status
+                                link_id
+                            ))
+                            
+                        elif within_limit and not has_workflows_for_assignment:
+                            # Within limit but no workflows available - mark as filtered but not used
+                            update_query = """"""
+                                UPDATE links
+                                SET tweeted_time = to_timestamp(%s),
+                                    tweeted_date = %s::date,
+                                    within_limit = %s,
+                                    used = %s,
+                                    filtered = %s,
+                                    filtered_time = %s,
+                                    workflow_status = %s
+                                WHERE links_id = %s
+                            """"""
+                            cursor.execute(update_query, (
+                                timestamp,
+                                tweet_datetime.strftime('%Y-%m-%d'),
+                                True,  # within_limit
+                                False,  # used - no workflows available
+                                True,  # filtered - still within timeframe
+                                current_utc_time,  # filtered_time
+                                'no_workflows_available',  # workflow_status
+                                link_id
+                            ))
+                            
+                        else:
+                            # Not within limit - just update timestamp info
+                            update_query = """"""
+                                UPDATE links
+                                SET tweeted_time = to_timestamp(%s),
+                                    tweeted_date = %s::date,
+                                    within_limit = %s,
+                                    used = %s,
+                                    filtered = %s
+                                WHERE links_id = %s
+                            """"""
+                            cursor.execute(update_query, (
+                                timestamp,
+                                tweet_datetime.strftime('%Y-%m-%d'),
+                                False,  # within_limit
+                                False,  # used
+                                False,  # filtered - only filtered if within limit
+                                link_id
+                            ))
+                        
+                        # Log the update details
+                        status_msg = f""Updated link_id {link_id} (tweet_id {tweet_id}): "" \
+                                   f""time={tweet_datetime}, date={tweet_datetime.strftime('%Y-%m-%d')}, "" \
+                                   f""within_limit={within_limit}, filtered={within_limit}""
+                                   
+                        if within_limit:
+                            if workflow_update_success:
+                                status_msg += f"", used=TRUE, workflow={selected_workflow['workflow_id']} UPDATED""
+                                if execution_record_id:
+                                    status_msg += f"", execution_record={execution_record_id}""
+                            elif has_workflows_for_assignment:
+                                status_msg += f"", workflow update FAILED, used=FALSE""
+                            else:
+                                status_msg += f"", no workflows available, used=FALSE""
+                        else:
+                            status_msg += "", not selected (older), used=FALSE, filtered=FALSE""
+                            
+                        logger.info(status_msg)
+                        updated_count += 1
+                            
+                    except Exception as e:
+                        logger.error(f""Error updating link_id {link_id}: {e}"")
+                        continue
+
+                # Commit all changes
+                conn.commit()
+                
+                # Update MongoDB has_link status for successfully processed workflows
+                if workflow_updated_count > 0:
+                    update_mongodb_has_link_status(mongo_db, workflow_updated_count)
+                
+                # Log final statistics
+                logger.info(f""Processing completed - Processed: {processed_count}, ""
+                          f""Updated: {updated_count}, Selected: {len(selected_links)}, ""
+                          f""Workflows updated: {workflow_updated_count}"")
+
+                cursor.execute(""SELECT COUNT(*) AS count FROM links WHERE within_limit = true"")
+                within_timeframe_count = cursor.fetchone()['count']
+                logger.info(f""Total links marked as latest (within_limit = true): {within_timeframe_count}"")
+                
+                cursor.execute(""SELECT COUNT(*) AS count FROM links WHERE used = true"")
+                used_links_count = cursor.fetchone()['count']
+                logger.info(f""Total used links: {used_links_count}"")
+                
+                cursor.execute(""SELECT COUNT(*) AS count FROM links WHERE filtered = true"")
+                filtered_links_count = cursor.fetchone()['count']
+                logger.info(f""Total filtered links: {filtered_links_count}"")
+                
+                cursor.execute(""SELECT COUNT(*) AS count FROM links WHERE processed_by_workflow = true"")
+                processed_by_workflow_count = cursor.fetchone()['count']
+                logger.info(f""Total links processed by workflow: {processed_by_workflow_count}"")
+
+        # Get workflow statistics after processing
+        workflow_stats_after = get_workflow_link_status(mongo_db)
+        logger.info(f""Workflow status after processing: {workflow_stats_after}"")
+
+    except Exception as e:
+        logger.error(f""❌ Error in update_tweeted_time_and_workflows: {e}"")
+        raise
+def update_mongodb_has_link_status(mongo_db, workflow_count):
+    """"""Update MongoDB content_workflow_links to set has_link=True for recently assigned workflows""""""
+    try:
+        # Update content_workflow_links that were just created/updated
+        result = mongo_db.content_workflow_links.update_many(
+            {
+                ""has_link"": False,  # Find records that haven't been marked yet
+                ""assigned_url"": {""$exists"": True, ""$ne"": None}  # That have actual URLs assigned
+            },
+            {
+                ""$set"": {
+                    ""has_link"": True,
+                    ""content_updated_at"": datetime.now(timezone.utc).isoformat()
+                }
+            }
+        )
+        
+        logger.info(f""Updated {result.modified_count} MongoDB content_workflow_links to has_link=True"")
+        
+        # Also update workflow_executions if needed
+        exec_result = mongo_db.workflow_executions.update_many(
+            {
+                ""has_link"": False,
+                ""link_url"": {""$exists"": True, ""$ne"": None, ""$ne"": """"}
+            },
+            {
+                ""$set"": {
+                    ""has_link"": True,
+                    ""content_status_updated_at"": datetime.now(timezone.utc).isoformat()
+                }
+            }
+        )
+        
+        logger.info(f""Updated {exec_result.modified_count} MongoDB workflow_executions to has_link=True"")
+        
+    except Exception as e:
+        logger.error(f""Error updating MongoDB has_link status: {e}"")
+
+def update_timeframe_flags(**kwargs):
+    """"""Update within_limit flags to mark only the latest N links""""""
+    try:
+        settings = get_system_setting('extraction_processing_settings', {
+            'content_to_filter': 5
+        })
+        content_limit = settings.get('content_to_filter', 5)
+
+        with get_postgres_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(""""""
+                    UPDATE links
+                    SET within_limit = FALSE
+                    WHERE tweeted_time IS NOT NULL
+                """""")
+                reset_count = cursor.rowcount
+
+                cursor.execute(""""""
+                    UPDATE links
+                    SET within_limit = TRUE
+                    WHERE links_id IN (
+                        SELECT links_id
+                        FROM links
+                        WHERE tweeted_time IS NOT NULL
+                        ORDER BY tweeted_time DESC
+                        LIMIT %s
+                    )
+                """""", (content_limit,))
+                
+                affected_rows = cursor.rowcount
+                conn.commit()
+                
+                logger.info(f""Reset {reset_count} within_limit flags, then updated ""
+                          f""{affected_rows} latest links to within_limit=TRUE"")
+
+                cursor.execute(""""""
+                    SELECT COUNT(*) AS total_links,
+                           COUNT(CASE WHEN tweeted_time IS NOT NULL THEN 1 END) AS with_timestamps,
+                           COUNT(CASE WHEN tweeted_date IS NOT NULL THEN 1 END) AS with_dates,
+                           COUNT(CASE WHEN within_limit = true THEN 1 END) AS within_limit,
+                           COUNT(CASE WHEN used = true THEN 1 END) AS used_links,
+                           COUNT(CASE WHEN filtered = true THEN 1 END) AS filtered_links,
+                           COUNT(CASE WHEN workflow_id IS NOT NULL THEN 1 END) AS with_workflows,
+                           COUNT(CASE WHEN processed_by_workflow = true THEN 1 END) AS processed_by_workflow
+                    FROM links
+                """""")
+                stats = cursor.fetchone()
+                
+                logger.info(f""Links statistics after timeframe update:"")
+                logger.info(f""  - Total links: {stats['total_links']}"")
+                logger.info(f""  - With timestamps: {stats['with_timestamps']}"")
+                logger.info(f""  - With dates: {stats['with_dates']}"")
+                logger.info(f""  - Latest selected (within_limit): {stats['within_limit']}"")
+                logger.info(f""  - Used links: {stats['used_links']}"")
+                logger.info(f""  - Filtered links: {stats['filtered_links']}"")
+                logger.info(f""  - With workflows: {stats['with_workflows']}"")
+                logger.info(f""  - Processed by workflow: {stats['processed_by_workflow']}"")
+                
+    except Exception as e:
+        logger.error(f""❌ Error in update_timeframe_flags: {e}"")
+        raise
+
+def sync_workflow_execution_status(**kwargs):
+    """"""Sync workflow execution status between MongoDB and PostgreSQL""""""
+    try:
+        mongo_db = get_mongo_connection()
+        
+        with get_postgres_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(""""""
+                    SELECT links_id, workflow_id, link, used, processed_by_workflow, filtered
+                    FROM links
+                    WHERE workflow_id IS NOT NULL
+                    AND used = TRUE
+                    AND filtered = TRUE
+                    ORDER BY links_id
+                """""")
+                used_links = cursor.fetchall()
+                
+                updated_executions = 0
+                updated_content_links = 0
+                logger.info(f""Found {len(used_links)} used and filtered links with workflow assignments to sync"")
+                
+                for link_row in used_links:
+                    try:
+                        # Update workflow_executions
+                        result = mongo_db.workflow_executions.update_many(
+                            {
+                                ""workflow_id"": link_row['workflow_id'],
+                                ""postgres_content_id"": link_row['links_id']
+                            },
+                            {
+                                ""$set"": {
+                                    ""has_link"": True,
+                                    ""link_url"": link_row['link'],
+                                    ""status"": ""completed"",
+                                    ""completed_at"": datetime.now(timezone.utc),
+                                    ""success"": True,
+                                    ""executed"": True,
+                                    ""content_status_updated_at"": datetime.now(timezone.utc).isoformat()
+                                }
+                            }
+                        )
+                        updated_executions += result.modified_count
+                        
+                        # Update content_workflow_links
+                        content_result = mongo_db.content_workflow_links.update_many(
+                            {
+                                ""postgres_content_id"": link_row['links_id'],
+                                ""assigned_url"": link_row['link']
+                            },
+                            {
+                                ""$set"": {
+                                    ""has_link"": True,
+                                    ""has_content"": True,  # Content has been successfully integrated
+                                    ""content_updated_at"": datetime.now(timezone.utc).isoformat()
+                                }
+                            }
+                        )
+                        updated_content_links += content_result.modified_count
+                        
+                        if result.modified_count > 0 or content_result.modified_count > 0:
+                            logger.debug(f""Updated MongoDB records for link {link_row['links_id']}, ""
+                                       f""workflow {link_row['workflow_id']}"")
+                        
+                    except Exception as e:
+                        logger.error(f""Error updating workflow execution for link {link_row['links_id']}: {e}"")
+                
+                logger.info(f""Updated {updated_executions} workflow execution records and ""
+                          f""{updated_content_links} content workflow links with has_link=True"")
+                
+                # Get execution statistics
+                execution_stats = {}
+                for status in ['generated', 'queued', 'running', 'completed', 'failed']:
+                    count = mongo_db.workflow_executions.count_documents({'status': status})
+                    execution_stats[status] = count
+                
+                # Get has_link statistics
+                has_link_stats = {
+                    'with_links': mongo_db.workflow_executions.count_documents({'has_link': True}),
+                    'without_links': mongo_db.workflow_executions.count_documents({'has_link': False}),
+                    'content_with_links': mongo_db.content_workflow_links.count_documents({'has_link': True}),
+                    'content_without_links': mongo_db.content_workflow_links.count_documents({'has_link': False})
+                }
+                
+                logger.info(f""Workflow execution status distribution: {execution_stats}"")
+                logger.info(f""MongoDB has_link status: {has_link_stats}"")
+                
+    except Exception as e:
+        logger.error(f""❌ Error in sync_workflow_execution_status: {e}"")
+        raise
+
+def reset_workflows_for_testing(**kwargs):
+    """"""Reset workflows back to placeholder state for testing (disabled unless explicitly triggered)""""""
+    try:
+        mongo_db = get_mongo_connection()
+        current_utc_time = datetime.now(timezone.utc)
+        
+        reset_count = reset_workflow_links(mongo_db)
+        logger.info(f""Reset {reset_count} workflows back to www.kimu.com placeholder state"")
+        
+        reset_postgres = kwargs.get('reset_postgres_assignments', False)
+        if reset_postgres:
+            with get_postgres_connection() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(""""""
+                        UPDATE links 
+                        SET workflow_id = NULL,
+                            processed_by_workflow = FALSE,
+                            workflow_processed_time = NULL,
+                            workflow_status = NULL,
+                            used = FALSE,
+                            used_time = NULL,
+                            filtered = FALSE,
+                            filtered_time = NULL
+                        WHERE processed_by_workflow = TRUE
+                    """""")
+                    
+                    reset_postgres_count = cursor.rowcount
+                    conn.commit()
+                    logger.info(f""Reset {reset_postgres_count} PostgreSQL link assignments"")
+                    
+    except Exception as e:
+        logger.error(f""❌ Error in reset_workflows_for_testing: {e}"")
+        raise
+
+# Airflow DAG configuration
+with DAG(
+    'filter_links',
+    default_args=DEFAULT_ARGS,
+    description='Enhanced tweet timestamp estimation with robust MongoDB workflow integration',
+    schedule_interval=None,
+    start_date=datetime(2025, 7, 31),
+    catchup=False,
+    tags=['twitter', 'timestamp', 'workflow', 'mongodb', 'enhanced'],
+) as dag:
+
+    update_tweeted_time_task = PythonOperator(
+        task_id='update_tweeted_time_and_workflows',
+        python_callable=update_tweeted_time_and_workflows,
+        provide_context=True,
+        dag=dag,
+    )
+
+    update_timeframe_flags_task = PythonOperator(
+        task_id='update_timeframe_flags',
+        python_callable=update_timeframe_flags,
+        provide_context=True,
+        dag=dag,
+    )
+
+    sync_workflow_status_task = PythonOperator(
+        task_id='sync_workflow_execution_status',
+        python_callable=sync_workflow_execution_status,
+        provide_context=True,
+        dag=dag,
+    )
+
+    reset_workflows_task = PythonOperator(
+        task_id='reset_workflows_for_testing',
+        python_callable=reset_workflows_for_testing,
+        provide_context=True,
+        dag=dag,
+    )
+
+    update_tweeted_time_task >> update_timeframe_flags_task >> sync_workflow_status_task"
+53091644158122201,/opt/airflow/dags/create_automa.py,2025-09-10 21:42:45.308723+03,"from airflow import DAG
+from airflow.operators.python import PythonOperator
+from dag_components.automa_workflow_dag.config import DEFAULT_ARGS, WORKFLOW_GENERATION_ENABLED, WORKFLOW_TEMPLATES, WORKFLOW_NAMES, logger
+from dag_components.automa_workflow_dag.workflow_generation import ensure_template_files_exist, create_workflow_with_content_connection, update_has_content
+from dag_components.automa_workflow_dag.tracking import log_workflow_generation, update_workflow_connection, log_execution_record
+from dag_components.automa_workflow_dag.db_utils import log_sync_error
+from core.database.postgres.replies import get_unused_replies, mark_reply_as_used
+from core.database.postgres.messages import get_unused_messages, mark_message_as_used
+from core.database.postgres.retweets import get_unused_retweets, mark_retweet_as_used
+import time
+
+def generate_automa_workflows_task():
+    """"""Main task to generate workflows using separated architecture""""""
+    if not WORKFLOW_GENERATION_ENABLED:
+        logger.warning(""Workflow generation is disabled"")
+        return ""Workflow generation disabled.""
+
+    ensure_template_files_exist()
+    
+    # Get unused content for each type
+    content_types = {
+        ""replies"": get_unused_replies,
+        ""messages"": get_unused_messages,
+        ""retweets"": get_unused_retweets
+    }
+    
+    generation_stats = {
+        ""replies"": {""generated"": 0, ""marked"": 0, ""skipped"": 0, ""connected"": 0},
+        ""messages"": {""generated"": 0, ""marked"": 0, ""skipped"": 0, ""connected"": 0},
+        ""retweets"": {""generated"": 0, ""marked"": 0, ""skipped"": 0, ""connected"": 0}
+    }
+    
+    total_content_processed = {""replies"": 0, ""messages"": 0, ""retweets"": 0}
+    
+    # NEW: Track successful workflow IDs for has_content update
+    successful_workflow_ids_by_type = {
+        ""replies"": [],
+        ""messages"": [],
+        ""retweets"": []
+    }
+
+    for workflow_type, get_content_func in content_types.items():
+        try:
+            contents_to_process = get_content_func(limit=None)
+            if not contents_to_process:
+                logger.info(f""No unused {workflow_type} found in PostgreSQL to process."")
+                continue
+
+            total_content_processed[workflow_type] = len(contents_to_process)
+            logger.debug(f""Processing {total_content_processed[workflow_type]} {workflow_type}: {contents_to_process}"")
+
+            for item in contents_to_process:
+                try:
+                    # Handle RealDictRow format from PostgreSQL
+                    if hasattr(item, 'keys') and hasattr(item, 'values'):
+                        if workflow_type == ""replies"":
+                            content_id = item.get('replies_id')
+                            content_text = item.get('content')
+                        elif workflow_type == ""messages"":
+                            content_id = item.get('messages_id')
+                            content_text = item.get('content')
+                        elif workflow_type == ""retweets"":
+                            content_id = item.get('retweets_id')
+                            content_text = item.get('content')
+                        else:
+                            logger.error(f""Unknown workflow type: {workflow_type}"")
+                            generation_stats[workflow_type][""skipped""] += 1
+                            continue
+                    elif isinstance(item, (tuple, list)) and len(item) >= 2:
+                        content_id, content_text = item[0], item[1]
+                    else:
+                        logger.error(f""Invalid {workflow_type} item format: {item}"")
+                        generation_stats[workflow_type][""skipped""] += 1
+                        continue
+                    
+                    # Validate extracted data
+                    if content_id is None or content_text is None:
+                        logger.error(f""Missing data in {workflow_type} item: content_id={content_id}, content_text={content_text}"")
+                        generation_stats[workflow_type][""skipped""] += 1
+                        continue
+                        
+                    # Ensure content_id is an integer
+                    try:
+                        content_id = int(content_id)
+                    except (ValueError, TypeError) as e:
+                        logger.error(f""Invalid {workflow_type}_id: {content_id} is not an integer: {e}"")
+                        generation_stats[workflow_type][""skipped""] += 1
+                        continue
+
+                    name_index = (total_content_processed[workflow_type] - 1) % len(WORKFLOW_NAMES[workflow_type])
+                    name = WORKFLOW_NAMES[workflow_type][name_index]
+                    
+                    logger.info(f""Generating {workflow_type} workflow '{name}' for {workflow_type}_id {content_id}"")
+                    
+                    # Use separated architecture workflow creation
+                    success_status, automa_workflow_id, execution_start, execution_end, execution_time_ms, blocks_generated, has_link, workflow_name, input_file = create_workflow_with_content_connection(
+                        workflow_type, WORKFLOW_TEMPLATES[workflow_type], name, content_text, content_id
+                    )
+                    
+                    if success_status and automa_workflow_id:
+                        try:
+                            # Log workflow generation statistics
+                            log_workflow_generation(workflow_type, workflow_name, content_id, automa_workflow_id)
+                            
+                            # Update PostgreSQL connection (using Automa workflow ID)
+                            update_workflow_connection(workflow_type, content_id, automa_workflow_id, workflow_name)
+                            
+                            generation_stats[workflow_type][""generated""] += 1
+                            generation_stats[workflow_type][""connected""] += 1
+                            
+                            # NEW: Track successful workflow ID for has_content update
+                            successful_workflow_ids_by_type[workflow_type].append(automa_workflow_id)
+                            
+                            logger.info(f""Generated separated architecture workflow for {workflow_type}:"")
+                            logger.info(f""  - Automa workflow ID: {automa_workflow_id}"")
+                            logger.info(f""  - Content ID: {content_id}"")
+                            logger.info(f""  - Blocks generated: {blocks_generated}"")
+                            logger.info(f""  - Has content: True"")
+                            
+                        except Exception as e:
+                            logger.error(f""Failed post-generation steps for {workflow_type} workflow, {workflow_type}_id {content_id}: {e}"")
+                            log_sync_error(workflow_type, str(automa_workflow_id), ""postgres_to_mongo"", f""Failed post-generation: {str(e)}"")
+                    
+                    # Mark content as used
+                    try:
+                        if workflow_type == ""replies"":
+                            mark_reply_as_used(content_id)
+                        elif workflow_type == ""messages"":
+                            mark_message_as_used(content_id)
+                        elif workflow_type == ""retweets"":
+                            mark_retweet_as_used(content_id)
+                        generation_stats[workflow_type][""marked""] += 1
+                        logger.info(f""Marked {workflow_type}_id {content_id} as used"")
+                    except Exception as e:
+                        logger.error(f""Failed to mark {workflow_type}_id {content_id} as used: {e}"")
+                        log_sync_error(workflow_type, str(automa_workflow_id) if automa_workflow_id else None, ""postgres_to_mongo"", f""Failed to mark as used: {str(e)}"")
+                    
+                    # Small delay to prevent overwhelming the database
+                    time.sleep(0.1)
+                
+                except Exception as e:
+                    logger.error(f""Error generating {workflow_type} workflow for {workflow_type}_id {content_id}: {e}"")
+                    generation_stats[workflow_type][""skipped""] += 1
+                    continue
+        
+        except Exception as e:
+            logger.error(f""Error processing {workflow_type} contents: {e}"")
+            log_sync_error(workflow_type, None, ""postgres_to_mongo"", f""Failed to process contents: {str(e)}"")
+            continue
+
+    # NEW: Update has_content status for all successfully generated workflows after DAG completion
+    try:
+        total_workflows_with_content = sum(len(ids) for ids in successful_workflow_ids_by_type.values())
+        if total_workflows_with_content > 0:
+            logger.info(f""DAG completion: Updating has_content=True for {total_workflows_with_content} successful workflows"")
+            updated_count = update_has_content(successful_workflow_ids_by_type)
+            logger.info(f""Successfully updated has_content status for {updated_count} workflows"")
+        else:
+            logger.info(""No successful workflows to update has_content status"")
+    except Exception as e:
+        logger.error(f""Failed to update has_content status after DAG completion: {e}"")
+        # Don't raise - this is a post-processing step
+
+    # Log final statistics
+    total_generated = sum(stats[""generated""] for stats in generation_stats.values())
+    total_connected = sum(stats[""connected""] for stats in generation_stats.values())
+    total_skipped = sum(stats[""skipped""] for stats in generation_stats.values())
+    
+    logger.info(f""Separated architecture workflow generation completed:"")
+    for workflow_type, stats in generation_stats.items():
+        logger.info(f""  {workflow_type}: {stats['generated']} workflows generated, {stats['connected']} connected, {stats['marked']} marked as used, {stats['skipped']} skipped"")
+    
+    logger.info(f""Total: {total_generated} workflows generated, {total_connected} connected, {total_skipped} skipped from {sum(total_content_processed.values())} contents"")
+    logger.info(f""Total workflows with has_content=True: {total_workflows_with_content}"")
+    
+    if total_generated == 0 and sum(total_content_processed.values()) > 0:
+        logger.warning(""No workflows generated, but content was processed. Check logs for errors."")
+    
+    return f""Generated {total_generated} workflows using separated architecture ({generation_stats['replies']['generated']} replies, {generation_stats['messages']['generated']} messages, {generation_stats['retweets']['generated']} retweets), connected {total_connected}, skipped {total_skipped} from {sum(total_content_processed.values())} contents. Updated has_content=True for {total_workflows_with_content} workflows.""
+
+
+
+with DAG(
+    'create_automa',
+    default_args=DEFAULT_ARGS,
+    schedule_interval=None,
+    catchup=False,
+    max_active_runs=1,
+    description=""Generate Automa workflows with enhanced content connections for replies, messages, and retweets.""
+) as dag:
+
+    generate_task = PythonOperator(
+        task_id='generate_automa_workflows',
+        python_callable=generate_automa_workflows_task,
+        dag=dag
+    )"
+17074656716647652,/opt/airflow/dags/execute.py,2025-09-10 21:42:45.30883+03,"from airflow import DAG
+from airflow.operators.python_operator import PythonOperator
+from airflow.utils.dates import days_ago
+import os
+import logging
+import json
+import time
+from datetime import datetime, timedelta
+from pymongo import MongoClient
+from bson import ObjectId
+
+# Hyperbrowser imports
+from hyperbrowser import Hyperbrowser
+from hyperbrowser.models import (
+    CreateSessionParams, 
+    CreateExtensionParams,
+    StartBrowserUseTaskParams,
+    CreateProfileParams  # Add for profile creation
+)
+
+# Default arguments for the DAG
+default_args = {
+    'owner': 'data-team',
+    'depends_on_past': False,
+    'start_date': days_ago(1),
+    'email_on_failure': False,
+    'email_on_retry': False,
+    'retries': 2,
+    'retry_delay': timedelta(minutes=10)
+}
+
+# Initialize the DAG
+dag = DAG(
+    'execute_automa_workflows',
+    default_args=default_args,
+    description='Execute Automa workflows using persistent Hyperbrowser profile with Automa extension',
+    schedule_interval=os.environ.get('AUTOMA_DAG_SCHEDULE', '*/5 * * * *'),
+    catchup=False,
+    tags=['automa', 'hyperbrowser', 'workflow', 'mongodb', 'profile-persistent']
+)
+
+# Configuration from environment variables
+MONGODB_URI = os.environ.get('MONGODB_URI', 'mongodb://admin:admin123@mongodb:27017/messages_db?authSource=admin')
+HYPERBROWSER_API_KEY = os.environ.get('HYPERBROWSER_API_KEY')
+HYPERBROWSER_PROFILE_ID = os.environ.get('HYPERBROWSER_PROFILE_ID')  # New: Profile ID from .env
+AUTOMA_EXTENSION_ID = ""infppggnoaenmfagbfknfkancpbljcca""  # Automa extension ID from Chrome Store
+
+# Hyperbrowser configuration
+HYPERBROWSER_MAX_STEPS = int(os.environ.get('HYPERBROWSER_MAX_STEPS', '25'))
+
+def get_mongodb_connection():
+    """"""Get MongoDB connection""""""
+    try:
+        client = MongoClient(MONGODB_URI)
+        db = client.get_default_database()
+        return client, db
+    except Exception as e:
+        logging.error(f""Failed to connect to MongoDB: {str(e)}"")
+        raise
+
+def get_workflow_gap_setting():
+    """"""Get the configurable workflow gap from settings""""""
+    client, db = get_mongodb_connection()
+    try:
+        settings_doc = db.settings.find_one({'category': 'system'})
+        if settings_doc and 'settings' in settings_doc:
+            extraction_settings = settings_doc['settings'].get('extraction_processing_settings', {})
+            gap_minutes = extraction_settings.get('gap_between_workflows', 0.25)
+            gap_seconds = int(gap_minutes * 60) if isinstance(gap_minutes, (int, float)) else 15
+            
+            if gap_seconds <= 0:
+                strategy_settings = settings_doc['settings'].get('workflow_strategy_settings', {})
+                gap_seconds = int(strategy_settings.get('workflow_gap_seconds', 15))
+            
+            logging.info(f""Retrieved workflow gap setting: {gap_seconds} seconds"")
+            return max(gap_seconds, 5)
+        
+        return 15
+    except Exception as e:
+        logging.error(f""Error retrieving workflow gap setting: {e}"")
+        return 15
+    finally:
+        client.close()
+
+def ensure_profile_exists(**context):
+    """"""Ensure the profile exists, create if needed""""""
+    if not HYPERBROWSER_API_KEY:
+        raise ValueError(""HYPERBROWSER_API_KEY environment variable is not set"")
+    
+    if not HYPERBROWSER_PROFILE_ID:
+        raise ValueError(""HYPERBROWSER_PROFILE_ID environment variable is not set"")
+    
+    hb_client = Hyperbrowser(api_key=HYPERBROWSER_API_KEY)
+    
+    try:
+        # Check if profile exists
+        try:
+            existing_profile = hb_client.profiles.get(HYPERBROWSER_PROFILE_ID)
+            logging.info(f""✅ Profile {HYPERBROWSER_PROFILE_ID} exists and is ready"")
+            
+            context['task_instance'].xcom_push(key='profile_id', value=HYPERBROWSER_PROFILE_ID)
+            context['task_instance'].xcom_push(key='profile_status', value='existing')
+            
+            return {
+                'profile_id': HYPERBROWSER_PROFILE_ID,
+                'profile_status': 'existing',
+                'profile_exists': True
+            }
+            
+        except Exception as get_error:
+            logging.warning(f""Profile {HYPERBROWSER_PROFILE_ID} not found: {get_error}"")
+            
+            # Create new profile
+            logging.info(f""Creating new profile with ID: {HYPERBROWSER_PROFILE_ID}"")
+            
+            # Note: Hyperbrowser typically auto-generates profile IDs
+            # You might need to create without specifying ID and then use the returned ID
+            new_profile = hb_client.profiles.create()
+            actual_profile_id = new_profile.id
+            
+            logging.warning(f""⚠️  Profile created with auto-generated ID: {actual_profile_id}"")
+            logging.warning(f""Please update your .env file: HYPERBROWSER_PROFILE_ID={actual_profile_id}"")
+            
+            context['task_instance'].xcom_push(key='profile_id', value=actual_profile_id)
+            context['task_instance'].xcom_push(key='profile_status', value='newly_created')
+            
+            return {
+                'profile_id': actual_profile_id,
+                'profile_status': 'newly_created',
+                'profile_exists': True,
+                'env_update_needed': True
+            }
+            
+    except Exception as e:
+        logging.error(f""❌ Failed to ensure profile exists: {e}"")
+        raise
+
+def initialize_profile_session(**context):
+    """"""Initialize a session with the profile and install/configure Automa extension""""""
+    
+    # Get profile info from previous task
+    profile_data = context['task_instance'].xcom_pull(
+        task_ids='ensure_profile_exists'
+    )
+    
+    profile_id = profile_data['profile_id']
+    profile_status = profile_data['profile_status']
+    
+    if not HYPERBROWSER_API_KEY:
+        raise ValueError(""HYPERBROWSER_API_KEY environment variable is not set"")
+    
+    hb_client = Hyperbrowser(api_key=HYPERBROWSER_API_KEY)
+    
+    try:
+        # Create session with profile - always persist changes for setup
+        session_params = CreateSessionParams(
+            viewport={'width': 1920, 'height': 1080},
+            stealth=True,
+            profile={
+                'id': profile_id,
+                'persistChanges': True  # Always persist during initialization
+            },
+            # Add Automa extension
+            extensions=[
+                CreateExtensionParams(
+                    id=AUTOMA_EXTENSION_ID,  # Automa extension ID
+                    # Note: You might need to provide the .crx file path if required
+                )
+            ]
+        )
+        
+        session_response = hb_client.sessions.create(session_params)
+        session_id = session_response.id
+        
+        logging.info(f""✅ Created initialization session: {session_id}"")
+        logging.info(f""Profile: {profile_id} (status: {profile_status})"")
+        logging.info(f""Automa extension should be installed: {AUTOMA_EXTENSION_ID}"")
+        
+        # If this is a new profile, we should set it up with login and Automa workflows
+        if profile_status == 'newly_created':
+            logging.info(""🔧 New profile detected - manual setup required:"")
+            logging.info(""1. Login to required services in the browser"")
+            logging.info(""2. Configure Automa extension"")
+            logging.info(""3. Import/setup your workflows"")
+            logging.info(""4. Test workflows manually"")
+            
+            # Use Browser Use to navigate to Automa setup
+            setup_task = f""""""
+            This is a new browser profile setup. Please help set up the Automa extension:
+            
+            1. Navigate to chrome://extensions/
+            2. Verify that Automa extension is installed and enabled
+            3. Click on the Automa extension icon in the toolbar
+            4. Complete any initial setup for Automa
+            5. Navigate to any required login pages and wait for manual intervention
+            
+            This is a setup session - please provide detailed status of what you see.
+            """"""
+            
+            browser_use_params = StartBrowserUseTaskParams(
+                session_id=session_id,
+                task=setup_task,
+                llm=""gpt-4o"",
+                max_steps=10,
+                keep_browser_open=True
+            )
+            
+            logging.info(""Starting Browser Use for profile setup..."")
+            browser_use_response = hb_client.agents.browser_use.start_and_wait(browser_use_params)
+            
+            if browser_use_response and hasattr(browser_use_response, 'data'):
+                logging.info(""Setup session completed - profile state will be persisted"")
+        
+        context['task_instance'].xcom_push(key='initialized_session_id', value=session_id)
+        context['task_instance'].xcom_push(key='profile_id', value=profile_id)
+        context['task_instance'].xcom_push(key='setup_completed', value=True)
+        
+        # Close the setup session to persist changes
+        try:
+            hb_client.sessions.stop(session_id)
+            logging.info(f""Setup session {session_id} closed - changes persisted to profile"")
+        except Exception as e:
+            logging.warning(f""Could not close setup session: {e}"")
+        
+        return {
+            'session_id': session_id,
+            'profile_id': profile_id,
+            'profile_status': profile_status,
+            'setup_completed': True,
+            'automa_extension_id': AUTOMA_EXTENSION_ID
+        }
+        
+    except Exception as e:
+        logging.error(f""❌ Failed to initialize profile session: {e}"")
+        raise
+
+def query_single_eligible_workflow(**context):
+    """"""Query MongoDB for ONE eligible workflow with has_link=true and executed=false""""""
+    
+    client, db = get_mongodb_connection()
+    
+    try:
+        workflow_gap_seconds = get_workflow_gap_setting()
+        collections = db.list_collection_names()
+        logging.info(f""Available collections: {collections}"")
+        
+        workflows_to_process = []
+        
+        if 'workflow_executions' in collections:
+            query_filter = {
+                'has_link': True,
+                'executed': False
+            }
+            
+            eligible_count = db.workflow_executions.count_documents(query_filter)
+            logging.info(f""Found {eligible_count} eligible workflows (has_link=true, executed=false)"")
+            
+            if eligible_count > 0:
+                priority_order = ['replies', 'messages', 'retweets']
+                selected_workflow = None
+                
+                for content_type in priority_order:
+                    priority_filter = query_filter.copy()
+                    priority_filter['content_type'] = content_type
+                    
+                    workflow_link = db.workflow_executions.find_one(
+                        priority_filter,
+                        sort=[('linked_at', 1)]
+                    )
+                    
+                    if workflow_link:
+                        selected_workflow = workflow_link
+                        logging.info(f""Selected {content_type} workflow: {workflow_link.get('_id')}"")
+                        break
+                
+                if not selected_workflow:
+                    logging.info(""No workflow found matching priority criteria"")
+                    return workflows_to_process
+                
+                automa_workflow_id = selected_workflow.get('automa_workflow_id')
+                if automa_workflow_id:
+                    automa_workflow = db.automa_workflows.find_one({""_id"": ObjectId(automa_workflow_id)})
+                    if automa_workflow:
+                        workflow_data = {
+                            'link_id': str(selected_workflow['_id']),
+                            'automa_workflow_id': str(automa_workflow['_id']),
+                            'workflow_name': automa_workflow.get('name', 'Unknown'),
+                            'workflow_data': automa_workflow,
+                            'postgres_content_id': selected_workflow.get('postgres_content_id', 'unknown'),
+                            'content_type': selected_workflow.get('content_type', 'unknown'),
+                            'has_link': selected_workflow.get('has_link', False),
+                            'executed': selected_workflow.get('executed', False),
+                            'workflow_gap_seconds': workflow_gap_seconds,
+                            'max_steps': HYPERBROWSER_MAX_STEPS
+                        }
+                        workflows_to_process.append(workflow_data)
+                        
+                        logging.info(f""Selected workflow: {workflow_data['workflow_name']} ""
+                                   f""(Type: {workflow_data['content_type']}, ""
+                                   f""Gap: {workflow_gap_seconds}s, ""
+                                   f""Max Steps: {HYPERBROWSER_MAX_STEPS})"")
+        
+        context['task_instance'].xcom_push(key='workflows_to_process', value=workflows_to_process)
+        context['task_instance'].xcom_push(key='workflow_count', value=len(workflows_to_process))
+        context['task_instance'].xcom_push(key='workflow_gap_seconds', value=workflow_gap_seconds)
+        
+        logging.info(f""Selected {len(workflows_to_process)} workflow(s) for processing"")
+        
+        return workflows_to_process
+        
+    except Exception as e:
+        logging.error(f""Error querying single eligible workflow: {str(e)}"")
+        raise
+    finally:
+        client.close()
+
+def upload_and_execute_workflows(**context):
+    """"""Upload workflows to Automa and execute using persistent profile""""""
+    
+    # Get profile ID from initialization task
+    profile_id = context['task_instance'].xcom_pull(
+        task_ids='initialize_profile_session', 
+        key='profile_id'
+    )
+    
+    if not profile_id:
+        raise ValueError(""No profile ID found from initialization task"")
+    
+    if not HYPERBROWSER_API_KEY:
+        raise ValueError(""HYPERBROWSER_API_KEY environment variable is not set"")
+    
+    try:
+        # Get workflows to process
+        workflows_to_process = context['task_instance'].xcom_pull(
+            task_ids='query_single_eligible_workflow', 
+            key='workflows_to_process'
+        )
+        workflow_gap_seconds = context['task_instance'].xcom_pull(
+            task_ids='query_single_eligible_workflow', 
+            key='workflow_gap_seconds'
+        ) or 15
+        
+        if not workflows_to_process:
+            logging.info(""No workflows to execute"")
+            return {
+                'results': [],
+                'profile_id': profile_id,
+                'total_workflows': 0,
+                'successful_executions': 0,
+                'failed_executions': 0,
+                'execution_mode': 'profile_persistent'
+            }
+        
+        hb_client = Hyperbrowser(api_key=HYPERBROWSER_API_KEY)
+        execution_results = []
+        successful_executions = 0
+        failed_executions = 0
+        
+        logging.info(f""=== Starting Automa Workflow Execution ==="")
+        logging.info(f""Using persistent profile: {profile_id}"")
+        logging.info(f""Workflows to process: {len(workflows_to_process)}"")
+        logging.info(f""Workflow gap: {workflow_gap_seconds} seconds"")
+        logging.info(f""Max steps per workflow: {HYPERBROWSER_MAX_STEPS}"")
+        
+        for i, workflow_data in enumerate(workflows_to_process):
+            workflow_name = workflow_data.get('workflow_name', 'Unknown')
+            link_id = workflow_data.get('link_id')
+            automa_workflow_id = workflow_data.get('automa_workflow_id')
+            workflow_json = workflow_data.get('workflow_data', {})
+            
+            logging.info(f""Processing workflow {i+1}/{len(workflows_to_process)}: {workflow_name}"")
+            
+            try:
+                # Create new session using the persistent profile (no persistChanges needed for execution)
+                session_params = CreateSessionParams(
+                    viewport={'width': 1920, 'height': 1080},
+                    stealth=True,
+                    profile={
+                        'id': profile_id
+                        # No persistChanges needed - just using existing profile state
+                    }
+                )
+                
+                session_response = hb_client.sessions.create(session_params)
+                session_id = session_response.id
+                
+                logging.info(f""Created execution session: {session_id}"")
+                
+                # Detailed task for workflow upload and execution
+                task_description = f""""""
+                Execute the following Automa workflow using the Automa browser extension:
+                
+                Workflow Name: {workflow_name}
+                Workflow JSON: {json.dumps(workflow_json, indent=2)}
+                
+                Steps to perform:
+                1. Click on the Automa extension icon in the browser toolbar
+                2. In the Automa dashboard, look for an ""Import"" or ""Add Workflow"" button
+                3. Import/upload this workflow: {json.dumps(workflow_json)}
+                4. Once imported, locate the workflow named ""{workflow_name}"" in the list
+                5. Click ""Run"" or ""Execute"" to start the workflow
+                6. Monitor the execution progress
+                7. Wait for completion and capture any results or errors
+                8. Provide detailed feedback about the execution status
+                
+                Important: 
+                - The Automa extension should already be installed from the profile
+                - Focus only on interacting with the Automa extension interface
+                - Provide detailed step-by-step feedback about what you see
+                - Report any errors or issues encountered
+                """"""
+                
+                browser_use_params = StartBrowserUseTaskParams(
+                    session_id=session_id,
+                    task=task_description,
+                    llm=""gpt-4o"",
+                    max_steps=HYPERBROWSER_MAX_STEPS,
+                    keep_browser_open=False  # Close after execution
+                )
+                
+                logging.info(f""Starting Browser Use task for: {workflow_name}"")
+                
+                start_time = time.time()
+                browser_use_response = hb_client.agents.browser_use.start_and_wait(browser_use_params)
+                execution_time = time.time() - start_time
+                
+                if browser_use_response and hasattr(browser_use_response, 'data'):
+                    data = browser_use_response.data
+                    
+                    if data:
+                        success = hasattr(data, 'final_result') and data.final_result is not None
+                        final_result = getattr(data, 'final_result', '')
+                        steps_taken = getattr(data, 'steps_taken', 0)
+                        
+                        # Enhance success detection for Automa workflows
+                        result_text = str(final_result).lower()
+                        if any(keyword in result_text for keyword in ['workflow completed', 'execution successful', 'finished running']):
+                            success = True
+                        elif any(keyword in result_text for keyword in ['error', 'failed', 'timeout']):
+                            success = False
+                        
+                        if success:
+                            successful_executions += 1
+                            logging.info(f""✅ Automa workflow '{workflow_name}' completed successfully in {execution_time:.2f}s ({steps_taken} steps)"")
+                            if final_result:
+                                log_result = final_result[:200] + ""..."" if len(str(final_result)) > 200 else final_result
+                                logging.info(f""Final result: {log_result}"")
+                        else:
+                            failed_executions += 1
+                            error_message = getattr(data, 'error', 'Unknown error')
+                            logging.error(f""❌ Automa workflow '{workflow_name}' failed: {error_message}"")
+                        
+                        execution_result = {
+                            'link_id': link_id,
+                            'automa_workflow_id': automa_workflow_id,
+                            'workflow_name': workflow_name,
+                            'success': success,
+                            'executed_at': datetime.now().isoformat(),
+                            'execution_time': execution_time,
+                            'steps_taken': steps_taken,
+                            'max_steps': HYPERBROWSER_MAX_STEPS,
+                            'final_result': str(final_result),
+                            'session_id': session_id,
+                            'profile_id': profile_id,
+                            'execution_mode': 'profile_persistent',
+                            'workflow_gap_seconds': workflow_gap_seconds
+                        }
+                        
+                        if not success:
+                            execution_result['error'] = getattr(data, 'error', 'Unknown error')
+                        
+                        execution_results.append(execution_result)
+                    else:
+                        raise Exception(""No data returned from Browser Use task"")
+                else:
+                    raise Exception(""Failed to get response from Browser Use task"")
+                
+                # Clean up session
+                try:
+                    hb_client.sessions.stop(session_id)
+                    logging.info(f""Execution session {session_id} closed"")
+                except Exception as e:
+                    logging.warning(f""Could not close session {session_id}: {e}"")
+                
+                # Wait between workflows if not the last one
+                if i < len(workflows_to_process) - 1:
+                    logging.info(f""Waiting {workflow_gap_seconds} seconds before next workflow..."")
+                    time.sleep(workflow_gap_seconds)
+                
+            except Exception as e:
+                failed_executions += 1
+                error_message = str(e)
+                logging.error(f""❌ Error executing Automa workflow '{workflow_name}': {error_message}"")
+                
+                execution_result = {
+                    'link_id': link_id,
+                    'automa_workflow_id': automa_workflow_id,
+                    'workflow_name': workflow_name,
+                    'success': False,
+                    'executed_at': datetime.now().isoformat(),
+                    'error': error_message,
+                    'profile_id': profile_id,
+                    'execution_mode': 'profile_persistent',
+                    'workflow_gap_seconds': workflow_gap_seconds
+                }
+                
+                execution_results.append(execution_result)
+        
+        logging.info(f""=== Execution Complete ==="")
+        logging.info(f""Total workflows processed: {len(workflows_to_process)}"")
+        logging.info(f""Successful executions: {successful_executions}"")
+        logging.info(f""Failed executions: {failed_executions}"")
+        logging.info(f""Persistent profile used: {profile_id}"")
+        
+        result_data = {
+            'results': execution_results,
+            'profile_id': profile_id,
+            'total_workflows': len(workflows_to_process),
+            'successful_executions': successful_executions,
+            'failed_executions': failed_executions,
+            'execution_mode': 'profile_persistent',
+            'workflow_gap_seconds': workflow_gap_seconds,
+            'max_steps': HYPERBROWSER_MAX_STEPS
+        }
+        
+        return result_data
+        
+    except Exception as e:
+        logging.error(f""Critical error in upload_and_execute_workflows: {str(e)}"")
+        raise
+
+def update_execution_status(**context):
+    """"""Update execution status in MongoDB""""""
+    
+    ti = context['task_instance']
+    execution_data = ti.xcom_pull(task_ids='upload_and_execute_workflows')
+    
+    if not execution_data or 'results' not in execution_data:
+        logging.warning(""No execution results found"")
+        return {""status"": ""no_results"", ""updated_count"": 0}
+    
+    execution_results = execution_data['results']
+    client, db = get_mongodb_connection()
+    
+    try:
+        updated_count = 0
+        
+        for result in execution_results:
+            link_id = result.get('link_id')
+            success = result.get('success', False)
+            
+            if link_id and not link_id.startswith(('direct_', 'test_')):
+                try:
+                    update_data = {
+                        'executed': True,
+                        'executed_at': datetime.fromisoformat(result.get('executed_at')),
+                        'execution_success': success,
+                        'execution_mode': 'profile_persistent',
+                        'profile_id': result.get('profile_id')
+                    }
+                    
+                    if success:
+                        update_data.update({
+                            'final_result': result.get('final_result', ''),
+                            'execution_time': result.get('execution_time'),
+                            'steps_taken': result.get('steps_taken', 0)
+                        })
+                    else:
+                        update_data['execution_error'] = result.get('error', 'Unknown error')
+                    
+                    update_result = db.workflow_executions.update_one(
+                        {'_id': ObjectId(link_id)},
+                        {'$set': update_data}
+                    )
+                    
+                    if update_result.modified_count > 0:
+                        updated_count += 1
+                        logging.info(f""✅ Marked workflow {link_id} as executed (success: {success})"")
+                    
+                except Exception as e:
+                    logging.error(f""Error updating workflow {link_id}: {e}"")
+        
+        logging.info(f""Updated {updated_count} workflow(s) in database"")
+        return {""status"": ""success"", ""updated_count"": updated_count}
+        
+    except Exception as e:
+        logging.error(f""Error updating execution status: {str(e)}"")
+        raise
+    finally:
+        client.close()
+
+# Define tasks
+ensure_profile_task = PythonOperator(
+    task_id='ensure_profile_exists',
+    python_callable=ensure_profile_exists,
+    dag=dag,
+)
+
+initialize_profile_task = PythonOperator(
+    task_id='initialize_profile_session',
+    python_callable=initialize_profile_session,
+    dag=dag,
+)
+
+query_workflow_task = PythonOperator(
+    task_id='query_single_eligible_workflow',
+    python_callable=query_single_eligible_workflow,
+    dag=dag,
+)
+
+execute_workflows_task = PythonOperator(
+    task_id='upload_and_execute_workflows',
+    python_callable=upload_and_execute_workflows,
+    dag=dag,
+)
+
+update_status_task = PythonOperator(
+    task_id='update_execution_status',
+    python_callable=update_execution_status,
+    dag=dag,
+)
+
+# Define task dependencies
+ensure_profile_task >> initialize_profile_task >> query_workflow_task >> execute_workflows_task >> update_status_task"
+19351245067923832,/opt/airflow/dags/profile_setup.py,2025-09-10 21:42:45.308944+03,"from airflow import DAG
+from airflow.operators.python_operator import PythonOperator
+from airflow.operators.bash_operator import BashOperator
+from airflow.utils.dates import days_ago
+from airflow.models import Variable
+import os
+import logging
+import json
+import time
+from datetime import datetime, timedelta
+from pymongo import MongoClient
+
+# Hyperbrowser imports
+from hyperbrowser import Hyperbrowser
+from hyperbrowser.models import (
+    CreateSessionParams, 
+    CreateExtensionParams,
+    StartBrowserUseTaskParams
+)
+
+# Default arguments for the setup DAG
+default_args = {
+    'owner': 'data-team',
+    'depends_on_past': False,
+    'start_date': days_ago(1),
+    'email_on_failure': True,
+    'email_on_retry': False,
+    'retries': 1,
+    'retry_delay': timedelta(minutes=5)
+}
+
+# Initialize the setup DAG
+setup_dag = DAG(
+    'hyperbrowser_profile_setup',
+    default_args=default_args,
+    description='One-time setup of Hyperbrowser profile with Automa extension for workflow execution',
+    schedule_interval=None,  # Manual trigger only
+    catchup=False,
+    tags=['setup', 'hyperbrowser', 'automa', 'profile', 'one-time']
+)
+
+# Configuration
+HYPERBROWSER_API_KEY = os.environ.get('HYPERBROWSER_API_KEY')
+AUTOMA_EXTENSION_ID = ""infppggnoaenmfagbfknfkancpbljcca""  # Automa Chrome extension ID
+MONGODB_URI = os.environ.get('MONGODB_URI', 'mongodb://admin:admin123@mongodb:27017/messages_db?authSource=admin')
+
+def validate_prerequisites(**context):
+    """"""Validate all prerequisites are in place before setup""""""
+    logging.info(""🔍 Validating prerequisites for Hyperbrowser profile setup..."")
+    
+    prerequisites = {
+        'HYPERBROWSER_API_KEY': HYPERBROWSER_API_KEY,
+        'MONGODB_URI': MONGODB_URI
+    }
+    
+    missing = []
+    for key, value in prerequisites.items():
+        if not value:
+            missing.append(key)
+            logging.error(f""❌ Missing required environment variable: {key}"")
+        else:
+            logging.info(f""✅ Found {key}"")
+    
+    if missing:
+        raise ValueError(f""Missing required environment variables: {', '.join(missing)}"")
+    
+    # Test Hyperbrowser API connection
+    try:
+        hb_client = Hyperbrowser(api_key=HYPERBROWSER_API_KEY)
+        # Try to list profiles to test API connectivity
+        profiles = hb_client.profiles.list()
+        logging.info(f""✅ Hyperbrowser API connection successful. Found {len(profiles)} existing profiles."")
+        
+        context['task_instance'].xcom_push(key='existing_profiles_count', value=len(profiles))
+        
+    except Exception as e:
+        logging.error(f""❌ Failed to connect to Hyperbrowser API: {e}"")
+        raise
+    
+    # Test MongoDB connection
+    try:
+        from pymongo import MongoClient
+        client = MongoClient(MONGODB_URI)
+        db = client.get_default_database()
+        collections = db.list_collection_names()
+        client.close()
+        logging.info(f""✅ MongoDB connection successful. Found {len(collections)} collections."")
+    except Exception as e:
+        logging.error(f""❌ Failed to connect to MongoDB: {e}"")
+        raise
+    
+    logging.info(""✅ All prerequisites validated successfully!"")
+    return {
+        'status': 'prerequisites_valid',
+        'api_connection': 'success',
+        'mongodb_connection': 'success'
+    }
+
+def check_existing_profile(**context):
+    """"""Check if a profile already exists and is configured""""""
+    
+    # Check if profile ID is already stored in Airflow Variables
+    try:
+        existing_profile_id = Variable.get('HYPERBROWSER_PROFILE_ID', default_var=None)
+        if existing_profile_id:
+            logging.info(f""🔍 Found existing profile ID in Airflow Variables: {existing_profile_id}"")
+            
+            # Verify the profile still exists
+            hb_client = Hyperbrowser(api_key=HYPERBROWSER_API_KEY)
+            try:
+                profile = hb_client.profiles.get(existing_profile_id)
+                logging.info(f""✅ Profile {existing_profile_id} exists and is accessible"")
+                
+                context['task_instance'].xcom_push(key='existing_profile_id', value=existing_profile_id)
+                context['task_instance'].xcom_push(key='profile_exists', value=True)
+                context['task_instance'].xcom_push(key='skip_creation', value=True)
+                
+                return {
+                    'profile_id': existing_profile_id,
+                    'profile_exists': True,
+                    'skip_creation': True,
+                    'action': 'verify_existing'
+                }
+            except Exception as e:
+                logging.warning(f""⚠️  Stored profile {existing_profile_id} no longer exists: {e}"")
+                # Clear the invalid profile ID
+                Variable.delete('HYPERBROWSER_PROFILE_ID')
+                
+    except Exception as e:
+        logging.info(""No existing profile ID found in Airflow Variables"")
+    
+    # No valid existing profile found
+    context['task_instance'].xcom_push(key='profile_exists', value=False)
+    context['task_instance'].xcom_push(key='skip_creation', value=False)
+    
+    return {
+        'profile_exists': False,
+        'skip_creation': False,
+        'action': 'create_new'
+    }
+
+def create_hyperbrowser_profile(**context):
+    """"""Create a new Hyperbrowser profile""""""
+    
+    # Check if we should skip creation
+    skip_creation = context['task_instance'].xcom_pull(
+        task_ids='check_existing_profile', 
+        key='skip_creation'
+    )
+    
+    if skip_creation:
+        existing_profile_id = context['task_instance'].xcom_pull(
+            task_ids='check_existing_profile', 
+            key='existing_profile_id'
+        )
+        logging.info(f""⏭️  Skipping profile creation - using existing profile: {existing_profile_id}"")
+        
+        context['task_instance'].xcom_push(key='profile_id', value=existing_profile_id)
+        context['task_instance'].xcom_push(key='profile_created', value=False)
+        
+        return {
+            'profile_id': existing_profile_id,
+            'profile_created': False,
+            'action': 'reused_existing'
+        }
+    
+    logging.info(""🔧 Creating new Hyperbrowser profile..."")
+    
+    try:
+        hb_client = Hyperbrowser(api_key=HYPERBROWSER_API_KEY)
+        
+        # Create new profile
+        profile = hb_client.profiles.create()
+        profile_id = profile.id
+        
+        logging.info(f""✅ Profile created successfully!"")
+        logging.info(f""📝 Profile ID: {profile_id}"")
+        
+        # Store profile ID in Airflow Variables for persistence
+        Variable.set('HYPERBROWSER_PROFILE_ID', profile_id)
+        logging.info(f""💾 Profile ID saved to Airflow Variables"")
+        
+        # Store in XCom for next tasks
+        context['task_instance'].xcom_push(key='profile_id', value=profile_id)
+        context['task_instance'].xcom_push(key='profile_created', value=True)
+        
+        # Log environment variable instruction
+        logging.info(f""🔑 IMPORTANT: Add this to your production environment:"")
+        logging.info(f""export HYPERBROWSER_PROFILE_ID={profile_id}"")
+        
+        return {
+            'profile_id': profile_id,
+            'profile_created': True,
+            'action': 'created_new',
+            'airflow_variable_set': True
+        }
+        
+    except Exception as e:
+        logging.error(f""❌ Failed to create profile: {e}"")
+        raise
+
+def setup_profile_with_automa(**context):
+    """"""Setup the profile with Automa extension and initial configuration""""""
+    
+    profile_id = context['task_instance'].xcom_pull(
+        task_ids='create_hyperbrowser_profile', 
+        key='profile_id'
+    )
+    
+    if not profile_id:
+        raise ValueError(""No profile ID found from previous task"")
+    
+    logging.info(f""🚀 Setting up profile {profile_id} with Automa extension..."")
+    
+    try:
+        hb_client = Hyperbrowser(api_key=HYPERBROWSER_API_KEY)
+        
+        # Create setup session with Automa extension and profile persistence
+        session_params = CreateSessionParams(
+            viewport={'width': 1920, 'height': 1080},
+            stealth=True,
+            profile={
+                'id': profile_id,
+                'persistChanges': True  # Critical: persist all setup changes
+            },
+            extensions=[
+                CreateExtensionParams(
+                    id=AUTOMA_EXTENSION_ID  # Install Automa extension
+                )
+            ]
+        )
+        
+        session_response = hb_client.sessions.create(session_params)
+        setup_session_id = session_response.id
+        
+        logging.info(f""✅ Setup session created: {setup_session_id}"")
+        logging.info(f""🔧 Automa extension installed: {AUTOMA_EXTENSION_ID}"")
+        
+        # Use Browser Use agent to perform initial setup
+        setup_task = """"""
+        Welcome to the Hyperbrowser + Automa initial setup! This is a one-time configuration.
+        
+        Please perform the following setup steps:
+        
+        1. EXTENSION VERIFICATION:
+           - Look for the Automa extension icon in the browser toolbar
+           - Click on it to verify it's installed and working
+           - Complete any initial Automa setup dialogs if they appear
+        
+        2. AUTOMA DASHBOARD ACCESS:
+           - Navigate to the main Automa dashboard/interface
+           - Familiarize yourself with the workflow management area
+           - Check if there are options to import or create workflows
+        
+        3. SERVICE LOGIN PREPARATION:
+           - Navigate to Twitter/X login page
+           - Navigate to any other services your workflows will need
+           - Don't login yet - just navigate to prepare the session
+           - Note: Actual logins will be done manually after this setup
+        
+        4. BROWSER PREPARATION:
+           - Navigate to common workflow target sites to prime the cache
+           - Test that the browser is working normally
+           - Verify that extensions are functioning properly
+        
+        5. STATUS REPORT:
+           - Provide a detailed report of what was accomplished
+           - Note any issues or areas that need manual intervention
+           - Confirm that Automa extension is ready for use
+        
+        This automated setup prepares the foundation. Manual login and workflow configuration will happen next.
+        Take your time and be thorough - this setup will be saved to the profile for all future sessions.
+        """"""
+        
+        browser_use_params = StartBrowserUseTaskParams(
+            session_id=setup_session_id,
+            task=setup_task,
+            llm=""gpt-4o"",
+            max_steps=20,
+            keep_browser_open=True  # Keep session open for manual steps
+        )
+        
+        logging.info(""🤖 Starting automated setup with Browser Use agent..."")
+        logging.info(""⏱️  This may take several minutes..."")
+        
+        start_time = time.time()
+        browser_use_response = hb_client.agents.browser_use.start_and_wait(browser_use_params)
+        setup_time = time.time() - start_time
+        
+        setup_success = False
+        setup_result = ""Setup failed - no response""
+        steps_taken = 0
+        
+        if browser_use_response and hasattr(browser_use_response, 'data') and browser_use_response.data:
+            data = browser_use_response.data
+            setup_result = getattr(data, 'final_result', 'No result available')
+            steps_taken = getattr(data, 'steps_taken', 0)
+            
+            # Check for success indicators in the result
+            result_lower = str(setup_result).lower()
+            success_indicators = ['automa', 'extension', 'dashboard', 'ready', 'successful', 'working']
+            found_indicators = [ind for ind in success_indicators if ind in result_lower]
+            
+            if found_indicators:
+                setup_success = True
+                logging.info(f""✅ Automated setup completed successfully!"")
+                logging.info(f""🔍 Success indicators found: {', '.join(found_indicators)}"")
+            else:
+                logging.warning(f""⚠️  Automated setup completed but may need manual intervention"")
+        
+        logging.info(f""📋 Setup result: {setup_result}"")
+        logging.info(f""🔢 Steps taken: {steps_taken}"")
+        logging.info(f""⏱️  Setup time: {setup_time:.2f} seconds"")
+        
+        # Store setup results
+        context['task_instance'].xcom_push(key='setup_session_id', value=setup_session_id)
+        context['task_instance'].xcom_push(key='setup_success', value=setup_success)
+        context['task_instance'].xcom_push(key='setup_result', value=setup_result)
+        context['task_instance'].xcom_push(key='setup_steps', value=steps_taken)
+        context['task_instance'].xcom_push(key='setup_time', value=setup_time)
+        
+        return {
+            'profile_id': profile_id,
+            'setup_session_id': setup_session_id,
+            'setup_success': setup_success,
+            'setup_result': setup_result,
+            'steps_taken': steps_taken,
+            'setup_time': setup_time,
+            'automa_extension_id': AUTOMA_EXTENSION_ID
+        }
+        
+    except Exception as e:
+        logging.error(f""❌ Failed to setup profile with Automa: {e}"")
+        raise
+
+def provide_manual_instructions(**context):
+    """"""Provide detailed manual setup instructions and session access""""""
+    
+    profile_id = context['task_instance'].xcom_pull(
+        task_ids='create_hyperbrowser_profile', 
+        key='profile_id'
+    )
+    setup_session_id = context['task_instance'].xcom_pull(
+        task_ids='setup_profile_with_automa', 
+        key='setup_session_id'
+    )
+    setup_success = context['task_instance'].xcom_pull(
+        task_ids='setup_profile_with_automa', 
+        key='setup_success'
+    )
+    setup_result = context['task_instance'].xcom_pull(
+        task_ids='setup_profile_with_automa', 
+        key='setup_result'
+    )
+    
+    logging.info(""📋 HYPERBROWSER + AUTOMA SETUP INSTRUCTIONS"")
+    logging.info(""=""*80)
+    
+    logging.info(f""✅ Profile ID: {profile_id}"")
+    logging.info(f""🌐 Setup Session: {setup_session_id}"")
+    logging.info(f""🤖 Automated Setup: {'✅ Success' if setup_success else '⚠️  Needs Attention'}"")
+    
+    if setup_result:
+        result_preview = setup_result[:200] + ""..."" if len(setup_result) > 200 else setup_result
+        logging.info(f""📋 Setup Result: {result_preview}"")
+    
+    logging.info(""\n🔧 MANUAL STEPS REQUIRED:"")
+    logging.info(""-"" * 40)
+    
+    logging.info(""1. 🌐 ACCESS THE BROWSER:"")
+    logging.info(f""   Go to: https://app.hyperbrowser.ai/sessions/{setup_session_id}"")
+    logging.info(""   The automated setup has prepared the foundation for you."")
+    
+    logging.info(""\n2. 🔐 COMPLETE LOGINS:"")
+    logging.info(""   - Login to Twitter/X with your automation account"")
+    logging.info(""   - Login to any other services your workflows need"")
+    logging.info(""   - These login sessions will be saved to your profile"")
+    
+    logging.info(""\n3. 📁 CONFIGURE AUTOMA WORKFLOWS:"")
+    logging.info(""   - Click the Automa extension icon in the browser toolbar"")
+    logging.info(""   - Import your existing workflows or create new ones"")
+    logging.info(""   - Test a few workflows manually to ensure they work"")
+    logging.info(""   - Configure any workflow-specific settings"")
+    
+    logging.info(""\n4. 🧪 VERIFY SETUP:"")
+    logging.info(""   - Test that Automa workflows can access your logged-in accounts"")
+    logging.info(""   - Ensure workflows run successfully in the browser"")
+    logging.info(""   - Check that all required browser extensions are working"")
+    
+    logging.info(""\n5. 💾 SAVE PROFILE:"")
+    logging.info(""   - Once everything is working, simply close the browser tab"")
+    logging.info(""   - All changes are automatically saved to your profile"")
+    logging.info(""   - Your profile will be ready for production workflow execution"")
+    
+    logging.info(""\n🔑 ENVIRONMENT VARIABLES:"")
+    logging.info(""-"" * 40)
+    logging.info(""Add these to your production environment (.env file):"")
+    logging.info(f""HYPERBROWSER_PROFILE_ID={profile_id}"")
+    logging.info(""HYPERBROWSER_API_KEY=your_api_key_here"")
+    
+    logging.info(""\n🚀 NEXT STEPS:"")
+    logging.info(""-"" * 40)
+    logging.info(""1. Complete the manual setup steps above"")
+    logging.info(""2. Run the 'verify_profile_setup' DAG to test your configuration"")
+    logging.info(""3. Deploy your production workflow execution DAG"")
+    logging.info(""4. Monitor your automated workflow executions"")
+    
+    logging.info(""\n⚠️  IMPORTANT NOTES:"")
+    logging.info(""-"" * 40)
+    logging.info(""- This is a ONE-TIME setup process"")
+    logging.info(""- The profile will persist all your configurations"")
+    logging.info(""- Future workflow executions will reuse this profile"")
+    logging.info(""- You can always create additional profiles if needed"")
+    
+    logging.info(""=""*80)
+    
+    # Store final instructions in XCom for potential external access
+    instructions = {
+        'profile_id': profile_id,
+        'setup_session_id': setup_session_id,
+        'browser_url': f""https://app.hyperbrowser.ai/sessions/{setup_session_id}"",
+        'environment_variables': {
+            'HYPERBROWSER_PROFILE_ID': profile_id
+        },
+        'manual_steps': [
+            'Access browser and complete logins',
+            'Configure Automa workflows',
+            'Test workflow execution',
+            'Close browser to save profile'
+        ]
+    }
+    
+    context['task_instance'].xcom_push(key='setup_instructions', value=instructions)
+    
+    return instructions
+
+def log_setup_completion(**context):
+    """"""Log setup completion and store metadata in MongoDB""""""
+    
+    profile_id = context['task_instance'].xcom_pull(
+        task_ids='create_hyperbrowser_profile', 
+        key='profile_id'
+    )
+    profile_created = context['task_instance'].xcom_pull(
+        task_ids='create_hyperbrowser_profile', 
+        key='profile_created'
+    )
+    setup_session_id = context['task_instance'].xcom_pull(
+        task_ids='setup_profile_with_automa', 
+        key='setup_session_id'
+    )
+    setup_success = context['task_instance'].xcom_pull(
+        task_ids='setup_profile_with_automa', 
+        key='setup_success'
+    )
+    
+    try:
+        # Store setup metadata in MongoDB
+        from pymongo import MongoClient
+        client = MongoClient(MONGODB_URI)
+        db = client.get_default_database()
+        
+        setup_metadata = {
+            'setup_type': 'hyperbrowser_profile',
+            'profile_id': profile_id,
+            'profile_created': profile_created,
+            'setup_session_id': setup_session_id,
+            'automated_setup_success': setup_success,
+            'automa_extension_id': AUTOMA_EXTENSION_ID,
+            'setup_completed_at': datetime.now(),
+            'setup_dag_run_id': context.get('dag_run').run_id,
+            'status': 'setup_completed_manual_steps_required',
+            'manual_steps_required': True,
+            'next_action': 'complete_manual_setup_then_verify'
+        }
+        
+        # Store in a setup tracking collection
+        result = db.hyperbrowser_setup.insert_one(setup_metadata)
+        
+        logging.info(f""✅ Setup metadata stored in MongoDB: {result.inserted_id}"")
+        client.close()
+        
+    except Exception as e:
+        logging.warning(f""⚠️  Could not store setup metadata in MongoDB: {e}"")
+    
+    # Final summary
+    logging.info(""\n🎉 HYPERBROWSER PROFILE SETUP INITIATED!"")
+    logging.info(""=""*60)
+    logging.info(f""Profile ID: {profile_id}"")
+    logging.info(f""Setup Session: {setup_session_id}"")
+    logging.info(f""Browser URL: https://app.hyperbrowser.ai/sessions/{setup_session_id}"")
+    logging.info(""Manual setup steps are now required to complete the configuration."")
+    logging.info(""See the logs above for detailed instructions."")
+    logging.info(""=""*60)
+    
+    return {
+        'setup_status': 'completed',
+        'profile_id': profile_id,
+        'requires_manual_steps': True,
+        'setup_session_id': setup_session_id
+    }
+
+# Define tasks
+validate_task = PythonOperator(
+    task_id='validate_prerequisites',
+    python_callable=validate_prerequisites,
+    dag=setup_dag,
+)
+
+check_profile_task = PythonOperator(
+    task_id='check_existing_profile',
+    python_callable=check_existing_profile,
+    dag=setup_dag,
+)
+
+create_profile_task = PythonOperator(
+    task_id='create_hyperbrowser_profile',
+    python_callable=create_hyperbrowser_profile,
+    dag=setup_dag,
+)
+
+setup_automa_task = PythonOperator(
+    task_id='setup_profile_with_automa',
+    python_callable=setup_profile_with_automa,
+    dag=setup_dag,
+)
+
+instructions_task = PythonOperator(
+    task_id='provide_manual_instructions',
+    python_callable=provide_manual_instructions,
+    dag=setup_dag,
+)
+
+completion_task = PythonOperator(
+    task_id='log_setup_completion',
+    python_callable=log_setup_completion,
+    dag=setup_dag,
+)
+
+# Define task dependencies
+validate_task >> check_profile_task >> create_profile_task >> setup_automa_task >> instructions_task >> completion_task"
+19480276694453996,/opt/airflow/dags/execute_puppeteer.py,2025-09-10 21:42:45.309034+03,"from airflow import DAG
+from airflow.operators.bash import BashOperator
+from datetime import datetime, timedelta
+import os
+import pytz
+from dotenv import load_dotenv
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Load environment variables for timezone
+load_dotenv()
+
+# Get timezone from environment variable, default to Kenya timezone
+timezone_str = os.getenv(""DAG_TIMEZONE"", ""Africa/Nairobi"")
+try:
+    dag_timezone = pytz.timezone(timezone_str)
+    logger.info(f""🌍 Using timezone: {timezone_str}"")
+except pytz.UnknownTimeZoneError:
+    logger.warning(f""⚠️ Unknown timezone '{timezone_str}', falling back to Africa/Nairobi"")
+    dag_timezone = pytz.timezone(""Africa/Nairobi"")
+
+# Parse start date
+puppeteer_start_date_str = os.getenv(""PUPPETEER_DAG_START_DATE"", ""2025-09-10"")
+try:
+    start_date_naive = datetime.strptime(puppeteer_start_date_str, ""%Y-%m-%d"")
+    start_date = dag_timezone.localize(start_date_naive)
+    logger.info(f""📅 Puppeteer DAG start date: {start_date}"")
+except ValueError:
+    logger.warning(f""⚠️ Invalid start date format '{puppeteer_start_date_str}', using default"")
+    start_date = dag_timezone.localize(datetime(2025, 9, 10))
+
+# Default args - NO RETRIES, NO DELAYS
+default_args = {
+    'owner': 'airflow',
+    'start_date': start_date,
+    'retries': 0,  # No retries
+    'max_active_tis_per_dag': 1,
+}
+
+# Create the DAG description
+dag_description = f""Manual Puppeteer workflow execution - No retries ({timezone_str})""
+
+dag = DAG(
+    dag_id='execute_puppeteer',
+    default_args=default_args,
+    description=dag_description,
+    schedule_interval=None,  # Manual trigger only
+    catchup=False,
+    max_active_runs=1,
+    user_defined_macros={
+        ""timezone"": dag_timezone,
+    },
+)
+
+dag.timezone = dag_timezone
+
+# Task 1: Execute Puppeteer script
+execute_puppeteer = BashOperator(
+    task_id='execute_puppeteer',
+    bash_command=f'''
+        set -e
+        echo ""🚀 Starting Puppeteer script execution...""
+        echo ""🌍 Running in timezone: {timezone_str}""
+        echo ""🕐 Execution started at: $(TZ={timezone_str} date)""
+
+        # Navigate to the puppeteer scripts directory
+        cd /opt/airflow/src/scripts/execute_puppeteer || {{
+            echo ""❌ Puppeteer scripts directory not found""
+            exit 1
+        }}
+
+        # Set environment variables
+        export MONGODB_URI=""{{{{ var.value.MONGODB_URI }}}}""
+        export NODE_ENV=production
+
+        echo ""🔍 Executing Puppeteer script...""
+        
+        # Execute the main.js file with timeout
+        timeout 300 node main.js || {{
+            EXIT_CODE=$?
+            if [ $EXIT_CODE -eq 124 ]; then
+                echo ""❌ Puppeteer script timed out after 300 seconds""
+            else
+                echo ""❌ Puppeteer script failed with exit code: $EXIT_CODE""
+            fi
+            exit 1
+        }}
+
+        echo ""✅ Puppeteer script execution completed successfully""
+        echo ""🕐 Execution completed at: $(TZ={timezone_str} date)""
+    ''',
+    dag=dag,
+)
+
+
+
+# Set task dependencies
+execute_puppeteer "

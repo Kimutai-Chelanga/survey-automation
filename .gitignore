@@ -1,0 +1,346 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.conda/
+
+# Environment variables
+.env
+.env.local
+.env.production
+.env.staging
+.env.*.local
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Docker
+.dockerignore
+Dockerfile.prod
+docker-compose.override.yml
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.npm
+.eslintcache
+.yarn-integrity
+
+# Logs and databases
+*.log
+logs/
+airflow/logs/
+automa-logs/
+reply-logs/
+browser-logs/
+*.sqlite
+*.db
+
+# Data directories
+data/
+backups/
+extracted-links/
+filtered-links/
+screenshots/
+chrome_profile/
+chrome_persistent_profile/
+
+# Airflow specific
+airflow/dags/__pycache__/
+airflow/plugins/__pycache__/
+airflow.cfg
+unittests.cfg
+webserver_config.py
+
+# MongoDB dumps
+mongodb_*/
+
+# PostgreSQL dumps
+
+*.dump
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Streamlit
+.streamlit/
+
+# Chrome/Puppeteer
+.chrome/
+chrome-data/
+chrome_profile/
+chrome_persistent_profile/
+
+# Automa specific
+automa/node_modules/
+automa/dist/
+automa/build/
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+temp/
+
+# Archives
+*.zip
+*.tar.gz
+*.rar
+
+# Keys and certificates
+*.pem
+*.key
+*.crt
+*.cert
+
+# Local configuration
+config.local.json
+settings.local.py
+
+# Package files
+requirements.txt.bak
+package-lock.json
+yarn.lock
+
+# Test coverage
+.coverage
+coverage.xml
+*.cover
+.hypothesis/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff (if applicable)
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff (if applicable)
+instance/
+.webassets-cache
+
+# Scrapy stuff (if applicable)
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+target/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# Backup files
+*.bak
+*.backup
+.pnpm-store/
+automa/
+# MongoDB export folders
+mongodb_export_*
+workflow_export_*
+exported_workflows/
+automa-built/exported_logs_*
+exported_logs_*
+# Production environment files - NEVER commit these!
+.env.production
+.production-credentials.txt
+*.production-credentials.txt
+
+# Backup files
+.env.production.backup.*
+*.env.backup
+.credentials.*.txt
+
+# SSH keys
+*.pem
+*.key
+id_rsa
+id_ed25519
+
+# Sensitive configuration backups
+*.sql.gz
+*.tar.gz
+backups/
+
+# Docker secrets
+docker-compose.override.yml
+.dockerenv
+private_docs/
+# ============================================================================
+# PRODUCTION SECURITY - NEVER COMMIT THESE
+# ============================================================================
+.env.production
+.env.local
+*.pem
+*.key
+*.crt
+ssl_certs/
+*.secret
+
+# ============================================================================
+# Environment Files
+# ============================================================================
+.env
+.env.*
+!.env.example
+
+# ============================================================================
+# Python
+# ============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ============================================================================
+# Virtual Environments
+# ============================================================================
+venv/
+ENV/
+env/
+.venv
+
+# ============================================================================
+# IDE
+# ============================================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ============================================================================
+# Docker
+# ============================================================================
+docker-compose.override.yml
+.docker/
+
+# ============================================================================
+# Data & Logs
+# ============================================================================
+*.log
+*.db
+*.sqlite
+*.sqlite3
+logs/
+airflow/logs/
+backups/
+*.sql
+*.dump
+
+# ============================================================================
+# Chrome & Browser Data
+# ============================================================================
+chrome_profiles/
+recordings/
+downloads/
+host_downloads/
+cookie_scripts/
+
+# ============================================================================
+# Testing
+# ============================================================================
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# ============================================================================
+# Node
+# ============================================================================
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
+.env.production
+clean_chrome.sh
+nginx/nginx.conf

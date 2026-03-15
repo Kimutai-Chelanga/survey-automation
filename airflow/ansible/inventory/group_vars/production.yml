@@ -1,0 +1,21 @@
+---
+# Production-specific variables
+environment: "production"
+domain: "your-domain.com"  # Replace with your domain
+ssl_enabled: true
+
+# Production resource limits
+max_memory: "8g"
+max_cpus: "4"
+
+# Production backup settings
+backup_retention_days: 30
+backup_schedule: "0 2 * * *"
+
+# Monitoring
+monitoring_enabled: true
+log_aggregation: true
+
+# Security
+firewall_enabled: true
+fail2ban_enabled: true

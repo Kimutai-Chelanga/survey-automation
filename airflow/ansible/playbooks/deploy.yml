@@ -1,0 +1,68 @@
+---
+- name: Deploy Application
+  hosts: all
+  become: yes
+  gather_facts: yes
+  
+  vars:
+    deployment_timestamp: "{{ ansible_date_time.epoch }}"
+    
+  tasks:
+    - name: Stop existing containers
+      docker_compose:
+        project_src: "{{ app_dir }}"
+        state: absent
+      ignore_errors: yes
+      
+    - name: Create backup of current deployment
+      archive:
+        path: "{{ app_dir }}"
+        dest: "{{ backup_dir }}/deployment-{{ deployment_timestamp }}.tar.gz"
+        exclude_path:
+          - "{{ app_dir }}/logs"
+          - "{{ app_dir }}/data"
+      when: app_dir is exists
+      
+    - name: Sync application files
+      synchronize:
+        src: "{{ playbook_dir }}/../../"
+        dest: "{{ app_dir }}/"
+        delete: yes
+        rsync_opts:
+          - "--exclude=.git"
+          - "--exclude=logs"
+          - "--exclude=data"
+          - "--exclude=__pycache__"
+          - "--exclude=*.pyc"
+          - "--exclude=node_modules"
+          - "--exclude=.env"
+      delegate_to: localhost
+      
+    - name: Generate environment file
+      template:
+        src: templates/.env.j2
+        dest: "{{ app_dir }}/.env"
+        owner: "{{ app_user }}"
+        group: "{{ app_group }}"
+        mode: '0600'
+      notify: restart application
+      
+    - name: Set file permissions
+      file:
+        path: "{{ app_dir }}"
+        owner: "{{ app_user }}"
+        group: "{{ app_group }}"
+        recurse: yes
+        
+    - name: Build and start containers
+      docker_compose:
+        project_src: "{{ app_dir }}"
+        build: yes
+        state: present
+      notify: restart application
+      
+  handlers:
+    - name: restart application
+      docker_compose:
+        project_src: "{{ app_dir }}"
+        restarted: yes

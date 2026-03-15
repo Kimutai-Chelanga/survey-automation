@@ -1,0 +1,45 @@
+---
+- name: Initial Server Setup
+  hosts: all
+  become: yes
+  gather_facts: yes
+  
+  tasks:
+    - name: Create application user
+      user:
+        name: "{{ app_user }}"
+        group: "{{ app_group }}"
+        groups: docker
+        shell: /bin/bash
+        create_home: yes
+        system: no
+      
+    - name: Create application directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ app_user }}"
+        group: "{{ app_group }}"
+        mode: '0755'
+      loop:
+        - "{{ app_dir }}"
+        - "{{ backup_dir }}"
+        - "{{ app_dir }}/logs"
+        - "{{ app_dir }}/data"
+        - "{{ app_dir }}/chrome_profile"
+        - "{{ app_dir }}/screenshots"
+    
+    - name: Configure firewall (if enabled)
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop: "{{ allowed_ports }}"
+      when: firewall_enabled is defined and firewall_enabled
+      
+    - name: Enable UFW
+      ufw:
+        state: enabled
+        policy: deny
+        direction: incoming
+      when: firewall_enabled is defined and firewall_enabled

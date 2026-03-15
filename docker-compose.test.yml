@@ -1,0 +1,87 @@
+version: '3.8'
+
+volumes:
+  postgres_data_test:
+  mongodb_data_test:
+  chrome_profiles_test:
+
+networks:
+  test_network:
+    driver: bridge
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: test-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-airflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-airflow}
+      POSTGRES_DB: ${POSTGRES_DB:-messages}
+      TZ: ${DAG_TIMEZONE:-Africa/Nairobi}
+    volumes:
+      - postgres_data_test:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow", "-d", "messages"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - test_network
+
+  mongodb:
+    image: mongo:7.0
+    container_name: test-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-admin123}
+      MONGO_INITDB_DATABASE: ${MONGO_DB:-messages_db}
+      TZ: ${DAG_TIMEZONE:-Africa/Nairobi}
+    volumes:
+      - mongodb_data_test:/data/db
+    ports:
+      - "27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - test_network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: test-streamlit-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://airflow:airflow@postgres:5432/messages
+      MONGODB_URI: mongodb://admin:admin123@mongodb:27017/messages_db?authSource=admin
+      CHROME_PROFILE_DIR: /app/chrome_profiles
+      DISPLAY: ":99"
+    ports:
+      - "8501:8501"
+      - "6080:6080"
+      - "5900:5900"
+    volumes:
+      - chrome_profiles_test:/app/chrome_profiles
+      - .:/app
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - test_network
+    shm_size: 2gb

@@ -1,0 +1,14 @@
+
+Starting Airflow scheduler...
+  ____________       _____________
+ ____    |__( )_________  __/__  /________      __
+____  /| |_  /__  ___/_  /_ __  /_  __ \_ | /| / /
+___  ___ |  / _  /   _  __/ _  / / /_/ /_ |/ |/ /
+ _/_/  |_/_/  /_/    /_/    /_/  \____/____/|__/
+[[34m2025-12-08T00:05:00.124+0300[0m] {[34mexecutor_loader.py:[0m117} INFO[0m - Loaded executor: LocalExecutor[0m
+[[34m2025-12-08T00:05:00.190+0300[0m] {[34mscheduler_job_runner.py:[0m798} INFO[0m - Starting the scheduler[0m
+[[34m2025-12-08T00:05:00.191+0300[0m] {[34mscheduler_job_runner.py:[0m805} INFO[0m - Processing each file at most -1 times[0m
+[[34m2025-12-08T00:05:00.235+0300[0m] {[34mmanager.py:[0m166} INFO[0m - Launched DagFileProcessorManager with pid: 66[0m
+[[34m2025-12-08T00:05:00.237+0300[0m] {[34mscheduler_job_runner.py:[0m1586} INFO[0m - Adopting or resetting orphaned tasks for active dag runs[0m
+[[34m2025-12-08T00:05:00.245+0300[0m] {[34msettings.py:[0m60} INFO[0m - Configured default timezone Timezone('Africa/Nairobi')[0m
+[[34m2025-12-08T00:10:00.295+0300[0m] {[34mscheduler_job_runner.py:[0m1586} INFO[0m - Adopting or resetting orphaned tasks for active dag runs[0m

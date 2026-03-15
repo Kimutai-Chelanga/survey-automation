@@ -1,0 +1,2 @@
+id,first_name,last_name,username,password,active,email,last_login,login_count,fail_login_count,created_on,changed_on,created_by_fk,changed_by_fk
+1,Brian,Kimutai,brian,pbkdf2:sha256:260000$eRr6bp2AfcVoViIf$c3d41f277d03ce31f4cf25d0f9c980021d126e0ab89d4b07b4719adebc1f5e3b,t,briankimu97@gmail.com,,,,2025-09-10 21:42:48.657098,2025-09-10 21:42:48.657109,,

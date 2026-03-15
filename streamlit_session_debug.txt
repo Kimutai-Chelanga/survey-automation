@@ -1,0 +1,600 @@
+/app/start.sh: line 10: warning: setlocale: LC_ALL: cannot change locale (en_KE.UTF-8): No such file or directory
+[0;34m╔═══════════════════════════════════════════════════════════╗[0m
+[0;34m║   STREAMLIT + VNC + CHROME (HP ELITEBOOK MODE)            ║[0m
+[0;34m╚═══════════════════════════════════════════════════════════╝[0m
+
+[0;34m[1/10][0m Setting up directories...
+[0;32m✓[0m Directories ready
+[0;34mℹ[0m Chrome profile: /workspace/chrome_profiles/default
+[0;34m[2/10][0m Cleaning old X locks...
+[0;32m✓[0m Old X locks removed
+[0;34m[3/10][0m Starting Xvfb...
+[0;32m✓[0m Xvfb running (PID: 12)
+[0;34m[4/10][0m Setting up XDG runtime...
+[0;32m✓[0m D-Bus started
+[0;34m[5/10][0m Starting Fluxbox...
+[0;32m✓[0m Fluxbox running (PID: 24)
+[0;34m[6/10][0m Starting Google Chrome...
+[0;32m✓[0m Chrome started (PID: 38)
+[0;34m[7/10][0m Setting VNC password...
+[0;32m✓[0m VNC password ready
+[0;34m[8/10][0m Starting x11vnc...
+[0;32m✓[0m x11vnc running (PID: 166)
+[0;34m[9/10][0m Starting noVNC...
+[0;32m✓[0m noVNC running (PID: 175)
+
+[0;32m╔═══════════════════════════════════════════════════════════╗[0m
+[0;32m║   HP ELITEBOOK x360 1030 G2 – 1:1 DISPLAY ACTIVE          ║[0m
+[0;32m╚═══════════════════════════════════════════════════════════╝[0m
+
+🖥️  Resolution: 1280x720 @ 96 DPI
+🌍 Locale:     English (Kenya)
+🕒 Timezone:   Africa/Nairobi
+🌐 Chrome:     Visible, real window
+🔐 VNC:        localhost:5900
+🌐 noVNC:      http://localhost:6080/vnc.html
+🚀 Streamlit:  http://localhost:8501
+
+
+Collecting usage statistics. To deactivate, set browser.gatherUsageStats to false.
+
+
+  You can now view your Streamlit app in your browser.
+
+  Local URL: http://localhost:8501
+  Network URL: http://172.20.0.4:8501
+  External URL: http://185.213.25.170:8501
+
+2026-02-13 19:08:12,319 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-02-13 19:08:12,319 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-02-13 19:08:12,320 - core.database_manager - INFO - Starting database initialization...
+2026-02-13 19:08:12,320 - core.database_manager - INFO - Connecting to MongoDB...
+2026-02-13 19:08:12,389 - src.core.database.mongodb.connection - INFO - MongoDB connected successfully to mongodb:27017
+2026-02-13 19:08:12,389 - src.core.database.mongodb.connection - INFO - MongoDB connected successfully to mongodb:27017
+2026-02-13 19:08:12,389 - core.database_manager - INFO - Connecting to PostgreSQL...
+2026-02-13 19:08:12,451 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool initialized
+2026-02-13 19:08:12,451 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool initialized
+2026-02-13 19:08:12,451 - core.database_manager - INFO - PostgreSQL connection pool initialized successfully.
+2026-02-13 19:08:12,451 - core.database_manager - INFO - Ensuring database schema...
+2026-02-13 19:08:12,453 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-02-13 19:08:12,453 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-02-13 19:08:12,453 - src.core.database.postgres.schema - INFO - Creating COMPLETE PostgreSQL schema...
+2026-02-13 19:08:12,457 - src.core.database.postgres.schema - INFO - ✓ Accounts table ready
+2026-02-13 19:08:12,457 - src.core.database.postgres.schema - INFO - ✓ Account cookies table ready
+2026-02-13 19:08:12,458 - src.core.database.postgres.schema - INFO - ✓ Workflows table ready
+2026-02-13 19:08:12,459 - src.core.database.postgres.schema - INFO - ✓ Prompts table ready
+2026-02-13 19:08:12,460 - src.core.database.postgres.schema - INFO - ✓ Prompt backups table ready
+2026-02-13 19:08:12,460 - src.core.database.postgres.schema - INFO - ✓ Prompt variations table ready
+2026-02-13 19:08:12,461 - src.core.database.postgres.schema - INFO - ✓ Extracted URLs table ready (child tweets)
+2026-02-13 19:08:12,461 - src.core.database.postgres.schema - INFO - ✓ Links table ready (parent tweets)
+2026-02-13 19:08:12,462 - src.core.database.postgres.schema - INFO - ✓ Content table ready (FIXED: no FK on connected_link_id)
+2026-02-13 19:08:12,463 - src.core.database.postgres.schema - INFO - ✓ Link-content mappings table ready
+2026-02-13 19:08:12,463 - src.core.database.postgres.schema - INFO - ✓ Link-content connections table ready
+2026-02-13 19:08:12,463 - src.core.database.postgres.schema - INFO - ✓ Workflow generation log table ready
+2026-02-13 19:08:12,463 - src.core.database.postgres.schema - INFO - ✓ Workflow sync log table ready
+2026-02-13 19:08:12,464 - src.core.database.postgres.schema - INFO - Creating indexes...
+2026-02-13 19:08:12,488 - src.core.database.postgres.schema - INFO - ✓ Indexes ready
+2026-02-13 19:08:12,488 - src.core.database.postgres.schema - INFO - Creating trigger functions...
+2026-02-13 19:08:12,515 - src.core.database.postgres.schema - INFO - ✓ Trigger functions ready
+2026-02-13 19:08:12,515 - src.core.database.postgres.schema - INFO - Creating triggers...
+2026-02-13 19:08:12,522 - src.core.database.postgres.schema - INFO - ✓ Triggers ready - Created: 0, Existing: 5
+2026-02-13 19:08:12,522 - src.core.database.postgres.schema - INFO - Creating helper functions from SQL schema...
+2026-02-13 19:08:12,530 - src.core.database.postgres.schema - INFO - ✓ All helper functions ready (13 functions created)
+2026-02-13 19:08:12,531 - src.core.database.postgres.schema - INFO - Creating views from SQL schema...
+2026-02-13 19:08:12,553 - src.core.database.postgres.schema - INFO - ✓ All views ready (6 views created)
+2026-02-13 19:08:12,555 - src.core.database.postgres.schema - INFO - ============================================================
+2026-02-13 19:08:12,555 - src.core.database.postgres.schema - INFO - ✅ FULLY CORRECTED POSTGRESQL SCHEMA READY
+2026-02-13 19:08:12,555 - src.core.database.postgres.schema - INFO - ============================================================
+2026-02-13 19:08:12,555 - src.core.database.postgres.schema - INFO - 🔧 CRITICAL FIXES APPLIED:
+2026-02-13 19:08:12,555 - src.core.database.postgres.schema - INFO -   ✅ Removed invalid FK on content.connected_link_id
+2026-02-13 19:08:12,556 - src.core.database.postgres.schema - INFO -   ✅ Added 13 helper functions from SQL schema
+2026-02-13 19:08:12,556 - src.core.database.postgres.schema - INFO -   ✅ Added 6 views from SQL schema
+2026-02-13 19:08:12,556 - src.core.database.postgres.schema - INFO -   ✅ Aligned all indexes with SQL schema
+2026-02-13 19:08:12,556 - src.core.database.postgres.schema - INFO - ============================================================
+2026-02-13 19:08:12,556 - src.core.database.postgres.schema - INFO - 📊 Schema includes:
+2026-02-13 19:08:12,556 - src.core.database.postgres.schema - INFO -   • 14 tables (all aligned with SQL)
+2026-02-13 19:08:12,556 - src.core.database.postgres.schema - INFO -   • 13 helper functions (fully aligned)
+2026-02-13 19:08:12,556 - src.core.database.postgres.schema - INFO -   • 6 views (fully aligned)
+2026-02-13 19:08:12,556 - src.core.database.postgres.schema - INFO -   • 6 triggers (fully aligned)
+2026-02-13 19:08:12,556 - src.core.database.postgres.schema - INFO -   • ~50 indexes (fully aligned)
+2026-02-13 19:08:12,556 - src.core.database.postgres.schema - INFO - ============================================================
+2026-02-13 19:08:12,556 - core.database_manager - INFO - Database schema ensured successfully.
+2026-02-13 19:08:12,746 - src.core.database.postgres.mongodb - INFO - MongoDB connection established successfully
+2026-02-13 19:08:13,357 - src.streamlit.ui.pages.accounts.chrome_session_manager - INFO - ChromeSessionManager initialized with profile dir: /workspace/chrome_profiles
+2026-02-13 19:08:13,386 - ui.pages.accounts.accounts - INFO - Refreshed 0 active sessions from MongoDB
+2026-02-13 19:08:13,419 - src.core.database.mongodb.connection - WARNING - Collection 'automa_workflows' does not exist in database 'messages_db'
+2026-02-13 19:08:13,419 - src.core.database.mongodb.connection - WARNING - Collection 'automa_workflows' does not exist in database 'messages_db'
+2026-02-13 19:08:13,433 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-02-13 19:08:13,433 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-02-13 19:08:13,435 - src.core.database.postgres.accounts - INFO - Retrieved 1 active accounts
+2026-02-13 19:08:13,435 - src.core.database.postgres.accounts - INFO - Retrieved 1 active accounts
+2026-02-13 19:08:14,392 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-02-13 19:08:14,392 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-02-13 19:08:14,393 - src.core.database.postgres.accounts - INFO - Retrieved 1 active accounts
+2026-02-13 19:08:14,393 - src.core.database.postgres.accounts - INFO - Retrieved 1 active accounts
+2026-02-13 19:08:14.418 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-02-13 19:08:29,452 - ui.pages.prompts.prompts - ERROR - Error in widget comparison for $$ID-1983ade14b1949a77cb4edfbeb0a6887-None: 'SessionState' object has no attribute '_widgets'
+2026-02-13 19:08:29,452 - ui.pages.prompts.prompts - ERROR - Error in widget comparison for $$ID-6b7709153f942e7d0f637fd91f02cdb9-view_mode: 'SessionState' object has no attribute '_widgets'
+2026-02-13 19:08:29,452 - ui.pages.prompts.prompts - ERROR - Error in widget comparison for $$ID-26e05a58ab2c734cf377685db2f377e4-filter_start_date: 'SessionState' object has no attribute '_widgets'
+2026-02-13 19:08:29,453 - ui.pages.prompts.prompts - ERROR - Error in widget comparison for $$ID-57875af36698280cb047bca13be9a119-filter_end_date: 'SessionState' object has no attribute '_widgets'
+2026-02-13 19:08:29,453 - ui.pages.prompts.prompts - ERROR - Error in widget comparison for $$ID-a245e14893012ef2805d61c9ad241ecc-None: 'SessionState' object has no attribute '_widgets'
+2026-02-13 19:08:29,453 - ui.pages.prompts.prompts - ERROR - Error in widget comparison for $$ID-92eee9df8cc5471d7ff0ced49cc0d770-None: 'SessionState' object has no attribute '_widgets'
+2026-02-13 19:08:29,453 - ui.pages.prompts.prompts - ERROR - Error in widget comparison for $$ID-10c83c04d5f48f5fabf4e057f9f8454b-None: 'SessionState' object has no attribute '_widgets'
+2026-02-13 19:08:29,457 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-02-13 19:08:29,457 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-02-13 19:08:29,459 - core.database_manager - INFO - Starting database initialization...
+2026-02-13 19:08:29,459 - core.database_manager - INFO - Connecting to MongoDB...
+2026-02-13 19:08:29,461 - core.database_manager - INFO - Connecting to PostgreSQL...
+2026-02-13 19:08:29,462 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool is active
+2026-02-13 19:08:29,462 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool is active
+2026-02-13 19:08:29,462 - core.database_manager - INFO - PostgreSQL connection pool initialized successfully.
+2026-02-13 19:08:29,462 - core.database_manager - INFO - Ensuring database schema...
+2026-02-13 19:08:29,463 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-02-13 19:08:29,463 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-02-13 19:08:29,463 - src.core.database.postgres.schema - INFO - Creating COMPLETE PostgreSQL schema...
+2026-02-13 19:08:29,464 - src.core.database.postgres.schema - INFO - ✓ Accounts table ready
+2026-02-13 19:08:29,465 - src.core.database.postgres.schema - INFO - ✓ Account cookies table ready
+2026-02-13 19:08:29,465 - src.core.database.postgres.schema - INFO - ✓ Workflows table ready
+2026-02-13 19:08:29,466 - src.core.database.postgres.schema - INFO - ✓ Prompts table ready
+2026-02-13 19:08:29,466 - src.core.database.postgres.schema - INFO - ✓ Prompt backups table ready
+2026-02-13 19:08:29,467 - src.core.database.postgres.schema - INFO - ✓ Prompt variations table ready
+2026-02-13 19:08:29,468 - src.core.database.postgres.schema - INFO - ✓ Extracted URLs table ready (child tweets)
+2026-02-13 19:08:29,470 - src.core.database.postgres.schema - INFO - ✓ Links table ready (parent tweets)
+2026-02-13 19:08:29,470 - src.core.database.postgres.schema - INFO - ✓ Content table ready (FIXED: no FK on connected_link_id)
+2026-02-13 19:08:29,471 - src.core.database.postgres.schema - INFO - ✓ Link-content mappings table ready
+2026-02-13 19:08:29,471 - src.core.database.postgres.schema - INFO - ✓ Link-content connections table ready
+2026-02-13 19:08:29,472 - src.core.database.postgres.schema - INFO - ✓ Workflow generation log table ready
+2026-02-13 19:08:29,472 - src.core.database.postgres.schema - INFO - ✓ Workflow sync log table ready
+2026-02-13 19:08:29,472 - src.core.database.postgres.schema - INFO - Creating indexes...
+2026-02-13 19:08:29,502 - src.core.database.postgres.schema - INFO - ✓ Indexes ready
+2026-02-13 19:08:29,502 - src.core.database.postgres.schema - INFO - Creating trigger functions...
+2026-02-13 19:08:29,506 - src.core.database.postgres.schema - INFO - ✓ Trigger functions ready
+2026-02-13 19:08:29,507 - src.core.database.postgres.schema - INFO - Creating triggers...
+2026-02-13 19:08:29,512 - src.core.database.postgres.schema - INFO - ✓ Triggers ready - Created: 0, Existing: 5
+2026-02-13 19:08:29,512 - src.core.database.postgres.schema - INFO - Creating helper functions from SQL schema...
+2026-02-13 19:08:29,524 - src.core.database.postgres.schema - INFO - ✓ All helper functions ready (13 functions created)
+2026-02-13 19:08:29,525 - src.core.database.postgres.schema - INFO - Creating views from SQL schema...
+2026-02-13 19:08:29,538 - src.core.database.postgres.schema - INFO - ✓ All views ready (6 views created)
+2026-02-13 19:08:29,543 - src.core.database.postgres.schema - INFO - ============================================================
+2026-02-13 19:08:29,543 - src.core.database.postgres.schema - INFO - ✅ FULLY CORRECTED POSTGRESQL SCHEMA READY
+2026-02-13 19:08:29,543 - src.core.database.postgres.schema - INFO - ============================================================
+2026-02-13 19:08:29,543 - src.core.database.postgres.schema - INFO - 🔧 CRITICAL FIXES APPLIED:
+2026-02-13 19:08:29,543 - src.core.database.postgres.schema - INFO -   ✅ Removed invalid FK on content.connected_link_id
+2026-02-13 19:08:29,543 - src.core.database.postgres.schema - INFO -   ✅ Added 13 helper functions from SQL schema
+2026-02-13 19:08:29,543 - src.core.database.postgres.schema - INFO -   ✅ Added 6 views from SQL schema
+2026-02-13 19:08:29,543 - src.core.database.postgres.schema - INFO -   ✅ Aligned all indexes with SQL schema
+2026-02-13 19:08:29,543 - src.core.database.postgres.schema - INFO - ============================================================
+2026-02-13 19:08:29,543 - src.core.database.postgres.schema - INFO - 📊 Schema includes:
+2026-02-13 19:08:29,543 - src.core.database.postgres.schema - INFO -   • 14 tables (all aligned with SQL)
+2026-02-13 19:08:29,543 - src.core.database.postgres.schema - INFO -   • 13 helper functions (fully aligned)
+2026-02-13 19:08:29,543 - src.core.database.postgres.schema - INFO -   • 6 views (fully aligned)
+2026-02-13 19:08:29,543 - src.core.database.postgres.schema - INFO -   • 6 triggers (fully aligned)
+2026-02-13 19:08:29,543 - src.core.database.postgres.schema - INFO -   • ~50 indexes (fully aligned)
+2026-02-13 19:08:29,543 - src.core.database.postgres.schema - INFO - ============================================================
+2026-02-13 19:08:29,544 - core.database_manager - INFO - Database schema ensured successfully.
+2026-02-13 19:08:29,554 - src.streamlit.ui.pages.accounts.chrome_session_manager - INFO - ChromeSessionManager initialized with profile dir: /workspace/chrome_profiles
+2026-02-13 19:08:29,584 - ui.pages.accounts.accounts - INFO - Refreshed 0 active sessions from MongoDB
+2026-02-13 19:08:29,612 - src.core.database.mongodb.connection - WARNING - Collection 'automa_workflows' does not exist in database 'messages_db'
+2026-02-13 19:08:29,612 - src.core.database.mongodb.connection - WARNING - Collection 'automa_workflows' does not exist in database 'messages_db'
+2026-02-13 19:08:29.658 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-02-13 19:08:29.685 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-02-13 19:08:29.849 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-02-13 19:08:29.920 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-02-13 19:10:05,805 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-02-13 19:10:05,805 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-02-13 19:10:05,807 - core.database_manager - INFO - Starting database initialization...
+2026-02-13 19:10:05,807 - core.database_manager - INFO - Connecting to MongoDB...
+2026-02-13 19:10:05,810 - core.database_manager - INFO - Connecting to PostgreSQL...
+2026-02-13 19:10:05,814 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool is active
+2026-02-13 19:10:05,814 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool is active
+2026-02-13 19:10:05,814 - core.database_manager - INFO - PostgreSQL connection pool initialized successfully.
+2026-02-13 19:10:05,815 - core.database_manager - INFO - Ensuring database schema...
+2026-02-13 19:10:05,816 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-02-13 19:10:05,816 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-02-13 19:10:05,816 - src.core.database.postgres.schema - INFO - Creating COMPLETE PostgreSQL schema...
+2026-02-13 19:10:05,817 - src.core.database.postgres.schema - INFO - ✓ Accounts table ready
+2026-02-13 19:10:05,818 - src.core.database.postgres.schema - INFO - ✓ Account cookies table ready
+2026-02-13 19:10:05,818 - src.core.database.postgres.schema - INFO - ✓ Workflows table ready
+2026-02-13 19:10:05,819 - src.core.database.postgres.schema - INFO - ✓ Prompts table ready
+2026-02-13 19:10:05,820 - src.core.database.postgres.schema - INFO - ✓ Prompt backups table ready
+2026-02-13 19:10:05,821 - src.core.database.postgres.schema - INFO - ✓ Prompt variations table ready
+2026-02-13 19:10:05,821 - src.core.database.postgres.schema - INFO - ✓ Extracted URLs table ready (child tweets)
+2026-02-13 19:10:05,821 - src.core.database.postgres.schema - INFO - ✓ Links table ready (parent tweets)
+2026-02-13 19:10:05,824 - src.core.database.postgres.schema - INFO - ✓ Content table ready (FIXED: no FK on connected_link_id)
+2026-02-13 19:10:05,825 - src.core.database.postgres.schema - INFO - ✓ Link-content mappings table ready
+2026-02-13 19:10:05,827 - src.core.database.postgres.schema - INFO - ✓ Link-content connections table ready
+2026-02-13 19:10:05,827 - src.core.database.postgres.schema - INFO - ✓ Workflow generation log table ready
+2026-02-13 19:10:05,828 - src.core.database.postgres.schema - INFO - ✓ Workflow sync log table ready
+2026-02-13 19:10:05,828 - src.core.database.postgres.schema - INFO - Creating indexes...
+2026-02-13 19:10:05,851 - src.core.database.postgres.schema - INFO - ✓ Indexes ready
+2026-02-13 19:10:05,851 - src.core.database.postgres.schema - INFO - Creating trigger functions...
+2026-02-13 19:10:05,854 - src.core.database.postgres.schema - INFO - ✓ Trigger functions ready
+2026-02-13 19:10:05,854 - src.core.database.postgres.schema - INFO - Creating triggers...
+2026-02-13 19:10:05,857 - src.core.database.postgres.schema - INFO - ✓ Triggers ready - Created: 0, Existing: 5
+2026-02-13 19:10:05,858 - src.core.database.postgres.schema - INFO - Creating helper functions from SQL schema...
+2026-02-13 19:10:05,864 - src.core.database.postgres.schema - INFO - ✓ All helper functions ready (13 functions created)
+2026-02-13 19:10:05,864 - src.core.database.postgres.schema - INFO - Creating views from SQL schema...
+2026-02-13 19:10:05,873 - src.core.database.postgres.schema - INFO - ✓ All views ready (6 views created)
+2026-02-13 19:10:05,875 - src.core.database.postgres.schema - INFO - ============================================================
+2026-02-13 19:10:05,875 - src.core.database.postgres.schema - INFO - ✅ FULLY CORRECTED POSTGRESQL SCHEMA READY
+2026-02-13 19:10:05,875 - src.core.database.postgres.schema - INFO - ============================================================
+2026-02-13 19:10:05,875 - src.core.database.postgres.schema - INFO - 🔧 CRITICAL FIXES APPLIED:
+2026-02-13 19:10:05,875 - src.core.database.postgres.schema - INFO -   ✅ Removed invalid FK on content.connected_link_id
+2026-02-13 19:10:05,875 - src.core.database.postgres.schema - INFO -   ✅ Added 13 helper functions from SQL schema
+2026-02-13 19:10:05,875 - src.core.database.postgres.schema - INFO -   ✅ Added 6 views from SQL schema
+2026-02-13 19:10:05,875 - src.core.database.postgres.schema - INFO -   ✅ Aligned all indexes with SQL schema
+2026-02-13 19:10:05,875 - src.core.database.postgres.schema - INFO - ============================================================
+2026-02-13 19:10:05,875 - src.core.database.postgres.schema - INFO - 📊 Schema includes:
+2026-02-13 19:10:05,875 - src.core.database.postgres.schema - INFO -   • 14 tables (all aligned with SQL)
+2026-02-13 19:10:05,875 - src.core.database.postgres.schema - INFO -   • 13 helper functions (fully aligned)
+2026-02-13 19:10:05,875 - src.core.database.postgres.schema - INFO -   • 6 views (fully aligned)
+2026-02-13 19:10:05,875 - src.core.database.postgres.schema - INFO -   • 6 triggers (fully aligned)
+2026-02-13 19:10:05,875 - src.core.database.postgres.schema - INFO -   • ~50 indexes (fully aligned)
+2026-02-13 19:10:05,875 - src.core.database.postgres.schema - INFO - ============================================================
+2026-02-13 19:10:05,875 - core.database_manager - INFO - Database schema ensured successfully.
+2026-02-13 19:10:05,894 - src.streamlit.ui.pages.accounts.chrome_session_manager - INFO - ChromeSessionManager initialized with profile dir: /workspace/chrome_profiles
+2026-02-13 19:10:05,918 - ui.pages.accounts.accounts - INFO - Refreshed 0 active sessions from MongoDB
+2026-02-13 19:10:05,940 - src.core.database.mongodb.connection - WARNING - Collection 'automa_workflows' does not exist in database 'messages_db'
+2026-02-13 19:10:05,940 - src.core.database.mongodb.connection - WARNING - Collection 'automa_workflows' does not exist in database 'messages_db'
+2026-02-13 19:10:05,964 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-02-13 19:10:05,964 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-02-13 19:10:05,967 - src.core.database.postgres.accounts - INFO - Retrieved 1 active accounts
+2026-02-13 19:10:05,967 - src.core.database.postgres.accounts - INFO - Retrieved 1 active accounts
+2026-02-13 19:10:06,142 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-02-13 19:10:06,142 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-02-13 19:10:06,144 - src.core.database.postgres.accounts - INFO - Retrieved 1 active accounts
+2026-02-13 19:10:06,144 - src.core.database.postgres.accounts - INFO - Retrieved 1 active accounts
+2026-02-13 19:10:06.156 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-02-13 19:10:12,376 - ui.pages.prompts.prompts - ERROR - Error in widget comparison for $$ID-1983ade14b1949a77cb4edfbeb0a6887-None: 'SessionState' object has no attribute '_widgets'
+2026-02-13 19:10:12,377 - ui.pages.prompts.prompts - ERROR - Error in widget comparison for $$ID-6b7709153f942e7d0f637fd91f02cdb9-view_mode: 'SessionState' object has no attribute '_widgets'
+2026-02-13 19:10:12,377 - ui.pages.prompts.prompts - ERROR - Error in widget comparison for $$ID-26e05a58ab2c734cf377685db2f377e4-filter_start_date: 'SessionState' object has no attribute '_widgets'
+2026-02-13 19:10:12,377 - ui.pages.prompts.prompts - ERROR - Error in widget comparison for $$ID-57875af36698280cb047bca13be9a119-filter_end_date: 'SessionState' object has no attribute '_widgets'
+2026-02-13 19:10:12,377 - ui.pages.prompts.prompts - ERROR - Error in widget comparison for $$ID-a245e14893012ef2805d61c9ad241ecc-None: 'SessionState' object has no attribute '_widgets'
+2026-02-13 19:10:12,377 - ui.pages.prompts.prompts - ERROR - Error in widget comparison for $$ID-92eee9df8cc5471d7ff0ced49cc0d770-None: 'SessionState' object has no attribute '_widgets'
+2026-02-13 19:10:12,377 - ui.pages.prompts.prompts - ERROR - Error in widget comparison for $$ID-10c83c04d5f48f5fabf4e057f9f8454b-None: 'SessionState' object has no attribute '_widgets'
+2026-02-13 19:10:12,378 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-02-13 19:10:12,378 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-02-13 19:10:12,379 - core.database_manager - INFO - Starting database initialization...
+2026-02-13 19:10:12,379 - core.database_manager - INFO - Connecting to MongoDB...
+2026-02-13 19:10:12,381 - core.database_manager - INFO - Connecting to PostgreSQL...
+2026-02-13 19:10:12,382 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool is active
+2026-02-13 19:10:12,382 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool is active
+2026-02-13 19:10:12,382 - core.database_manager - INFO - PostgreSQL connection pool initialized successfully.
+2026-02-13 19:10:12,382 - core.database_manager - INFO - Ensuring database schema...
+2026-02-13 19:10:12,383 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-02-13 19:10:12,383 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-02-13 19:10:12,383 - src.core.database.postgres.schema - INFO - Creating COMPLETE PostgreSQL schema...
+2026-02-13 19:10:12,384 - src.core.database.postgres.schema - INFO - ✓ Accounts table ready
+2026-02-13 19:10:12,385 - src.core.database.postgres.schema - INFO - ✓ Account cookies table ready
+2026-02-13 19:10:12,385 - src.core.database.postgres.schema - INFO - ✓ Workflows table ready
+2026-02-13 19:10:12,386 - src.core.database.postgres.schema - INFO - ✓ Prompts table ready
+2026-02-13 19:10:12,386 - src.core.database.postgres.schema - INFO - ✓ Prompt backups table ready
+2026-02-13 19:10:12,387 - src.core.database.postgres.schema - INFO - ✓ Prompt variations table ready
+2026-02-13 19:10:12,388 - src.core.database.postgres.schema - INFO - ✓ Extracted URLs table ready (child tweets)
+2026-02-13 19:10:12,388 - src.core.database.postgres.schema - INFO - ✓ Links table ready (parent tweets)
+2026-02-13 19:10:12,389 - src.core.database.postgres.schema - INFO - ✓ Content table ready (FIXED: no FK on connected_link_id)
+2026-02-13 19:10:12,389 - src.core.database.postgres.schema - INFO - ✓ Link-content mappings table ready
+2026-02-13 19:10:12,389 - src.core.database.postgres.schema - INFO - ✓ Link-content connections table ready
+2026-02-13 19:10:12,390 - src.core.database.postgres.schema - INFO - ✓ Workflow generation log table ready
+2026-02-13 19:10:12,391 - src.core.database.postgres.schema - INFO - ✓ Workflow sync log table ready
+2026-02-13 19:10:12,391 - src.core.database.postgres.schema - INFO - Creating indexes...
+2026-02-13 19:10:12,403 - src.core.database.postgres.schema - INFO - ✓ Indexes ready
+2026-02-13 19:10:12,403 - src.core.database.postgres.schema - INFO - Creating trigger functions...
+2026-02-13 19:10:12,405 - src.core.database.postgres.schema - INFO - ✓ Trigger functions ready
+2026-02-13 19:10:12,405 - src.core.database.postgres.schema - INFO - Creating triggers...
+2026-02-13 19:10:12,407 - src.core.database.postgres.schema - INFO - ✓ Triggers ready - Created: 0, Existing: 5
+2026-02-13 19:10:12,407 - src.core.database.postgres.schema - INFO - Creating helper functions from SQL schema...
+2026-02-13 19:10:12,411 - src.core.database.postgres.schema - INFO - ✓ All helper functions ready (13 functions created)
+2026-02-13 19:10:12,411 - src.core.database.postgres.schema - INFO - Creating views from SQL schema...
+2026-02-13 19:10:12,420 - src.core.database.postgres.schema - INFO - ✓ All views ready (6 views created)
+2026-02-13 19:10:12,421 - src.core.database.postgres.schema - INFO - ============================================================
+2026-02-13 19:10:12,421 - src.core.database.postgres.schema - INFO - ✅ FULLY CORRECTED POSTGRESQL SCHEMA READY
+2026-02-13 19:10:12,422 - src.core.database.postgres.schema - INFO - ============================================================
+2026-02-13 19:10:12,422 - src.core.database.postgres.schema - INFO - 🔧 CRITICAL FIXES APPLIED:
+2026-02-13 19:10:12,422 - src.core.database.postgres.schema - INFO -   ✅ Removed invalid FK on content.connected_link_id
+2026-02-13 19:10:12,422 - src.core.database.postgres.schema - INFO -   ✅ Added 13 helper functions from SQL schema
+2026-02-13 19:10:12,422 - src.core.database.postgres.schema - INFO -   ✅ Added 6 views from SQL schema
+2026-02-13 19:10:12,422 - src.core.database.postgres.schema - INFO -   ✅ Aligned all indexes with SQL schema
+2026-02-13 19:10:12,422 - src.core.database.postgres.schema - INFO - ============================================================
+2026-02-13 19:10:12,422 - src.core.database.postgres.schema - INFO - 📊 Schema includes:
+2026-02-13 19:10:12,422 - src.core.database.postgres.schema - INFO -   • 14 tables (all aligned with SQL)
+2026-02-13 19:10:12,422 - src.core.database.postgres.schema - INFO -   • 13 helper functions (fully aligned)
+2026-02-13 19:10:12,422 - src.core.database.postgres.schema - INFO -   • 6 views (fully aligned)
+2026-02-13 19:10:12,422 - src.core.database.postgres.schema - INFO -   • 6 triggers (fully aligned)
+2026-02-13 19:10:12,422 - src.core.database.postgres.schema - INFO -   • ~50 indexes (fully aligned)
+2026-02-13 19:10:12,422 - src.core.database.postgres.schema - INFO - ============================================================
+2026-02-13 19:10:12,423 - core.database_manager - INFO - Database schema ensured successfully.
+2026-02-13 19:10:12,429 - src.streamlit.ui.pages.accounts.chrome_session_manager - INFO - ChromeSessionManager initialized with profile dir: /workspace/chrome_profiles
+2026-02-13 19:10:12,449 - ui.pages.accounts.accounts - INFO - Refreshed 0 active sessions from MongoDB
+2026-02-13 19:10:12,474 - src.core.database.mongodb.connection - WARNING - Collection 'automa_workflows' does not exist in database 'messages_db'
+2026-02-13 19:10:12,474 - src.core.database.mongodb.connection - WARNING - Collection 'automa_workflows' does not exist in database 'messages_db'
+2026-02-13 19:10:12.505 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-02-13 19:10:12.524 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-02-13 19:10:12.554 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-02-13 19:10:12.595 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-02-13 19:10:23,094 - ui.pages.prompts.prompts - ERROR - Error in widget comparison for $$ID-1983ade14b1949a77cb4edfbeb0a6887-None: 'SessionState' object has no attribute '_widgets'
+2026-02-13 19:10:23,094 - ui.pages.prompts.prompts - ERROR - Error in widget comparison for $$ID-3a59c2fa96104117f6399bab9d0de5bd-overview_tab_status_filter: 'SessionState' object has no attribute '_widgets'
+2026-02-13 19:10:23,094 - ui.pages.prompts.prompts - ERROR - Error in widget comparison for $$ID-33dbf18b84a4c8b916eb4c9533974810-overview_tab_time_filter: 'SessionState' object has no attribute '_widgets'
+2026-02-13 19:10:23,094 - ui.pages.prompts.prompts - ERROR - Error in widget comparison for $$ID-ab72e0d97d000a55e7ca76702b200d75-overview_tab_view_option: 'SessionState' object has no attribute '_widgets'
+2026-02-13 19:10:23,095 - ui.pages.prompts.prompts - ERROR - Error in widget comparison for $$ID-57a195938e418d08cc6b47cdcaeccbe1-local_chrome_tab_select: 'SessionState' object has no attribute '_widgets'
+2026-02-13 19:10:23,095 - ui.pages.prompts.prompts - ERROR - Error in widget comparison for $$ID-4ed61e7e8c605a31156882c7d25b8dee-script_gen_account_select_ui: 'SessionState' object has no attribute '_widgets'
+2026-02-13 19:10:23,095 - ui.pages.prompts.prompts - ERROR - Error in widget comparison for $$ID-5fd12ca66df2aec79ed8ae0641dffb32-acct_cookie_mgmt_select_ui: 'SessionState' object has no attribute '_widgets'
+2026-02-13 19:10:23,095 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-02-13 19:10:23,095 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-02-13 19:10:23,095 - core.database_manager - INFO - Starting database initialization...
+2026-02-13 19:10:23,096 - core.database_manager - INFO - Connecting to MongoDB...
+2026-02-13 19:10:23,099 - core.database_manager - INFO - Connecting to PostgreSQL...
+2026-02-13 19:10:23,101 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool is active
+2026-02-13 19:10:23,101 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool is active
+2026-02-13 19:10:23,101 - core.database_manager - INFO - PostgreSQL connection pool initialized successfully.
+2026-02-13 19:10:23,101 - core.database_manager - INFO - Ensuring database schema...
+2026-02-13 19:10:23,102 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-02-13 19:10:23,102 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-02-13 19:10:23,102 - src.core.database.postgres.schema - INFO - Creating COMPLETE PostgreSQL schema...
+2026-02-13 19:10:23,102 - src.core.database.postgres.schema - INFO - ✓ Accounts table ready
+2026-02-13 19:10:23,102 - src.core.database.postgres.schema - INFO - ✓ Account cookies table ready
+2026-02-13 19:10:23,103 - src.core.database.postgres.schema - INFO - ✓ Workflows table ready
+2026-02-13 19:10:23,104 - src.core.database.postgres.schema - INFO - ✓ Prompts table ready
+2026-02-13 19:10:23,105 - src.core.database.postgres.schema - INFO - ✓ Prompt backups table ready
+2026-02-13 19:10:23,105 - src.core.database.postgres.schema - INFO - ✓ Prompt variations table ready
+2026-02-13 19:10:23,105 - src.core.database.postgres.schema - INFO - ✓ Extracted URLs table ready (child tweets)
+2026-02-13 19:10:23,106 - src.core.database.postgres.schema - INFO - ✓ Links table ready (parent tweets)
+2026-02-13 19:10:23,108 - src.core.database.postgres.schema - INFO - ✓ Content table ready (FIXED: no FK on connected_link_id)
+2026-02-13 19:10:23,108 - src.core.database.postgres.schema - INFO - ✓ Link-content mappings table ready
+2026-02-13 19:10:23,108 - src.core.database.postgres.schema - INFO - ✓ Link-content connections table ready
+2026-02-13 19:10:23,109 - src.core.database.postgres.schema - INFO - ✓ Workflow generation log table ready
+2026-02-13 19:10:23,109 - src.core.database.postgres.schema - INFO - ✓ Workflow sync log table ready
+2026-02-13 19:10:23,109 - src.core.database.postgres.schema - INFO - Creating indexes...
+2026-02-13 19:10:23,122 - src.core.database.postgres.schema - INFO - ✓ Indexes ready
+2026-02-13 19:10:23,123 - src.core.database.postgres.schema - INFO - Creating trigger functions...
+2026-02-13 19:10:23,124 - src.core.database.postgres.schema - INFO - ✓ Trigger functions ready
+2026-02-13 19:10:23,124 - src.core.database.postgres.schema - INFO - Creating triggers...
+2026-02-13 19:10:23,127 - src.core.database.postgres.schema - INFO - ✓ Triggers ready - Created: 0, Existing: 5
+2026-02-13 19:10:23,127 - src.core.database.postgres.schema - INFO - Creating helper functions from SQL schema...
+2026-02-13 19:10:23,132 - src.core.database.postgres.schema - INFO - ✓ All helper functions ready (13 functions created)
+2026-02-13 19:10:23,132 - src.core.database.postgres.schema - INFO - Creating views from SQL schema...
+2026-02-13 19:10:23,141 - src.core.database.postgres.schema - INFO - ✓ All views ready (6 views created)
+2026-02-13 19:10:23,143 - src.core.database.postgres.schema - INFO - ============================================================
+2026-02-13 19:10:23,143 - src.core.database.postgres.schema - INFO - ✅ FULLY CORRECTED POSTGRESQL SCHEMA READY
+2026-02-13 19:10:23,143 - src.core.database.postgres.schema - INFO - ============================================================
+2026-02-13 19:10:23,143 - src.core.database.postgres.schema - INFO - 🔧 CRITICAL FIXES APPLIED:
+2026-02-13 19:10:23,144 - src.core.database.postgres.schema - INFO -   ✅ Removed invalid FK on content.connected_link_id
+2026-02-13 19:10:23,144 - src.core.database.postgres.schema - INFO -   ✅ Added 13 helper functions from SQL schema
+2026-02-13 19:10:23,144 - src.core.database.postgres.schema - INFO -   ✅ Added 6 views from SQL schema
+2026-02-13 19:10:23,144 - src.core.database.postgres.schema - INFO -   ✅ Aligned all indexes with SQL schema
+2026-02-13 19:10:23,144 - src.core.database.postgres.schema - INFO - ============================================================
+2026-02-13 19:10:23,144 - src.core.database.postgres.schema - INFO - 📊 Schema includes:
+2026-02-13 19:10:23,144 - src.core.database.postgres.schema - INFO -   • 14 tables (all aligned with SQL)
+2026-02-13 19:10:23,144 - src.core.database.postgres.schema - INFO -   • 13 helper functions (fully aligned)
+2026-02-13 19:10:23,144 - src.core.database.postgres.schema - INFO -   • 6 views (fully aligned)
+2026-02-13 19:10:23,144 - src.core.database.postgres.schema - INFO -   • 6 triggers (fully aligned)
+2026-02-13 19:10:23,144 - src.core.database.postgres.schema - INFO -   • ~50 indexes (fully aligned)
+2026-02-13 19:10:23,144 - src.core.database.postgres.schema - INFO - ============================================================
+2026-02-13 19:10:23,144 - core.database_manager - INFO - Database schema ensured successfully.
+2026-02-13 19:10:23,151 - src.streamlit.ui.pages.accounts.chrome_session_manager - INFO - ChromeSessionManager initialized with profile dir: /workspace/chrome_profiles
+2026-02-13 19:10:23,172 - ui.pages.accounts.accounts - INFO - Refreshed 0 active sessions from MongoDB
+2026-02-13 19:10:23,192 - src.core.database.mongodb.connection - WARNING - Collection 'automa_workflows' does not exist in database 'messages_db'
+2026-02-13 19:10:23,192 - src.core.database.mongodb.connection - WARNING - Collection 'automa_workflows' does not exist in database 'messages_db'
+2026-02-13 19:10:23.222 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-02-13 19:10:23.257 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-02-13 19:10:23.299 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-02-13 19:10:23.349 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-02-13 19:10:26,346 - ui.pages.prompts.prompts - ERROR - Error in widget comparison for $$ID-1983ade14b1949a77cb4edfbeb0a6887-None: 'SessionState' object has no attribute '_widgets'
+2026-02-13 19:10:26,346 - ui.pages.prompts.prompts - ERROR - Error in widget comparison for $$ID-3a59c2fa96104117f6399bab9d0de5bd-overview_tab_status_filter: 'SessionState' object has no attribute '_widgets'
+2026-02-13 19:10:26,346 - ui.pages.prompts.prompts - ERROR - Error in widget comparison for $$ID-33dbf18b84a4c8b916eb4c9533974810-overview_tab_time_filter: 'SessionState' object has no attribute '_widgets'
+2026-02-13 19:10:26,346 - ui.pages.prompts.prompts - ERROR - Error in widget comparison for $$ID-ab72e0d97d000a55e7ca76702b200d75-overview_tab_view_option: 'SessionState' object has no attribute '_widgets'
+2026-02-13 19:10:26,346 - ui.pages.prompts.prompts - ERROR - Error in widget comparison for $$ID-57a195938e418d08cc6b47cdcaeccbe1-local_chrome_tab_select: 'SessionState' object has no attribute '_widgets'
+2026-02-13 19:10:26,346 - ui.pages.prompts.prompts - ERROR - Error in widget comparison for $$ID-4ed61e7e8c605a31156882c7d25b8dee-script_gen_account_select_ui: 'SessionState' object has no attribute '_widgets'
+2026-02-13 19:10:26,346 - ui.pages.prompts.prompts - ERROR - Error in widget comparison for $$ID-5fd12ca66df2aec79ed8ae0641dffb32-acct_cookie_mgmt_select_ui: 'SessionState' object has no attribute '_widgets'
+2026-02-13 19:10:26,346 - ui.pages.prompts.prompts - ERROR - Error in widget comparison for $$ID-a48ef9ad6cb5cd7cdfa0ddbd17fa59e4-local_chrome_start_1: 'SessionState' object has no attribute '_widgets'
+2026-02-13 19:10:26,347 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-02-13 19:10:26,347 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-02-13 19:10:26,347 - core.database_manager - INFO - Starting database initialization...
+2026-02-13 19:10:26,347 - core.database_manager - INFO - Connecting to MongoDB...
+2026-02-13 19:10:26,351 - core.database_manager - INFO - Connecting to PostgreSQL...
+2026-02-13 19:10:26,353 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool is active
+2026-02-13 19:10:26,353 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool is active
+2026-02-13 19:10:26,353 - core.database_manager - INFO - PostgreSQL connection pool initialized successfully.
+2026-02-13 19:10:26,353 - core.database_manager - INFO - Ensuring database schema...
+2026-02-13 19:10:26,353 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-02-13 19:10:26,353 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-02-13 19:10:26,353 - src.core.database.postgres.schema - INFO - Creating COMPLETE PostgreSQL schema...
+2026-02-13 19:10:26,354 - src.core.database.postgres.schema - INFO - ✓ Accounts table ready
+2026-02-13 19:10:26,354 - src.core.database.postgres.schema - INFO - ✓ Account cookies table ready
+2026-02-13 19:10:26,354 - src.core.database.postgres.schema - INFO - ✓ Workflows table ready
+2026-02-13 19:10:26,355 - src.core.database.postgres.schema - INFO - ✓ Prompts table ready
+2026-02-13 19:10:26,355 - src.core.database.postgres.schema - INFO - ✓ Prompt backups table ready
+2026-02-13 19:10:26,355 - src.core.database.postgres.schema - INFO - ✓ Prompt variations table ready
+2026-02-13 19:10:26,355 - src.core.database.postgres.schema - INFO - ✓ Extracted URLs table ready (child tweets)
+2026-02-13 19:10:26,356 - src.core.database.postgres.schema - INFO - ✓ Links table ready (parent tweets)
+2026-02-13 19:10:26,356 - src.core.database.postgres.schema - INFO - ✓ Content table ready (FIXED: no FK on connected_link_id)
+2026-02-13 19:10:26,356 - src.core.database.postgres.schema - INFO - ✓ Link-content mappings table ready
+2026-02-13 19:10:26,357 - src.core.database.postgres.schema - INFO - ✓ Link-content connections table ready
+2026-02-13 19:10:26,358 - src.core.database.postgres.schema - INFO - ✓ Workflow generation log table ready
+2026-02-13 19:10:26,359 - src.core.database.postgres.schema - INFO - ✓ Workflow sync log table ready
+2026-02-13 19:10:26,359 - src.core.database.postgres.schema - INFO - Creating indexes...
+2026-02-13 19:10:26,371 - src.core.database.postgres.schema - INFO - ✓ Indexes ready
+2026-02-13 19:10:26,371 - src.core.database.postgres.schema - INFO - Creating trigger functions...
+2026-02-13 19:10:26,374 - src.core.database.postgres.schema - INFO - ✓ Trigger functions ready
+2026-02-13 19:10:26,374 - src.core.database.postgres.schema - INFO - Creating triggers...
+2026-02-13 19:10:26,377 - src.core.database.postgres.schema - INFO - ✓ Triggers ready - Created: 0, Existing: 5
+2026-02-13 19:10:26,378 - src.core.database.postgres.schema - INFO - Creating helper functions from SQL schema...
+2026-02-13 19:10:26,384 - src.core.database.postgres.schema - INFO - ✓ All helper functions ready (13 functions created)
+2026-02-13 19:10:26,384 - src.core.database.postgres.schema - INFO - Creating views from SQL schema...
+2026-02-13 19:10:26,394 - src.core.database.postgres.schema - INFO - ✓ All views ready (6 views created)
+2026-02-13 19:10:26,397 - src.core.database.postgres.schema - INFO - ============================================================
+2026-02-13 19:10:26,397 - src.core.database.postgres.schema - INFO - ✅ FULLY CORRECTED POSTGRESQL SCHEMA READY
+2026-02-13 19:10:26,397 - src.core.database.postgres.schema - INFO - ============================================================
+2026-02-13 19:10:26,397 - src.core.database.postgres.schema - INFO - 🔧 CRITICAL FIXES APPLIED:
+2026-02-13 19:10:26,397 - src.core.database.postgres.schema - INFO -   ✅ Removed invalid FK on content.connected_link_id
+2026-02-13 19:10:26,397 - src.core.database.postgres.schema - INFO -   ✅ Added 13 helper functions from SQL schema
+2026-02-13 19:10:26,397 - src.core.database.postgres.schema - INFO -   ✅ Added 6 views from SQL schema
+2026-02-13 19:10:26,397 - src.core.database.postgres.schema - INFO -   ✅ Aligned all indexes with SQL schema
+2026-02-13 19:10:26,397 - src.core.database.postgres.schema - INFO - ============================================================
+2026-02-13 19:10:26,397 - src.core.database.postgres.schema - INFO - 📊 Schema includes:
+2026-02-13 19:10:26,397 - src.core.database.postgres.schema - INFO -   • 14 tables (all aligned with SQL)
+2026-02-13 19:10:26,397 - src.core.database.postgres.schema - INFO -   • 13 helper functions (fully aligned)
+2026-02-13 19:10:26,397 - src.core.database.postgres.schema - INFO -   • 6 views (fully aligned)
+2026-02-13 19:10:26,397 - src.core.database.postgres.schema - INFO -   • 6 triggers (fully aligned)
+2026-02-13 19:10:26,397 - src.core.database.postgres.schema - INFO -   • ~50 indexes (fully aligned)
+2026-02-13 19:10:26,397 - src.core.database.postgres.schema - INFO - ============================================================
+2026-02-13 19:10:26,397 - core.database_manager - INFO - Database schema ensured successfully.
+2026-02-13 19:10:26,405 - src.streamlit.ui.pages.accounts.chrome_session_manager - INFO - ChromeSessionManager initialized with profile dir: /workspace/chrome_profiles
+2026-02-13 19:10:26,425 - ui.pages.accounts.accounts - INFO - Refreshed 0 active sessions from MongoDB
+2026-02-13 19:10:26,447 - src.core.database.mongodb.connection - WARNING - Collection 'automa_workflows' does not exist in database 'messages_db'
+2026-02-13 19:10:26,447 - src.core.database.mongodb.connection - WARNING - Collection 'automa_workflows' does not exist in database 'messages_db'
+2026-02-13 19:10:26.478 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-02-13 19:10:26,499 - ui.pages.accounts.accounts - INFO - Starting LOCAL Chrome session for: tina
+2026-02-13 19:10:26,499 - ui.pages.accounts.accounts - INFO - Will open 3 tabs: Automa, EditThisCookie, X.com
+2026-02-13 19:10:26,500 - ui.pages.accounts.accounts - INFO - Session ID: local_tina_1770999026
+2026-02-13 19:10:26,508 - ui.pages.accounts.accounts - INFO - ✓ Generated account cookie script: /app/cookie_scripts/copy_cookies_tina.sh
+2026-02-13 19:10:26,508 - ui.pages.accounts.accounts - INFO - ✓ Account cookie script ready: copy_cookies_tina.sh
+2026-02-13 19:10:26,508 - ui.pages.accounts.accounts - INFO - Starting Chrome with Automa, EditThisCookie, and X.com tabs
+2026-02-13 19:10:34,591 - src.streamlit.ui.pages.accounts.chrome_session_manager - INFO - Chrome session started: local_tina_1770999026
+2026-02-13 19:10:34,592 - src.streamlit.ui.pages.accounts.chrome_session_manager - INFO -   Tabs: Automa, EditThisCookie, X.com
+2026-02-13 19:10:34,592 - src.streamlit.ui.pages.accounts.chrome_session_manager - INFO -   VNC: http://localhost:6080/vnc.html
+2026-02-13 19:10:34,592 - src.streamlit.ui.pages.accounts.chrome_session_manager - INFO -   Debug: localhost:9222
+2026-02-13 19:10:34,593 - ui.pages.accounts.accounts - INFO - ✓ Chrome process started with 3 tabs
+2026-02-13 19:10:34,593 - ui.pages.accounts.accounts - INFO -   Tab 1: Automa extension
+2026-02-13 19:10:34,593 - ui.pages.accounts.accounts - INFO -   Tab 2: EditThisCookie extension
+2026-02-13 19:10:34,593 - ui.pages.accounts.accounts - INFO -   Tab 3: X.com home
+2026-02-13 19:10:34,593 - ui.pages.accounts.accounts - INFO - ✓ Chrome visible at: http://localhost:6080/vnc.html
+2026-02-13 19:10:34,593 - ui.pages.accounts.accounts - INFO - ✓ Account cookie script: /app/cookie_scripts/copy_cookies_tina.sh
+2026-02-13 19:10:34,620 - ui.pages.accounts.accounts - INFO - ✓ Stored in MongoDB
+2026-02-13 19:10:34,621 - ui.pages.accounts.accounts - INFO - ✓ Session stored in local_chrome_sessions
+2026-02-13 19:10:35,851 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-02-13 19:10:35,851 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-02-13 19:10:35,852 - core.database_manager - INFO - Starting database initialization...
+2026-02-13 19:10:35,853 - core.database_manager - INFO - Connecting to MongoDB...
+2026-02-13 19:10:35,856 - core.database_manager - INFO - Connecting to PostgreSQL...
+2026-02-13 19:10:35,857 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool is active
+2026-02-13 19:10:35,857 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool is active
+2026-02-13 19:10:35,857 - core.database_manager - INFO - PostgreSQL connection pool initialized successfully.
+2026-02-13 19:10:35,857 - core.database_manager - INFO - Ensuring database schema...
+2026-02-13 19:10:35,857 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-02-13 19:10:35,857 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-02-13 19:10:35,857 - src.core.database.postgres.schema - INFO - Creating COMPLETE PostgreSQL schema...
+2026-02-13 19:10:35,858 - src.core.database.postgres.schema - INFO - ✓ Accounts table ready
+2026-02-13 19:10:35,859 - src.core.database.postgres.schema - INFO - ✓ Account cookies table ready
+2026-02-13 19:10:35,859 - src.core.database.postgres.schema - INFO - ✓ Workflows table ready
+2026-02-13 19:10:35,860 - src.core.database.postgres.schema - INFO - ✓ Prompts table ready
+2026-02-13 19:10:35,860 - src.core.database.postgres.schema - INFO - ✓ Prompt backups table ready
+2026-02-13 19:10:35,860 - src.core.database.postgres.schema - INFO - ✓ Prompt variations table ready
+2026-02-13 19:10:35,861 - src.core.database.postgres.schema - INFO - ✓ Extracted URLs table ready (child tweets)
+2026-02-13 19:10:35,861 - src.core.database.postgres.schema - INFO - ✓ Links table ready (parent tweets)
+2026-02-13 19:10:35,862 - src.core.database.postgres.schema - INFO - ✓ Content table ready (FIXED: no FK on connected_link_id)
+2026-02-13 19:10:35,862 - src.core.database.postgres.schema - INFO - ✓ Link-content mappings table ready
+2026-02-13 19:10:35,862 - src.core.database.postgres.schema - INFO - ✓ Link-content connections table ready
+2026-02-13 19:10:35,863 - src.core.database.postgres.schema - INFO - ✓ Workflow generation log table ready
+2026-02-13 19:10:35,863 - src.core.database.postgres.schema - INFO - ✓ Workflow sync log table ready
+2026-02-13 19:10:35,864 - src.core.database.postgres.schema - INFO - Creating indexes...
+2026-02-13 19:10:35,874 - src.core.database.postgres.schema - INFO - ✓ Indexes ready
+2026-02-13 19:10:35,874 - src.core.database.postgres.schema - INFO - Creating trigger functions...
+2026-02-13 19:10:35,878 - src.core.database.postgres.schema - INFO - ✓ Trigger functions ready
+2026-02-13 19:10:35,878 - src.core.database.postgres.schema - INFO - Creating triggers...
+2026-02-13 19:10:35,880 - src.core.database.postgres.schema - INFO - ✓ Triggers ready - Created: 0, Existing: 5
+2026-02-13 19:10:35,880 - src.core.database.postgres.schema - INFO - Creating helper functions from SQL schema...
+2026-02-13 19:10:35,884 - src.core.database.postgres.schema - INFO - ✓ All helper functions ready (13 functions created)
+2026-02-13 19:10:35,884 - src.core.database.postgres.schema - INFO - Creating views from SQL schema...
+2026-02-13 19:10:35,898 - src.core.database.postgres.schema - INFO - ✓ All views ready (6 views created)
+2026-02-13 19:10:35,902 - src.core.database.postgres.schema - INFO - ============================================================
+2026-02-13 19:10:35,902 - src.core.database.postgres.schema - INFO - ✅ FULLY CORRECTED POSTGRESQL SCHEMA READY
+2026-02-13 19:10:35,903 - src.core.database.postgres.schema - INFO - ============================================================
+2026-02-13 19:10:35,903 - src.core.database.postgres.schema - INFO - 🔧 CRITICAL FIXES APPLIED:
+2026-02-13 19:10:35,903 - src.core.database.postgres.schema - INFO -   ✅ Removed invalid FK on content.connected_link_id
+2026-02-13 19:10:35,903 - src.core.database.postgres.schema - INFO -   ✅ Added 13 helper functions from SQL schema
+2026-02-13 19:10:35,903 - src.core.database.postgres.schema - INFO -   ✅ Added 6 views from SQL schema
+2026-02-13 19:10:35,903 - src.core.database.postgres.schema - INFO -   ✅ Aligned all indexes with SQL schema
+2026-02-13 19:10:35,903 - src.core.database.postgres.schema - INFO - ============================================================
+2026-02-13 19:10:35,903 - src.core.database.postgres.schema - INFO - 📊 Schema includes:
+2026-02-13 19:10:35,903 - src.core.database.postgres.schema - INFO -   • 14 tables (all aligned with SQL)
+2026-02-13 19:10:35,904 - src.core.database.postgres.schema - INFO -   • 13 helper functions (fully aligned)
+2026-02-13 19:10:35,904 - src.core.database.postgres.schema - INFO -   • 6 views (fully aligned)
+2026-02-13 19:10:35,904 - src.core.database.postgres.schema - INFO -   • 6 triggers (fully aligned)
+2026-02-13 19:10:35,904 - src.core.database.postgres.schema - INFO -   • ~50 indexes (fully aligned)
+2026-02-13 19:10:35,905 - src.core.database.postgres.schema - INFO - ============================================================
+2026-02-13 19:10:35,905 - core.database_manager - INFO - Database schema ensured successfully.
+2026-02-13 19:10:35,928 - src.streamlit.ui.pages.accounts.chrome_session_manager - INFO - ChromeSessionManager initialized with profile dir: /workspace/chrome_profiles
+2026-02-13 19:10:35,961 - ui.pages.accounts.accounts - INFO - Refreshed 1 active sessions from MongoDB
+2026-02-13 19:10:35,989 - src.core.database.mongodb.connection - WARNING - Collection 'automa_workflows' does not exist in database 'messages_db'
+2026-02-13 19:10:35,989 - src.core.database.mongodb.connection - WARNING - Collection 'automa_workflows' does not exist in database 'messages_db'
+2026-02-13 19:10:36.035 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-02-13 19:10:36.079 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-02-13 19:10:36.133 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-02-13 19:10:36.191 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.

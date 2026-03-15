@@ -1,0 +1,22 @@
+{
+  "name": "hyperbrowser-workflow-executor",
+  "version": "1.0.0",
+  "description": "Modular JavaScript workflow executor for Hyperbrowser automation",
+  "type": "module",
+  "main": "main.js",
+  "scripts": {
+    "start": "node main.js",
+    "dev": "NODE_ENV=development node main.js",
+    "test": "node --experimental-vm-modules node_modules/.bin/jest",
+    "lint": "eslint .",
+    "clean": "rm -rf temp/*.json"
+  },
+  "dependencies": {
+    "@hyperbrowser/sdk": "^0.51.0",
+    "mongodb": "^5.0.0",
+    "pg": "^8.0.0",
+    "dotenv": "^16.0.0",
+    "puppeteer-core": "^24.12.0",
+    "ws": "^8.14.2"
+  }
+}

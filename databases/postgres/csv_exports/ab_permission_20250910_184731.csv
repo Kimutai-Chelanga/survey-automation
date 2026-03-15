@@ -1,0 +1,6 @@
+id,name
+1,can_read
+2,can_edit
+3,can_delete
+4,can_create
+5,menu_access

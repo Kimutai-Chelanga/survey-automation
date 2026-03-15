@@ -1,0 +1,15 @@
+{
+  "name": "x-extractor",
+  "version": "1.0.0",
+  "description": "Data extraction script using puppeteer-core, MongoDB, and PostgreSQL",
+  "type": "module",
+  "main": "main.js",
+  "scripts": {
+    "start": "node main.js"
+  },
+  "dependencies": {
+    "puppeteer-core": "^24.12.0",
+    "mongodb": "^5.0.0",
+    "pg": "^8.0.0"
+  }
+}

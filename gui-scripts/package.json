@@ -1,0 +1,23 @@
+{
+  "name": "automa-workflow-uploader",
+  "version": "1.0.0",
+  "description": "Upload and trigger Automa workflows via Chrome DevTools Protocol",
+  "main": "automa-uploader.js",
+  "scripts": {
+    "start": "node automa-uploader.js",
+    "upload": "node automa-uploader.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["automa", "chrome", "devtools", "workflow", "automation"],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.14.2"
+  },
+  "bin": {
+    "automa-uploader": "./automa-uploader.js"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "name": "Automa Chrome GUI Environment with Ansible",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "."
+  },
+  "runArgs": [
+    "--cap-add=SYS_ADMIN",
+    "--ipc=host",
+    "--shm-size=2g",
+    "--security-opt=seccomp=unconfined"
+  ],
+  "forwardPorts": [6080, 9222],
+  "portsAttributes": {
+    "6080": {
+      "label": "noVNC GUI Access",
+      "onAutoForward": "notify"
+    },
+    "9222": {
+      "label": "Chrome Remote Debugging",
+      "onAutoForward": "notify"
+    }
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/git-lfs:1": {
+      "version": "latest"
+    },
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "version": "latest",
+      "moby": true
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "ms-azuretools.vscode-docker",
+        "ms-python.python",
+        "redhat.ansible",
+        "ms-ansible.ansible"
+      ]
+    }
+  },
+  "remoteUser": "root",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
+  "workspaceFolder": "/workspace",
+  "postCreateCommand": "git lfs install && chown -R root:root /workspace && python3 -m pip install pymongo python-dotenv psycopg2-binary>=2.9 pandas>=1.0 && mkdir -p /workspace/chrome_profile && chmod -R 777 /workspace/chrome_profile && chown -R root:root /workspace/chrome_profile && if [ ! -d '/workspace/automa' ]; then git clone https://github.com/AutomaApp/automa.git /workspace/automa && cd /workspace/automa && mkdir -p src/utils && echo \"export default function() { return 'automa-codespaces'; }\" > src/utils/getPassKey.js && pnpm install && pnpm build; fi && mkdir -p ~/.ssh && chmod 700 ~/.ssh && ansible --version"
+}
