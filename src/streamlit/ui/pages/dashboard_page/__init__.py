@@ -1,3 +1,3 @@
-from .dashboard import DashboardPage
+from .dashboard_page import DashboardPage
 
 # This allows: from ui.pages.dashboard import DashboardPage

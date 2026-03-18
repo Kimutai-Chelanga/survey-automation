@@ -6,25 +6,22 @@ from .connection import get_postgres_connection
 logger = logging.getLogger(__name__)
 
 # ===================================================================
-# POSTGRESQL SCHEMA - FULLY ALIGNED WITH init-db.sql
-# Updated: 2026-03-06
-# Changes from previous version:
-#   1. Added account_extraction_state table
-#   2. Added success/failure columns to links table
-#   3. Added tweet_author_user_id and chat_link columns to links table
-#   4. Added extraction state helper functions (reset_extraction_state,
-#      reset_all_extraction_state, upsert_extraction_state)
-#   5. Added build_chat_link helper function
-#   6. Added extraction state trigger function + trigger
-#   7. Added links_with_chat view
-#   8. Updated parent_tweets_in_links view to expose new columns
-#   9. Added extraction_state_summary view
-#  10. Added new indexes for success, failure, tweet_author_user_id, chat_link
+# POSTGRESQL SCHEMA - SURVEY AUTOMATION ARCHITECTURE
+# Updated: 2026-03-18
+# Complete schema for survey automation with workflows:
+#   1. Accounts management with country targeting
+#   2. Survey sites by country
+#   3. Questions extracted from survey sites
+#   4. Answers submitted by accounts
+#   5. One prompt per user (persona)
+#   6. Workflows linked to survey sites
+#   7. Extraction state tracking
+#   8. Workflow generation logs
 # ===================================================================
 
 def create_postgres_tables():
     """
-    Creates COMPLETE PostgreSQL schema matching init-db.sql EXACTLY.
+    Creates COMPLETE PostgreSQL schema for survey automation.
     ONLY creates tables if they don't exist - NEVER drops existing data.
     """
 
@@ -35,23 +32,24 @@ def create_postgres_tables():
                 # ======================================================
                 # STEP 1: CREATE CORE TABLES (ONLY IF NOT EXISTS)
                 # ======================================================
-                logger.info("Creating COMPLETE PostgreSQL schema...")
+                logger.info("Creating SURVEY AUTOMATION schema...")
 
                 # ACCOUNTS TABLE
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS accounts (
                         account_id SERIAL PRIMARY KEY,
                         username VARCHAR(255) NOT NULL UNIQUE,
-                        x_account_id VARCHAR(30),          
+                        country VARCHAR(100),
                         profile_id VARCHAR(255) UNIQUE,
-                        profile_type VARCHAR(50) DEFAULT 'hyperbrowser'
+                        profile_type VARCHAR(50) DEFAULT 'local_chrome'
                             CHECK (profile_type IN ('local_chrome', 'hyperbrowser')),
                         created_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         mongo_object_id VARCHAR(24),
-                        total_content_processed INTEGER DEFAULT 0,
+                        total_surveys_processed INTEGER DEFAULT 0,
                         has_cookies BOOLEAN DEFAULT FALSE,
-                        cookies_last_updated TIMESTAMP
+                        cookies_last_updated TIMESTAMP,
+                        is_active BOOLEAN DEFAULT TRUE
                     )
                 """)
                 logger.info("✓ accounts table ready")
@@ -73,51 +71,35 @@ def create_postgres_tables():
                 """)
                 logger.info("✓ account_cookies table ready")
 
-                # ACCOUNT EXTRACTION STATE TABLE
-                # Tracks the newest tweet ID seen per account for incremental extraction.
+                # SURVEY SITES TABLE
                 cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS account_extraction_state (
-                        state_id               SERIAL PRIMARY KEY,
-                        username               VARCHAR(255) NOT NULL UNIQUE,
-                        last_seen_tweet_id     VARCHAR(30),
-                        last_extraction_time   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        last_tweet_url         TEXT,
-                        tweets_found_last_run  INTEGER DEFAULT 0,
-                        parents_found_last_run INTEGER DEFAULT 0,
-                        created_at             TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        updated_at             TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                """)
-                logger.info("✓ account_extraction_state table ready")
-
-                # WORKFLOWS TABLE
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS workflows (
-                        workflow_id SERIAL PRIMARY KEY,
-                        workflow_name VARCHAR(255) NOT NULL,
-                        workflow_type VARCHAR(50),
-                        created_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        updated_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    CREATE TABLE IF NOT EXISTS survey_sites (
+                        site_id SERIAL PRIMARY KEY,
+                        country VARCHAR(100) UNIQUE NOT NULL,
+                        url TEXT NOT NULL,
+                        description TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         is_active BOOLEAN DEFAULT TRUE
                     )
                 """)
-                logger.info("✓ workflows table ready")
+                logger.info("✓ survey_sites table ready")
 
-                # PROMPTS TABLE
+                # PROMPTS TABLE - ONE PER USER (unique constraint)
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS prompts (
                         prompt_id SERIAL PRIMARY KEY,
-                        account_id INTEGER REFERENCES accounts(account_id) ON DELETE CASCADE,
+                        account_id INTEGER UNIQUE NOT NULL REFERENCES accounts(account_id) ON DELETE CASCADE,
                         name VARCHAR(255) NOT NULL,
                         content TEXT NOT NULL,
-                        prompt_type VARCHAR(50) NOT NULL,
+                        prompt_type VARCHAR(50) DEFAULT 'user_persona',
                         created_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         mongo_object_id VARCHAR(24),
                         is_active BOOLEAN DEFAULT TRUE
                     )
                 """)
-                logger.info("✓ prompts table ready")
+                logger.info("✓ prompts table ready (one per user)")
 
                 # PROMPT BACKUPS TABLE
                 cursor.execute("""
@@ -127,7 +109,6 @@ def create_postgres_tables():
                         account_id INTEGER NOT NULL REFERENCES accounts(account_id) ON DELETE CASCADE,
                         username VARCHAR(255) NOT NULL,
                         prompt_name VARCHAR(255) NOT NULL,
-                        prompt_type VARCHAR(50) NOT NULL,
                         prompt_content TEXT NOT NULL,
                         version_number INTEGER NOT NULL DEFAULT 1,
                         backed_up_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -143,203 +124,77 @@ def create_postgres_tables():
                 """)
                 logger.info("✓ prompt_backups table ready")
 
-                # PROMPT VARIATIONS TABLE
+                # WORKFLOWS TABLE - Linked to survey sites
                 cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS prompt_variations (
-                        variation_id SERIAL PRIMARY KEY,
-                        parent_prompt_id INTEGER NOT NULL REFERENCES prompts(prompt_id) ON DELETE CASCADE,
-                        account_id INTEGER NOT NULL REFERENCES accounts(account_id) ON DELETE CASCADE,
-                        username VARCHAR(255) NOT NULL,
-                        prompt_type VARCHAR(50) NOT NULL,
-                        prompt_name VARCHAR(255) NOT NULL,
-                        variation_content TEXT NOT NULL,
-                        variation_number INTEGER NOT NULL,
-                        generation_batch_id VARCHAR(100) NOT NULL,
-                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                        used BOOLEAN DEFAULT FALSE,
-                        used_at TIMESTAMP,
-                        copied_count INTEGER DEFAULT 0,
-                        last_copied_at TIMESTAMP,
-                        is_active BOOLEAN DEFAULT TRUE,
-                        quality_score DECIMAL(3,2),
-                        metadata JSONB
-                    )
-                """)
-                logger.info("✓ prompt_variations table ready")
-
-                # EXTRACTED URLS TABLE (CHILD TWEETS - REPLIES)
-                # NOTE: Created BEFORE links table so links can reference it
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS extracted_urls (
-                        extracted_url_id SERIAL PRIMARY KEY,
-                        account_id INTEGER NOT NULL REFERENCES accounts(account_id) ON DELETE CASCADE,
-                        url TEXT NOT NULL,
-                        tweet_id VARCHAR(30),
-                        tweet_text TEXT,
-                        is_reply BOOLEAN DEFAULT FALSE,
-                        extracted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        parent_extracted BOOLEAN DEFAULT FALSE,
-                        parent_extraction_attempted BOOLEAN DEFAULT FALSE,
-                        parent_extraction_time TIMESTAMP,
-                        parent_url_id INTEGER REFERENCES extracted_urls(extracted_url_id) ON DELETE SET NULL,
-                        parent_tweet_id VARCHAR(30),
-                        parent_tweet_url TEXT,
-                        linked_to_links_table BOOLEAN DEFAULT FALSE,
-                        links_table_id INTEGER,
-                        source_page TEXT,
-                        extraction_batch_id VARCHAR(100),
-                        metadata JSONB,
-                        CONSTRAINT unique_url_per_account UNIQUE (account_id, url)
-                    )
-                """)
-                logger.info("✓ extracted_urls table ready (child tweets)")
-
-                # LINKS TABLE (PARENT TWEETS - ORIGINALS)
-                # Includes: success/failure tracking, tweet_author_user_id, chat_link
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS links (
-                        links_id SERIAL PRIMARY KEY,
-                        account_id INTEGER REFERENCES accounts(account_id) ON DELETE CASCADE,
-                        link TEXT NOT NULL UNIQUE,
-                        tweet_id VARCHAR(30),
-                        tweeted_time TIMESTAMP,
-                        tweeted_date DATE,
-                        within_limit BOOLEAN DEFAULT FALSE,
-                        scraped_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        used BOOLEAN DEFAULT FALSE,
-                        executed BOOLEAN DEFAULT FALSE,
-                        used_time TIMESTAMP,
-                        filtered BOOLEAN DEFAULT FALSE,
-                        filtered_time TIMESTAMP,
-                        workflow_type VARCHAR(50),
-                        mongo_object_id VARCHAR(24),
-                        workflow_id INTEGER REFERENCES workflows(workflow_id) ON DELETE SET NULL,
-                        mongo_workflow_id VARCHAR(100),
-                        processed_by_workflow BOOLEAN DEFAULT FALSE,
-                        workflow_processed_time TIMESTAMP,
-                        workflow_status VARCHAR(50) DEFAULT 'pending'
-                            CHECK (workflow_status IN ('pending', 'processing', 'completed', 'failed', 'error')),
-                        execution_mode VARCHAR(20) DEFAULT 'execution'
-                            CHECK (execution_mode IN ('manual', 'execution')),
-
-                        -- Success/Failure tracking
-                        success BOOLEAN DEFAULT FALSE,
-                        failure BOOLEAN DEFAULT FALSE,
-
-                        -- Connection to extracted_urls (source child tweet)
-                        extracted_url_id INTEGER REFERENCES extracted_urls(extracted_url_id) ON DELETE SET NULL,
-                        is_parent_tweet BOOLEAN DEFAULT FALSE,
-                        child_tweet_id INTEGER REFERENCES links(links_id) ON DELETE SET NULL,
-
-                        -- Link-to-Content connection fields
-                        connected_content_id INTEGER,
-                        connected_via_workflow VARCHAR(255),
-                        content_connection_time TIMESTAMP,
-                        connection_status VARCHAR(50) DEFAULT 'pending'
-                            CHECK (connection_status IN ('pending', 'active', 'broken', 'disconnected')),
-
-                        -- Author identity & direct message
-                        tweet_author_user_id VARCHAR(30),
-                        chat_link TEXT
-                    )
-                """)
-                logger.info("✓ links table ready (parent tweets, includes success/failure/user_id/chat_link)")
-
-                # ── Migrate existing links table: add new columns if missing ──
-                # Safe to run on both new and existing databases.
-                migration_columns = [
-                    ("success",              "BOOLEAN DEFAULT FALSE"),
-                    ("failure",              "BOOLEAN DEFAULT FALSE"),
-                    ("tweet_author_user_id", "VARCHAR(30)"),
-                    ("chat_link",            "TEXT"),
-                ]
-                for col_name, col_def in migration_columns:
-                    cursor.execute(f"""
-                        DO $$
-                        BEGIN
-                            IF NOT EXISTS (
-                                SELECT 1 FROM information_schema.columns
-                                WHERE table_name = 'links' AND column_name = '{col_name}'
-                            ) THEN
-                                ALTER TABLE links ADD COLUMN {col_name} {col_def};
-                            END IF;
-                        END$$;
-                    """)
-                logger.info("✓ links migration complete (success/failure/tweet_author_user_id/chat_link ensured)")
-
-                # CONTENT TABLE
-                # CRITICAL: No FK constraint on connected_link_id (intentional)
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS content (
-                        content_id SERIAL PRIMARY KEY,
-                        account_id INTEGER REFERENCES accounts(account_id) ON DELETE CASCADE,
-                        prompt_id INTEGER REFERENCES prompts(prompt_id) ON DELETE SET NULL,
-                        content TEXT NOT NULL,
-                        content_name VARCHAR(255) NOT NULL,
-                        content_type VARCHAR(50) NOT NULL,
-                        used BOOLEAN DEFAULT FALSE,
-                        used_time TIMESTAMP,
+                    CREATE TABLE IF NOT EXISTS workflows (
+                        workflow_id SERIAL PRIMARY KEY,
+                        site_id INTEGER NOT NULL REFERENCES survey_sites(site_id) ON DELETE CASCADE,
+                        workflow_name VARCHAR(255) NOT NULL,
+                        workflow_type VARCHAR(50) NOT NULL CHECK (workflow_type IN ('extraction', 'submission', 'validation')),
+                        workflow_data JSONB,
                         created_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        mongo_object_id VARCHAR(24),
-                        workflow_status VARCHAR(50) DEFAULT 'pending'
-                            CHECK (workflow_status IN ('pending', 'processing', 'completed', 'failed', 'error')),
-
-                        -- Workflow connection tracking
-                        automa_workflow_id VARCHAR(100),
-                        workflow_name VARCHAR(255),
-                        workflow_generated_time TIMESTAMP,
-                        workflow_executed_time TIMESTAMP,
-                        workflow_success BOOLEAN DEFAULT FALSE,
-                        has_content BOOLEAN DEFAULT FALSE,
-
-                        -- Link connection tracking (no FK - intentional)
-                        connected_link_id INTEGER,
-                        connected_via_workflow VARCHAR(255),
-                        link_connection_time TIMESTAMP,
-                        link_connection_status VARCHAR(50) DEFAULT 'pending'
-                            CHECK (link_connection_status IN ('pending', 'active', 'broken', 'disconnected')),
-
-                        -- Variation tracking
-                        generated_from_variation_id INTEGER REFERENCES prompt_variations(variation_id) ON DELETE SET NULL
+                        updated_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        is_active BOOLEAN DEFAULT TRUE,
+                        description TEXT,
+                        version VARCHAR(20)
                     )
                 """)
-                logger.info("✓ content table ready (no FK on connected_link_id)")
+                logger.info("✓ workflows table ready (linked to survey sites)")
 
-                # LINK-CONTENT MAPPINGS TABLE
+                # QUESTIONS TABLE - Extracted from survey sites
                 cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS link_content_mappings (
-                        mapping_id SERIAL PRIMARY KEY,
-                        link_id INTEGER NOT NULL REFERENCES links(links_id) ON DELETE CASCADE,
-                        content_id INTEGER NOT NULL REFERENCES content(content_id) ON DELETE CASCADE,
-                        workflow_id VARCHAR(100),
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        UNIQUE(link_id, content_id)
+                    CREATE TABLE IF NOT EXISTS questions (
+                        question_id SERIAL PRIMARY KEY,
+                        survey_site_id INTEGER NOT NULL REFERENCES survey_sites(site_id) ON DELETE CASCADE,
+                        account_id INTEGER REFERENCES accounts(account_id) ON DELETE CASCADE,
+                        workflow_id INTEGER REFERENCES workflows(workflow_id) ON DELETE SET NULL,
+                        question_text TEXT NOT NULL,
+                        question_type VARCHAR(50) NOT NULL CHECK (question_type IN ('multiple_choice', 'text', 'rating', 'yes_no')),
+                        options JSONB,
+                        required BOOLEAN DEFAULT TRUE,
+                        order_index INTEGER DEFAULT 0,
+                        extracted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        last_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        is_active BOOLEAN DEFAULT TRUE,
+                        extraction_batch_id VARCHAR(100),
+                        CONSTRAINT unique_question_per_site UNIQUE (survey_site_id, question_text, account_id)
                     )
                 """)
-                logger.info("✓ link_content_mappings table ready")
+                logger.info("✓ questions table ready (linked to workflows)")
 
-                # LINK-CONTENT CONNECTIONS TABLE
+                # ANSWERS TABLE
                 cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS link_content_connections (
-                        connection_id SERIAL PRIMARY KEY,
-                        link_id INTEGER NOT NULL REFERENCES links(links_id) ON DELETE CASCADE,
-                        content_id INTEGER NOT NULL,
-                        workflow_name VARCHAR(255),
-                        automa_workflow_id VARCHAR(100),
-                        workflow_type VARCHAR(100),
-                        account_id INTEGER,
-                        connection_type VARCHAR(50) DEFAULT 'workflow_based'
-                            CHECK (connection_type IN ('workflow_based', 'manual', 'automated')),
-                        connection_method VARCHAR(100) DEFAULT 'filter_links_workflow_assignment',
-                        connected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        status VARCHAR(50) DEFAULT 'active'
-                            CHECK (status IN ('active', 'inactive', 'broken')),
+                    CREATE TABLE IF NOT EXISTS answers (
+                        answer_id SERIAL PRIMARY KEY,
+                        question_id INTEGER NOT NULL REFERENCES questions(question_id) ON DELETE CASCADE,
+                        account_id INTEGER REFERENCES accounts(account_id) ON DELETE CASCADE,
+                        workflow_id INTEGER REFERENCES workflows(workflow_id) ON DELETE SET NULL,
+                        answer_text TEXT,
+                        answer_value_numeric NUMERIC,
+                        answer_value_boolean BOOLEAN,
+                        submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        submission_batch_id VARCHAR(100),
                         metadata JSONB,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        prompt_id INTEGER REFERENCES prompts(prompt_id) ON DELETE SET NULL
                     )
                 """)
-                logger.info("✓ link_content_connections table ready")
+                logger.info("✓ answers table ready (linked to workflows)")
+
+                # EXTRACTION STATE TABLE - Track last extraction per account/site
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS extraction_state (
+                        state_id SERIAL PRIMARY KEY,
+                        account_id INTEGER NOT NULL REFERENCES accounts(account_id) ON DELETE CASCADE,
+                        site_id INTEGER NOT NULL REFERENCES survey_sites(site_id) ON DELETE CASCADE,
+                        last_extraction_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        last_extraction_batch_id VARCHAR(100),
+                        questions_found_last_run INTEGER DEFAULT 0,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(account_id, site_id)
+                    )
+                """)
+                logger.info("✓ extraction_state table ready")
 
                 # WORKFLOW GENERATION LOG
                 cursor.execute("""
@@ -347,40 +202,21 @@ def create_postgres_tables():
                         log_id SERIAL PRIMARY KEY,
                         workflow_type VARCHAR(50) NOT NULL,
                         workflow_name VARCHAR(255) NOT NULL,
-                        content_id INTEGER NOT NULL,
-                        automa_workflow_id VARCHAR(100) NOT NULL,
-                        account_id INTEGER,
-                        prompt_id INTEGER,
-                        workflow_id VARCHAR(100),
+                        account_id INTEGER REFERENCES accounts(account_id) ON DELETE CASCADE,
+                        site_id INTEGER REFERENCES survey_sites(site_id) ON DELETE CASCADE,
+                        prompt_id INTEGER REFERENCES prompts(prompt_id) ON DELETE SET NULL,
+                        workflow_id INTEGER REFERENCES workflows(workflow_id) ON DELETE SET NULL,
                         username VARCHAR(255),
-                        profile_id VARCHAR(255),
                         generated_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         status VARCHAR(50) DEFAULT 'success'
                             CHECK (status IN ('success', 'failed', 'partial')),
-                        error_message TEXT
+                        questions_processed INTEGER DEFAULT 0,
+                        answers_generated INTEGER DEFAULT 0,
+                        error_message TEXT,
+                        metadata JSONB
                     )
                 """)
                 logger.info("✓ workflow_generation_log table ready")
-
-                # WORKFLOW SYNC LOG
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS workflow_sync_log (
-                        sync_id SERIAL PRIMARY KEY,
-                        sync_type VARCHAR(50) NOT NULL
-                            CHECK (sync_type IN ('postgres_to_mongo', 'mongo_to_postgres', 'status_update', 'execution_log')),
-                        workflow_type VARCHAR(50) NOT NULL,
-                        content_id INTEGER,
-                        automa_workflow_id VARCHAR(100),
-                        workflow_name VARCHAR(255),
-                        account_id INTEGER,
-                        sync_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        sync_status VARCHAR(50) DEFAULT 'success'
-                            CHECK (sync_status IN ('success', 'failed', 'partial')),
-                        error_message TEXT,
-                        details JSONB
-                    )
-                """)
-                logger.info("✓ workflow_sync_log table ready")
 
                 # ======================================================
                 # STEP 2: CREATE INDEXES
@@ -389,108 +225,64 @@ def create_postgres_tables():
 
                 # Accounts
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_accounts_username ON accounts(username);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_accounts_profile_id ON accounts(profile_id);")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_accounts_country ON accounts(country);")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_accounts_active ON accounts(is_active) WHERE is_active = TRUE;")
 
                 # Account cookies
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_account_cookies_account_id ON account_cookies(account_id);")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_account_cookies_account ON account_cookies(account_id);")
 
-                # Account extraction state
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_extraction_state_username ON account_extraction_state(username);")
-
-                # Extracted URLs
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_extracted_urls_account_id ON extracted_urls(account_id);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_extracted_urls_url ON extracted_urls(url);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_extracted_urls_tweet_id ON extracted_urls(tweet_id);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_extracted_urls_is_reply ON extracted_urls(is_reply);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_extracted_urls_parent_extracted ON extracted_urls(parent_extracted);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_extracted_urls_parent_extraction_attempted ON extracted_urls(parent_extraction_attempted);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_extracted_urls_linked_to_links ON extracted_urls(linked_to_links_table);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_extracted_urls_extraction_batch ON extracted_urls(extraction_batch_id);")
-                cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_extracted_urls_needs_parent_extraction
-                    ON extracted_urls(account_id, is_reply, parent_extraction_attempted)
-                    WHERE is_reply = TRUE AND parent_extraction_attempted = FALSE;
-                """)
-
-                # Links
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_links_account_id ON links(account_id);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_links_workflow_status ON links(workflow_status);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_links_used ON links(used);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_links_extracted_url_id ON links(extracted_url_id);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_links_is_parent_tweet ON links(is_parent_tweet);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_links_child_tweet_id ON links(child_tweet_id);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_links_connected_content ON links(connected_content_id);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_links_success ON links(success);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_links_failure ON links(failure);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_links_tweet_author_user_id ON links(tweet_author_user_id);")
-                cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_links_chat_link
-                    ON links(chat_link)
-                    WHERE chat_link IS NOT NULL;
-                """)
-
-                # Workflows
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflows_type ON workflows(workflow_type);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflows_active ON workflows(is_active);")
+                # Survey sites
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_survey_sites_country ON survey_sites(country);")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_survey_sites_active ON survey_sites(is_active) WHERE is_active = TRUE;")
 
                 # Prompts
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_prompts_account_id ON prompts(account_id);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_prompts_type ON prompts(prompt_type);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_prompts_is_active ON prompts(is_active);")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_prompts_account ON prompts(account_id);")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_prompts_active ON prompts(is_active) WHERE is_active = TRUE;")
 
                 # Prompt backups
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_prompt_backups_prompt_id ON prompt_backups(prompt_id);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_prompt_backups_account_id ON prompt_backups(account_id);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_prompt_backups_username ON prompt_backups(username);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_prompt_backups_prompt_type ON prompt_backups(prompt_type);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_prompt_backups_version ON prompt_backups(prompt_id, version_number);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_prompt_backups_backed_up_at ON prompt_backups(backed_up_at);")
-                cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_prompt_backups_restorable
-                    ON prompt_backups(is_restorable)
-                    WHERE is_restorable = TRUE;
-                """)
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_backups_prompt ON prompt_backups(prompt_id);")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_backups_account ON prompt_backups(account_id);")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_backups_version ON prompt_backups(prompt_id, version_number);")
 
-                # Prompt variations
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_variations_parent_prompt ON prompt_variations(parent_prompt_id);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_variations_account_id ON prompt_variations(account_id);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_variations_username ON prompt_variations(username);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_variations_prompt_type ON prompt_variations(prompt_type);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_variations_batch_id ON prompt_variations(generation_batch_id);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_variations_used ON prompt_variations(used);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_variations_created_at ON prompt_variations(created_at);")
-                cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_variations_active
-                    ON prompt_variations(is_active)
-                    WHERE is_active = TRUE;
-                """)
+                # Workflows
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflows_site ON workflows(site_id);")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflows_type ON workflows(workflow_type);")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflows_active ON workflows(is_active) WHERE is_active = TRUE;")
 
-                # Content
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_content_account_id ON content(account_id);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_content_prompt_id ON content(prompt_id);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_content_type ON content(content_type);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_content_used ON content(used);")
-                cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_content_variation
-                    ON content(generated_from_variation_id)
-                    WHERE generated_from_variation_id IS NOT NULL;
-                """)
+                # Questions
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_questions_site ON questions(survey_site_id);")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_questions_account ON questions(account_id);")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_questions_workflow ON questions(workflow_id) WHERE workflow_id IS NOT NULL;")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_questions_type ON questions(question_type);")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_questions_batch ON questions(extraction_batch_id);")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_questions_active ON questions(is_active) WHERE is_active = TRUE;")
 
-                # Link-content mappings
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_lcm_link_id ON link_content_mappings(link_id);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_lcm_content_id ON link_content_mappings(content_id);")
+                # Answers
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_answers_question ON answers(question_id);")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_answers_account ON answers(account_id);")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_answers_workflow ON answers(workflow_id) WHERE workflow_id IS NOT NULL;")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_answers_batch ON answers(submission_batch_id);")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_answers_submitted ON answers(submitted_at DESC);")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_answers_prompt ON answers(prompt_id) WHERE prompt_id IS NOT NULL;")
 
-                # Link-content connections
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_lcc_link_id ON link_content_connections(link_id);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_lcc_content_id ON link_content_connections(content_id);")
+                # Extraction state
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_extraction_account_site ON extraction_state(account_id, site_id);")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_extraction_time ON extraction_state(last_extraction_time DESC);")
 
-                logger.info("✓ All indexes ready (~55 indexes)")
+                # Workflow generation log
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_wf_log_account ON workflow_generation_log(account_id);")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_wf_log_site ON workflow_generation_log(site_id);")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_wf_log_workflow ON workflow_generation_log(workflow_id) WHERE workflow_id IS NOT NULL;")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_wf_log_time ON workflow_generation_log(generated_time DESC);")
+
+                logger.info("✓ All indexes ready")
 
                 # ======================================================
-                # STEP 3: CREATE OR REPLACE TRIGGER FUNCTIONS
+                # STEP 3: CREATE TRIGGER FUNCTIONS
                 # ======================================================
                 logger.info("Creating trigger functions...")
 
+                # Update timestamp function
                 cursor.execute("""
                     CREATE OR REPLACE FUNCTION update_updated_time_column()
                     RETURNS TRIGGER AS $$
@@ -501,6 +293,7 @@ def create_postgres_tables():
                     $$ LANGUAGE plpgsql;
                 """)
 
+                # Update extraction state function
                 cursor.execute("""
                     CREATE OR REPLACE FUNCTION update_extraction_state_updated_at()
                     RETURNS TRIGGER AS $$
@@ -511,12 +304,14 @@ def create_postgres_tables():
                     $$ LANGUAGE plpgsql;
                 """)
 
+                # Auto-backup prompts
                 cursor.execute("""
                     CREATE OR REPLACE FUNCTION auto_backup_prompt()
                     RETURNS TRIGGER AS $$
                     DECLARE
                         v_version_number INTEGER;
                         v_backup_type VARCHAR(50);
+                        v_username VARCHAR(255);
                     BEGIN
                         IF TG_OP = 'DELETE' THEN
                             v_backup_type := 'pre_delete';
@@ -524,47 +319,36 @@ def create_postgres_tables():
                             v_backup_type := 'pre_update';
                         END IF;
 
+                        SELECT username INTO v_username
+                        FROM accounts
+                        WHERE account_id = OLD.account_id;
+
                         SELECT COALESCE(MAX(version_number), 0) + 1
                         INTO v_version_number
                         FROM prompt_backups
                         WHERE prompt_id = OLD.prompt_id;
 
                         INSERT INTO prompt_backups (
-                            prompt_id, account_id, username, prompt_name, prompt_type,
-                            prompt_content, version_number, backup_type, backup_reason, metadata
+                            prompt_id, account_id, username, prompt_name, prompt_content,
+                            version_number, backup_type, backup_reason, metadata
                         )
-                        SELECT
-                            OLD.prompt_id, OLD.account_id, a.username, OLD.name, OLD.prompt_type,
-                            OLD.content, v_version_number, v_backup_type,
+                        VALUES (
+                            OLD.prompt_id, OLD.account_id, v_username, OLD.name, OLD.content,
+                            v_version_number, v_backup_type,
                             CASE WHEN TG_OP = 'DELETE' THEN 'Automatic backup before deletion'
                                  ELSE 'Automatic backup before update' END,
                             jsonb_build_object(
                                 'is_active', OLD.is_active,
                                 'created_time', OLD.created_time,
-                                'updated_time', OLD.updated_time,
-                                'mongo_object_id', OLD.mongo_object_id
+                                'updated_time', OLD.updated_time
                             )
-                        FROM accounts a
-                        WHERE a.account_id = OLD.account_id;
-
+                        );
                         RETURN OLD;
                     END;
                     $$ LANGUAGE plpgsql;
                 """)
 
-                cursor.execute("""
-                    CREATE OR REPLACE FUNCTION update_variation_usage()
-                    RETURNS TRIGGER AS $$
-                    BEGIN
-                        IF NEW.used = TRUE AND OLD.used = FALSE THEN
-                            NEW.used_at = CURRENT_TIMESTAMP;
-                        END IF;
-                        RETURN NEW;
-                    END;
-                    $$ LANGUAGE plpgsql;
-                """)
-
-                logger.info("✓ Trigger functions ready (4 functions)")
+                logger.info("✓ Trigger functions ready")
 
                 # ======================================================
                 # STEP 4: CREATE TRIGGERS
@@ -597,9 +381,21 @@ def create_postgres_tables():
                         FOR EACH ROW
                         EXECUTE FUNCTION update_updated_time_column();
                     """),
-                    ("trg_extraction_state_updated_at", "account_extraction_state", """
+                    ("update_survey_sites_updated_time", "survey_sites", """
+                        CREATE TRIGGER update_survey_sites_updated_time
+                        BEFORE UPDATE ON survey_sites
+                        FOR EACH ROW
+                        EXECUTE FUNCTION update_updated_time_column();
+                    """),
+                    ("update_workflows_updated_time", "workflows", """
+                        CREATE TRIGGER update_workflows_updated_time
+                        BEFORE UPDATE ON workflows
+                        FOR EACH ROW
+                        EXECUTE FUNCTION update_updated_time_column();
+                    """),
+                    ("trg_extraction_state_updated_at", "extraction_state", """
                         CREATE TRIGGER trg_extraction_state_updated_at
-                        BEFORE UPDATE ON account_extraction_state
+                        BEFORE UPDATE ON extraction_state
                         FOR EACH ROW
                         EXECUTE FUNCTION update_extraction_state_updated_at();
                     """),
@@ -615,12 +411,6 @@ def create_postgres_tables():
                         BEFORE DELETE ON prompts
                         FOR EACH ROW
                         EXECUTE FUNCTION auto_backup_prompt();
-                    """),
-                    ("update_variation_usage_trigger", "prompt_variations", """
-                        CREATE TRIGGER update_variation_usage_trigger
-                        BEFORE UPDATE ON prompt_variations
-                        FOR EACH ROW
-                        EXECUTE FUNCTION update_variation_usage();
                     """),
                 ]
 
@@ -645,554 +435,322 @@ def create_postgres_tables():
                 # ======================================================
                 logger.info("Creating helper functions...")
 
-                # ── Extracted URLs helpers ─────────────────────────────
-
+                # Get questions by survey site
                 cursor.execute("""
-                    CREATE OR REPLACE FUNCTION insert_extracted_url(
-                        p_account_id INTEGER,
-                        p_url TEXT,
-                        p_tweet_id VARCHAR(30),
-                        p_tweet_text TEXT DEFAULT NULL,
-                        p_is_reply BOOLEAN DEFAULT FALSE,
-                        p_source_page TEXT DEFAULT NULL,
-                        p_extraction_batch_id VARCHAR(100) DEFAULT NULL,
-                        p_metadata JSONB DEFAULT NULL
-                    )
-                    RETURNS INTEGER AS $$
-                    DECLARE
-                        v_extracted_url_id INTEGER;
-                    BEGIN
-                        INSERT INTO extracted_urls (
-                            account_id, url, tweet_id, tweet_text, is_reply,
-                            source_page, extraction_batch_id, metadata
-                        )
-                        VALUES (
-                            p_account_id, p_url, p_tweet_id, p_tweet_text, p_is_reply,
-                            p_source_page, p_extraction_batch_id, p_metadata
-                        )
-                        ON CONFLICT (account_id, url) DO NOTHING
-                        RETURNING extracted_url_id INTO v_extracted_url_id;
-
-                        IF v_extracted_url_id IS NULL THEN
-                            SELECT extracted_url_id INTO v_extracted_url_id
-                            FROM extracted_urls
-                            WHERE account_id = p_account_id AND url = p_url;
-                        END IF;
-
-                        RETURN v_extracted_url_id;
-                    END;
-                    $$ LANGUAGE plpgsql;
-                """)
-
-                cursor.execute("""
-                    CREATE OR REPLACE FUNCTION get_urls_needing_parent_extraction(
-                        p_account_id INTEGER,
-                        p_limit INTEGER DEFAULT 100
-                    )
+                    CREATE OR REPLACE FUNCTION get_questions_by_site(p_site_id INTEGER)
                     RETURNS TABLE (
-                        extracted_url_id INTEGER,
-                        url TEXT,
-                        tweet_id VARCHAR(30),
-                        tweet_text TEXT
+                        question_id INTEGER,
+                        question_text TEXT,
+                        question_type VARCHAR,
+                        options JSONB,
+                        required BOOLEAN,
+                        answer_count BIGINT,
+                        workflow_name VARCHAR
                     ) AS $$
                     BEGIN
                         RETURN QUERY
                         SELECT
-                            eu.extracted_url_id,
-                            eu.url,
-                            eu.tweet_id,
-                            eu.tweet_text
-                        FROM extracted_urls eu
-                        WHERE eu.account_id = p_account_id
-                          AND eu.is_reply = TRUE
-                          AND eu.parent_extraction_attempted = FALSE
-                        ORDER BY eu.extracted_at ASC
-                        LIMIT p_limit;
+                            q.question_id,
+                            q.question_text,
+                            q.question_type,
+                            q.options,
+                            q.required,
+                            COUNT(a.answer_id)::BIGINT,
+                            w.workflow_name
+                        FROM questions q
+                        LEFT JOIN answers a ON q.question_id = a.question_id
+                        LEFT JOIN workflows w ON q.workflow_id = w.workflow_id
+                        WHERE q.survey_site_id = p_site_id AND q.is_active = TRUE
+                        GROUP BY q.question_id, q.question_text, q.question_type, 
+                                 q.options, q.required, w.workflow_name
+                        ORDER BY q.order_index, q.extracted_at;
                     END;
                     $$ LANGUAGE plpgsql;
                 """)
 
+                # Get answers for a question
                 cursor.execute("""
-                    CREATE OR REPLACE FUNCTION mark_parent_extraction_attempted(
-                        p_extracted_url_id INTEGER,
-                        p_parent_found BOOLEAN,
-                        p_parent_tweet_id VARCHAR(30) DEFAULT NULL,
-                        p_parent_tweet_url TEXT DEFAULT NULL,
-                        p_parent_url_id INTEGER DEFAULT NULL
-                    )
-                    RETURNS BOOLEAN AS $$
-                    BEGIN
-                        UPDATE extracted_urls
-                        SET parent_extraction_attempted = TRUE,
-                            parent_extraction_time = CURRENT_TIMESTAMP,
-                            parent_extracted = p_parent_found,
-                            parent_tweet_id = p_parent_tweet_id,
-                            parent_tweet_url = p_parent_tweet_url,
-                            parent_url_id = p_parent_url_id
-                        WHERE extracted_url_id = p_extracted_url_id;
-                        RETURN FOUND;
-                    END;
-                    $$ LANGUAGE plpgsql;
-                """)
-
-                cursor.execute("""
-                    CREATE OR REPLACE FUNCTION insert_parent_tweet_to_links(
-                        p_parent_url TEXT,
-                        p_parent_tweet_id VARCHAR(30),
-                        p_child_extracted_url_id INTEGER,
-                        p_account_id INTEGER,
-                        p_parent_extracted_url_id INTEGER DEFAULT NULL,
-                        p_tweeted_time TIMESTAMP DEFAULT NULL,
-                        p_tweeted_date DATE DEFAULT NULL
-                    )
-                    RETURNS INTEGER AS $$
-                    DECLARE
-                        v_parent_links_id INTEGER;
-                    BEGIN
-                        INSERT INTO links (
-                            account_id, link, tweet_id, tweeted_time, tweeted_date,
-                            extracted_url_id, is_parent_tweet,
-                            scraped_time, workflow_status, within_limit, used, filtered
-                        )
-                        VALUES (
-                            p_account_id, p_parent_url, p_parent_tweet_id,
-                            p_tweeted_time, p_tweeted_date,
-                            p_child_extracted_url_id, TRUE,
-                            CURRENT_TIMESTAMP, 'pending', FALSE, FALSE, FALSE
-                        )
-                        ON CONFLICT (link) DO UPDATE SET
-                            is_parent_tweet  = TRUE,
-                            extracted_url_id = EXCLUDED.extracted_url_id,
-                            account_id       = EXCLUDED.account_id
-                        RETURNING links_id INTO v_parent_links_id;
-
-                        IF p_parent_extracted_url_id IS NOT NULL THEN
-                            UPDATE extracted_urls
-                            SET linked_to_links_table = TRUE,
-                                links_table_id        = v_parent_links_id
-                            WHERE extracted_url_id = p_parent_extracted_url_id;
-                        END IF;
-
-                        UPDATE extracted_urls
-                        SET links_table_id = v_parent_links_id
-                        WHERE extracted_url_id = p_child_extracted_url_id;
-
-                        RETURN v_parent_links_id;
-                    END;
-                    $$ LANGUAGE plpgsql;
-                """)
-
-                # ── Extraction state helpers ───────────────────────────
-
-                cursor.execute("""
-                    CREATE OR REPLACE FUNCTION reset_extraction_state(p_username VARCHAR)
-                    RETURNS BOOLEAN AS $$
-                    BEGIN
-                        UPDATE account_extraction_state
-                        SET last_seen_tweet_id     = NULL,
-                            last_extraction_time   = NULL,
-                            tweets_found_last_run  = 0,
-                            parents_found_last_run = 0
-                        WHERE username = p_username;
-                        RETURN FOUND;
-                    END;
-                    $$ LANGUAGE plpgsql;
-                """)
-
-                cursor.execute("""
-                    CREATE OR REPLACE FUNCTION reset_all_extraction_state()
-                    RETURNS INTEGER AS $$
-                    DECLARE
-                        v_count INTEGER;
-                    BEGIN
-                        UPDATE account_extraction_state
-                        SET last_seen_tweet_id     = NULL,
-                            last_extraction_time   = NULL,
-                            tweets_found_last_run  = 0,
-                            parents_found_last_run = 0;
-                        GET DIAGNOSTICS v_count = ROW_COUNT;
-                        RETURN v_count;
-                    END;
-                    $$ LANGUAGE plpgsql;
-                """)
-
-                cursor.execute("""
-                    CREATE OR REPLACE FUNCTION upsert_extraction_state(
-                        p_username              VARCHAR,
-                        p_last_seen_tweet_id    VARCHAR(30),
-                        p_last_tweet_url        TEXT    DEFAULT NULL,
-                        p_tweets_found          INTEGER DEFAULT 0,
-                        p_parents_found         INTEGER DEFAULT 0
-                    )
-                    RETURNS VOID AS $$
-                    BEGIN
-                        INSERT INTO account_extraction_state (
-                            username,
-                            last_seen_tweet_id,
-                            last_extraction_time,
-                            last_tweet_url,
-                            tweets_found_last_run,
-                            parents_found_last_run
-                        )
-                        VALUES (
-                            p_username,
-                            p_last_seen_tweet_id,
-                            NOW(),
-                            p_last_tweet_url,
-                            p_tweets_found,
-                            p_parents_found
-                        )
-                        ON CONFLICT (username) DO UPDATE
-                            SET last_seen_tweet_id     = EXCLUDED.last_seen_tweet_id,
-                                last_extraction_time   = EXCLUDED.last_extraction_time,
-                                last_tweet_url         = EXCLUDED.last_tweet_url,
-                                tweets_found_last_run  = EXCLUDED.tweets_found_last_run,
-                                parents_found_last_run = EXCLUDED.parents_found_last_run;
-                    END;
-                    $$ LANGUAGE plpgsql;
-                """)
-
-                # ── Chat link helper ───────────────────────────────────
-
-                cursor.execute("""
-                    CREATE OR REPLACE FUNCTION build_chat_link(
-                        p_your_user_id  VARCHAR(30),
-                        p_their_user_id VARCHAR(30)
-                    )
-                    RETURNS TEXT AS $$
-                    BEGIN
-                        IF p_your_user_id IS NULL OR p_their_user_id IS NULL THEN
-                            RETURN NULL;
-                        END IF;
-                        RETURN 'https://x.com/i/chat/' || p_your_user_id || '-' || p_their_user_id;
-                    END;
-                    $$ LANGUAGE plpgsql IMMUTABLE;
-                """)
-
-                # ── Statistics helpers ─────────────────────────────────
-
-                cursor.execute("""
-                    CREATE OR REPLACE FUNCTION get_extraction_statistics(p_account_id INTEGER)
+                    CREATE OR REPLACE FUNCTION get_answers_for_question(p_question_id INTEGER)
                     RETURNS TABLE (
-                        total_extracted BIGINT,
-                        total_replies BIGINT,
-                        total_regular BIGINT,
-                        pending_parent_extraction BIGINT,
-                        parents_found BIGINT,
-                        parents_not_found BIGINT,
-                        moved_to_links BIGINT,
-                        pending_move_to_links BIGINT
+                        answer_id INTEGER,
+                        account_username VARCHAR,
+                        answer_text TEXT,
+                        answer_value_numeric NUMERIC,
+                        answer_value_boolean BOOLEAN,
+                        submitted_at TIMESTAMP,
+                        submission_batch_id VARCHAR,
+                        workflow_name VARCHAR
                     ) AS $$
                     BEGIN
                         RETURN QUERY
                         SELECT
-                            COUNT(*)::BIGINT,
-                            COUNT(CASE WHEN is_reply = TRUE THEN 1 END)::BIGINT,
-                            COUNT(CASE WHEN is_reply = FALSE THEN 1 END)::BIGINT,
-                            COUNT(CASE WHEN is_reply = TRUE AND parent_extraction_attempted = FALSE THEN 1 END)::BIGINT,
-                            COUNT(CASE WHEN parent_extracted = TRUE THEN 1 END)::BIGINT,
-                            COUNT(CASE WHEN is_reply = TRUE AND parent_extraction_attempted = TRUE AND parent_extracted = FALSE THEN 1 END)::BIGINT,
-                            COUNT(CASE WHEN linked_to_links_table = TRUE THEN 1 END)::BIGINT,
-                            COUNT(CASE WHEN linked_to_links_table = FALSE THEN 1 END)::BIGINT
-                        FROM extracted_urls
+                            a.answer_id,
+                            acc.username,
+                            a.answer_text,
+                            a.answer_value_numeric,
+                            a.answer_value_boolean,
+                            a.submitted_at,
+                            a.submission_batch_id,
+                            w.workflow_name
+                        FROM answers a
+                        LEFT JOIN accounts acc ON a.account_id = acc.account_id
+                        LEFT JOIN workflows w ON a.workflow_id = w.workflow_id
+                        WHERE a.question_id = p_question_id
+                        ORDER BY a.submitted_at DESC;
+                    END;
+                    $$ LANGUAGE plpgsql;
+                """)
+
+                # Get prompt for account (should be 0 or 1)
+                cursor.execute("""
+                    CREATE OR REPLACE FUNCTION get_prompt_for_account(p_account_id INTEGER)
+                    RETURNS TABLE (
+                        prompt_id INTEGER,
+                        prompt_name VARCHAR,
+                        prompt_content TEXT,
+                        is_active BOOLEAN
+                    ) AS $$
+                    BEGIN
+                        RETURN QUERY
+                        SELECT prompt_id, name, content, is_active
+                        FROM prompts
                         WHERE account_id = p_account_id;
                     END;
                     $$ LANGUAGE plpgsql;
                 """)
 
-                # ── Prompt helpers ─────────────────────────────────────
-
+                # Get workflows by site
                 cursor.execute("""
-                    CREATE OR REPLACE FUNCTION get_latest_prompt_backup(p_prompt_id INTEGER)
+                    CREATE OR REPLACE FUNCTION get_workflows_by_site(p_site_id INTEGER)
                     RETURNS TABLE (
-                        backup_id INTEGER,
-                        version_number INTEGER,
-                        prompt_content TEXT,
-                        backed_up_at TIMESTAMP
-                    ) AS $$
-                    BEGIN
-                        RETURN QUERY
-                        SELECT pb.backup_id, pb.version_number, pb.prompt_content, pb.backed_up_at
-                        FROM prompt_backups pb
-                        WHERE pb.prompt_id = p_prompt_id
-                        ORDER BY pb.version_number DESC
-                        LIMIT 1;
-                    END;
-                    $$ LANGUAGE plpgsql;
-                """)
-
-                cursor.execute("""
-                    CREATE OR REPLACE FUNCTION get_all_prompt_backups(
-                        p_prompt_id INTEGER DEFAULT NULL,
-                        p_username VARCHAR DEFAULT NULL,
-                        p_prompt_type VARCHAR DEFAULT NULL
-                    )
-                    RETURNS TABLE (
-                        backup_id INTEGER,
-                        prompt_id INTEGER,
-                        username VARCHAR,
-                        prompt_name VARCHAR,
-                        prompt_type VARCHAR,
-                        version_number INTEGER,
-                        backed_up_at TIMESTAMP,
-                        backup_type VARCHAR,
-                        is_restorable BOOLEAN
+                        workflow_id INTEGER,
+                        workflow_name VARCHAR,
+                        workflow_type VARCHAR,
+                        question_count BIGINT,
+                        answer_count BIGINT,
+                        created_time TIMESTAMP,
+                        is_active BOOLEAN
                     ) AS $$
                     BEGIN
                         RETURN QUERY
                         SELECT
-                            pb.backup_id, pb.prompt_id, pb.username, pb.prompt_name,
-                            pb.prompt_type, pb.version_number, pb.backed_up_at,
-                            pb.backup_type, pb.is_restorable
-                        FROM prompt_backups pb
-                        WHERE (p_prompt_id IS NULL OR pb.prompt_id = p_prompt_id)
-                          AND (p_username IS NULL OR pb.username = p_username)
-                          AND (p_prompt_type IS NULL OR pb.prompt_type = p_prompt_type)
-                        ORDER BY pb.backed_up_at DESC;
+                            w.workflow_id,
+                            w.workflow_name,
+                            w.workflow_type,
+                            COUNT(DISTINCT q.question_id)::BIGINT,
+                            COUNT(DISTINCT a.answer_id)::BIGINT,
+                            w.created_time,
+                            w.is_active
+                        FROM workflows w
+                        LEFT JOIN questions q ON w.workflow_id = q.workflow_id
+                        LEFT JOIN answers a ON w.workflow_id = a.workflow_id
+                        WHERE w.site_id = p_site_id
+                        GROUP BY w.workflow_id, w.workflow_name, w.workflow_type, 
+                                 w.created_time, w.is_active
+                        ORDER BY w.created_time DESC;
                     END;
                     $$ LANGUAGE plpgsql;
                 """)
 
+                # Record extraction batch
                 cursor.execute("""
-                    CREATE OR REPLACE FUNCTION get_prompt_variations(
-                        p_prompt_id INTEGER,
-                        p_unused_only BOOLEAN DEFAULT FALSE
-                    )
-                    RETURNS TABLE (
-                        variation_id INTEGER,
-                        variation_number INTEGER,
-                        variation_content TEXT,
-                        used BOOLEAN,
-                        created_at TIMESTAMP,
-                        copied_count INTEGER
-                    ) AS $$
+                    CREATE OR REPLACE FUNCTION record_extraction_batch(
+                        p_account_id INTEGER,
+                        p_site_id INTEGER,
+                        p_batch_id VARCHAR,
+                        p_questions_found INTEGER
+                    ) RETURNS VOID AS $$
                     BEGIN
-                        RETURN QUERY
-                        SELECT
-                            pv.variation_id, pv.variation_number, pv.variation_content,
-                            pv.used, pv.created_at, pv.copied_count
-                        FROM prompt_variations pv
-                        WHERE pv.parent_prompt_id = p_prompt_id
-                          AND pv.is_active = TRUE
-                          AND (p_unused_only = FALSE OR pv.used = FALSE)
-                        ORDER BY pv.variation_number;
+                        INSERT INTO extraction_state (
+                            account_id, site_id, last_extraction_time,
+                            last_extraction_batch_id, questions_found_last_run
+                        ) VALUES (
+                            p_account_id, p_site_id, CURRENT_TIMESTAMP,
+                            p_batch_id, p_questions_found
+                        )
+                        ON CONFLICT (account_id, site_id) DO UPDATE SET
+                            last_extraction_time = CURRENT_TIMESTAMP,
+                            last_extraction_batch_id = EXCLUDED.last_extraction_batch_id,
+                            questions_found_last_run = EXCLUDED.questions_found_last_run,
+                            updated_at = CURRENT_TIMESTAMP;
                     END;
                     $$ LANGUAGE plpgsql;
                 """)
 
+                # Get answer statistics for a question
                 cursor.execute("""
-                    CREATE OR REPLACE FUNCTION mark_variation_used(p_variation_id INTEGER)
-                    RETURNS BOOLEAN AS $$
+                    CREATE OR REPLACE FUNCTION get_answer_statistics(p_question_id INTEGER)
+                    RETURNS JSONB AS $$
+                    DECLARE
+                        v_question_type VARCHAR;
+                        v_result JSONB;
                     BEGIN
-                        UPDATE prompt_variations
-                        SET used = TRUE, used_at = CURRENT_TIMESTAMP
-                        WHERE variation_id = p_variation_id;
-                        RETURN FOUND;
+                        SELECT question_type INTO v_question_type
+                        FROM questions
+                        WHERE question_id = p_question_id;
+
+                        IF v_question_type = 'multiple_choice' THEN
+                            SELECT jsonb_build_object(
+                                'type', 'multiple_choice',
+                                'total_answers', COUNT(*),
+                                'breakdown', jsonb_object_agg(
+                                    COALESCE(answer_text, 'unknown'),
+                                    COUNT(*)
+                                )
+                            ) INTO v_result
+                            FROM answers
+                            WHERE question_id = p_question_id;
+                            
+                        ELSIF v_question_type = 'rating' THEN
+                            SELECT jsonb_build_object(
+                                'type', 'rating',
+                                'total_answers', COUNT(*),
+                                'average', AVG(answer_value_numeric),
+                                'min', MIN(answer_value_numeric),
+                                'max', MAX(answer_value_numeric),
+                                'stddev', STDDEV(answer_value_numeric)
+                            ) INTO v_result
+                            FROM answers
+                            WHERE question_id = p_question_id;
+                            
+                        ELSIF v_question_type = 'yes_no' THEN
+                            SELECT jsonb_build_object(
+                                'type', 'yes_no',
+                                'total_answers', COUNT(*),
+                                'yes_count', COUNT(*) FILTER (WHERE answer_value_boolean = TRUE),
+                                'no_count', COUNT(*) FILTER (WHERE answer_value_boolean = FALSE)
+                            ) INTO v_result
+                            FROM answers
+                            WHERE question_id = p_question_id;
+                            
+                        ELSE
+                            SELECT jsonb_build_object(
+                                'type', 'text',
+                                'total_answers', COUNT(*),
+                                'unique_responses', COUNT(DISTINCT answer_text),
+                                'avg_length', AVG(LENGTH(answer_text))
+                            ) INTO v_result
+                            FROM answers
+                            WHERE question_id = p_question_id;
+                        END IF;
+
+                        RETURN v_result;
                     END;
                     $$ LANGUAGE plpgsql;
                 """)
 
-                cursor.execute("""
-                    CREATE OR REPLACE FUNCTION increment_variation_copy_count(p_variation_id INTEGER)
-                    RETURNS BOOLEAN AS $$
-                    BEGIN
-                        UPDATE prompt_variations
-                        SET copied_count   = copied_count + 1,
-                            last_copied_at = CURRENT_TIMESTAMP
-                        WHERE variation_id = p_variation_id;
-                        RETURN FOUND;
-                    END;
-                    $$ LANGUAGE plpgsql;
-                """)
-
-                cursor.execute("""
-                    CREATE OR REPLACE FUNCTION get_account_variation_stats(p_account_id INTEGER)
-                    RETURNS TABLE (
-                        prompt_type VARCHAR,
-                        total_variations BIGINT,
-                        unused_variations BIGINT,
-                        used_variations BIGINT,
-                        total_copied BIGINT
-                    ) AS $$
-                    BEGIN
-                        RETURN QUERY
-                        SELECT
-                            pv.prompt_type,
-                            COUNT(*)::BIGINT,
-                            COUNT(CASE WHEN pv.used = FALSE THEN 1 END)::BIGINT,
-                            COUNT(CASE WHEN pv.used = TRUE THEN 1 END)::BIGINT,
-                            SUM(pv.copied_count)::BIGINT
-                        FROM prompt_variations pv
-                        WHERE pv.account_id = p_account_id
-                          AND pv.is_active = TRUE
-                        GROUP BY pv.prompt_type;
-                    END;
-                    $$ LANGUAGE plpgsql;
-                """)
-
-                # ── Backward compatibility ─────────────────────────────
-
-                cursor.execute("""
-                    CREATE OR REPLACE FUNCTION get_available_accounts()
-                    RETURNS TABLE (
-                        account_id INTEGER,
-                        username VARCHAR,
-                        profile_id VARCHAR,
-                        created_time TIMESTAMP
-                    ) AS $$
-                    BEGIN
-                        RETURN QUERY
-                        SELECT a.account_id, a.username, a.profile_id, a.created_time
-                        FROM accounts a
-                        ORDER BY a.username;
-                    END;
-                    $$ LANGUAGE plpgsql;
-                """)
-
-                logger.info("✓ All helper functions ready (17 functions)")
+                logger.info("✓ Helper functions ready")
 
                 # ======================================================
                 # STEP 6: CREATE VIEWS
-                # PostgreSQL does not allow CREATE OR REPLACE VIEW to change
-                # column names or add columns in a different position. We
-                # therefore DROP each view first (CASCADE is safe — views
-                # hold no data) and then recreate it fresh. This is
-                # idempotent and harmless on a new database too.
                 # ======================================================
-                logger.info("Dropping old views (safe — no data) and recreating...")
+                logger.info("Creating views...")
 
+                # Drop existing views
                 views_to_drop = [
-                    "extracted_urls_pending_parent",
-                    "extracted_urls_with_parents",
-                    "parent_tweets_in_links",
-                    "links_with_chat",
-                    "extraction_state_summary",
+                    "survey_site_summary",
+                    "account_summary",
+                    "question_stats",
+                    "recent_extractions",
                     "prompt_backup_summary",
-                    "prompt_variations_summary",
-                    "content_with_variations",
+                    "workflow_summary"
                 ]
                 for vname in views_to_drop:
                     cursor.execute(f"DROP VIEW IF EXISTS {vname} CASCADE;")
-                logger.info(f"  ↳ Dropped {len(views_to_drop)} views (CASCADE)")
+                logger.info(f"  ↳ Dropped {len(views_to_drop)} views")
 
-                # Child tweets awaiting parent extraction
+                # Survey site summary
                 cursor.execute("""
-                    CREATE VIEW extracted_urls_pending_parent AS
+                    CREATE VIEW survey_site_summary AS
                     SELECT
-                        eu.extracted_url_id,
-                        eu.account_id,
+                        ss.site_id,
+                        ss.country,
+                        ss.url,
+                        COUNT(DISTINCT q.question_id) as total_questions,
+                        COUNT(DISTINCT CASE WHEN q.is_active THEN q.question_id END) as active_questions,
+                        COUNT(DISTINCT q.account_id) as accounts_with_questions,
+                        COUNT(DISTINCT a.answer_id) as total_answers,
+                        COUNT(DISTINCT a.account_id) as unique_respondents,
+                        COUNT(DISTINCT w.workflow_id) as total_workflows,
+                        MIN(q.extracted_at) as first_question,
+                        MAX(q.extracted_at) as latest_question,
+                        COUNT(DISTINCT q.extraction_batch_id) as extraction_batches
+                    FROM survey_sites ss
+                    LEFT JOIN questions q ON ss.site_id = q.survey_site_id
+                    LEFT JOIN answers a ON q.question_id = a.question_id
+                    LEFT JOIN workflows w ON ss.site_id = w.site_id
+                    GROUP BY ss.site_id, ss.country, ss.url;
+                """)
+
+                # Account summary
+                cursor.execute("""
+                    CREATE VIEW account_summary AS
+                    SELECT
+                        a.account_id,
                         a.username,
-                        eu.url as child_url,
-                        eu.tweet_id as child_tweet_id,
-                        eu.is_reply,
-                        eu.extracted_at,
-                        eu.extraction_batch_id
-                    FROM extracted_urls eu
-                    JOIN accounts a ON eu.account_id = a.account_id
-                    WHERE eu.is_reply = TRUE
-                      AND eu.parent_extraction_attempted = FALSE
-                    ORDER BY eu.extracted_at ASC;
+                        a.country,
+                        a.created_time,
+                        a.total_surveys_processed,
+                        COUNT(DISTINCT q.question_id) as questions_extracted,
+                        COUNT(DISTINCT ans.answer_id) as answers_submitted,
+                        COUNT(DISTINCT q.survey_site_id) as sites_participated,
+                        COUNT(DISTINCT w.workflow_id) as workflows_used,
+                        MAX(ans.submitted_at) as last_answer,
+                        p.prompt_id,
+                        p.name as prompt_name,
+                        p.is_active as prompt_active
+                    FROM accounts a
+                    LEFT JOIN questions q ON a.account_id = q.account_id
+                    LEFT JOIN answers ans ON a.account_id = ans.account_id
+                    LEFT JOIN workflows w ON ans.workflow_id = w.workflow_id
+                    LEFT JOIN prompts p ON a.account_id = p.account_id
+                    GROUP BY a.account_id, a.username, a.country, a.created_time, 
+                             a.total_surveys_processed, p.prompt_id, p.name, p.is_active;
                 """)
 
-                # Child tweets with parent information
+                # Question statistics
                 cursor.execute("""
-                    CREATE VIEW extracted_urls_with_parents AS
+                    CREATE VIEW question_stats AS
                     SELECT
-                        eu.extracted_url_id as child_id,
-                        eu.account_id,
-                        a.username,
-                        eu.url as child_url,
-                        eu.tweet_id as child_tweet_id,
-                        eu.parent_extracted,
-                        eu.parent_tweet_url,
-                        eu.parent_tweet_id,
-                        peu.url as parent_url_in_extracted,
-                        l.links_id as parent_links_id,
-                        l.link as parent_url_in_links,
-                        eu.linked_to_links_table as parent_in_links_table,
-                        eu.links_table_id,
-                        eu.extracted_at
-                    FROM extracted_urls eu
-                    JOIN accounts a ON eu.account_id = a.account_id
-                    LEFT JOIN extracted_urls peu ON eu.parent_url_id = peu.extracted_url_id
-                    LEFT JOIN links l ON eu.links_table_id = l.links_id
-                    WHERE eu.is_reply = TRUE
-                    ORDER BY eu.extracted_at DESC;
+                        q.question_id,
+                        q.survey_site_id,
+                        ss.country as survey_site_country,
+                        q.question_text,
+                        q.question_type,
+                        q.options,
+                        q.required,
+                        q.extracted_at,
+                        q.is_active,
+                        w.workflow_name,
+                        w.workflow_type,
+                        COUNT(DISTINCT a.answer_id) as answer_count,
+                        COUNT(DISTINCT a.account_id) as unique_respondents,
+                        MIN(a.submitted_at) as first_answer,
+                        MAX(a.submitted_at) as last_answer,
+                        q.extraction_batch_id
+                    FROM questions q
+                    LEFT JOIN survey_sites ss ON q.survey_site_id = ss.site_id
+                    LEFT JOIN workflows w ON q.workflow_id = w.workflow_id
+                    LEFT JOIN answers a ON q.question_id = a.question_id
+                    GROUP BY q.question_id, q.survey_site_id, ss.country, q.question_text,
+                             q.question_type, q.options, q.required, q.extracted_at,
+                             q.is_active, w.workflow_name, w.workflow_type, q.extraction_batch_id;
                 """)
 
-                # Parent tweets in links table (includes new columns)
+                # Recent extractions
                 cursor.execute("""
-                    CREATE VIEW parent_tweets_in_links AS
+                    CREATE VIEW recent_extractions AS
                     SELECT
-                        l.links_id as parent_links_id,
-                        l.account_id,
-                        a.username,
-                        l.link as parent_url,
-                        l.tweet_id as parent_tweet_id,
-                        l.tweet_author_user_id,
-                        l.chat_link,
-                        l.extracted_url_id as source_child_id,
-                        l.is_parent_tweet,
-                        l.used,
-                        l.filtered,
-                        l.within_limit,
-                        l.executed,
-                        l.success,
-                        l.failure,
-                        l.scraped_time
-                    FROM links l
-                    JOIN accounts a ON l.account_id = a.account_id
-                    WHERE l.is_parent_tweet = TRUE
-                    ORDER BY l.scraped_time DESC;
-                """)
-
-                # Links with resolved chat URLs
-                cursor.execute("""
-                    CREATE VIEW links_with_chat AS
-                    SELECT
-                        l.links_id,
-                        l.account_id,
-                        a.username AS account_username,
-                        l.link AS tweet_url,
-                        l.tweet_id,
-                        l.tweet_author_user_id,
-                        l.chat_link,
-                        l.tweeted_time,
-                        l.used,
-                        l.filtered,
-                        l.executed,
-                        l.success,
-                        l.failure,
-                        l.workflow_status
-                    FROM links l
-                    JOIN accounts a ON l.account_id = a.account_id
-                    WHERE l.chat_link IS NOT NULL
-                    ORDER BY l.tweeted_time DESC NULLS LAST;
-                """)
-
-                # Extraction state summary
-                cursor.execute("""
-                    CREATE VIEW extraction_state_summary AS
-                    SELECT
-                        aes.state_id,
-                        aes.username,
-                        aes.last_seen_tweet_id,
-                        aes.last_extraction_time,
-                        aes.tweets_found_last_run,
-                        aes.parents_found_last_run,
-                        aes.last_tweet_url,
-                        ROUND(
-                            EXTRACT(EPOCH FROM (NOW() - aes.last_extraction_time)) / 3600, 1
-                        ) AS hours_since_last_extraction,
-                        CASE
-                            WHEN aes.last_extraction_time IS NULL THEN TRUE
-                            WHEN NOW() - aes.last_extraction_time > INTERVAL '6 hours' THEN TRUE
-                            ELSE FALSE
-                        END AS is_stale,
-                        aes.created_at,
-                        aes.updated_at
-                    FROM account_extraction_state aes
-                    ORDER BY aes.last_extraction_time DESC NULLS LAST;
+                        extraction_batch_id,
+                        COUNT(*) as question_count,
+                        MIN(extracted_at) as first_extracted,
+                        MAX(extracted_at) as last_extracted,
+                        COUNT(DISTINCT survey_site_id) as site_count,
+                        COUNT(DISTINCT account_id) as account_count
+                    FROM questions
+                    WHERE extraction_batch_id IS NOT NULL
+                    GROUP BY extraction_batch_id
+                    ORDER BY last_extracted DESC;
                 """)
 
                 # Prompt backup summary
@@ -1202,60 +760,63 @@ def create_postgres_tables():
                         p.prompt_id,
                         p.account_id,
                         p.name as current_prompt_name,
-                        p.prompt_type,
                         COUNT(pb.backup_id) as total_backups,
                         MAX(pb.version_number) as latest_version,
                         MIN(pb.backed_up_at) as first_backup,
-                        MAX(pb.backed_up_at) as latest_backup,
-                        COUNT(CASE WHEN pb.is_restorable = TRUE THEN 1 END) as restorable_backups,
-                        COUNT(CASE WHEN pb.restored = TRUE THEN 1 END) as restored_count
+                        MAX(pb.backed_up_at) as latest_backup
                     FROM prompts p
                     LEFT JOIN prompt_backups pb ON p.prompt_id = pb.prompt_id
-                    GROUP BY p.prompt_id, p.account_id, p.name, p.prompt_type;
+                    GROUP BY p.prompt_id, p.account_id, p.name;
                 """)
 
-                # Prompt variations summary
+                # Workflow summary
                 cursor.execute("""
-                    CREATE VIEW prompt_variations_summary AS
+                    CREATE VIEW workflow_summary AS
                     SELECT
-                        p.prompt_id,
-                        p.account_id,
-                        a.username,
-                        p.name as prompt_name,
-                        p.prompt_type,
-                        COUNT(pv.variation_id) as total_variations,
-                        COUNT(CASE WHEN pv.used = FALSE THEN 1 END) as unused_variations,
-                        COUNT(CASE WHEN pv.used = TRUE THEN 1 END) as used_variations,
-                        SUM(pv.copied_count) as total_copies,
-                        MAX(pv.created_at) as latest_generation,
-                        COUNT(DISTINCT pv.generation_batch_id) as generation_batches
-                    FROM prompts p
-                    LEFT JOIN accounts a ON p.account_id = a.account_id
-                    LEFT JOIN prompt_variations pv ON p.prompt_id = pv.parent_prompt_id
-                    GROUP BY p.prompt_id, p.account_id, a.username, p.name, p.prompt_type;
+                        w.workflow_id,
+                        w.workflow_name,
+                        w.workflow_type,
+                        ss.country as site_country,
+                        ss.url as site_url,
+                        COUNT(DISTINCT q.question_id) as questions_processed,
+                        COUNT(DISTINCT a.answer_id) as answers_generated,
+                        w.created_time,
+                        w.updated_time,
+                        w.is_active
+                    FROM workflows w
+                    LEFT JOIN survey_sites ss ON w.site_id = ss.site_id
+                    LEFT JOIN questions q ON w.workflow_id = q.workflow_id
+                    LEFT JOIN answers a ON w.workflow_id = a.workflow_id
+                    GROUP BY w.workflow_id, w.workflow_name, w.workflow_type, 
+                             ss.country, ss.url, w.created_time, w.updated_time, w.is_active;
                 """)
 
-                # Content with variations tracking
+                logger.info("✓ All views ready")
+
+                # ======================================================
+                # STEP 7: INSERT DEFAULT DATA
+                # ======================================================
+                logger.info("Inserting default data...")
+
+                # Insert default survey sites if none exist
                 cursor.execute("""
-                    CREATE OR REPLACE VIEW content_with_variations AS
-                    SELECT
-                        c.content_id,
-                        c.account_id,
-                        c.content_name,
-                        c.content_type,
-                        c.used,
-                        c.created_time,
-                        pv.variation_id,
-                        pv.variation_number,
-                        pv.generation_batch_id,
-                        p.prompt_id,
-                        p.name as prompt_name
-                    FROM content c
-                    LEFT JOIN prompt_variations pv ON c.generated_from_variation_id = pv.variation_id
-                    LEFT JOIN prompts p ON pv.parent_prompt_id = p.prompt_id;
+                    INSERT INTO survey_sites (country, url, description)
+                    SELECT * FROM (VALUES
+                        ('United States', 'https://surveys.usa.gov', 'US Government Surveys'),
+                        ('Canada', 'https://surveys.canada.ca', 'Canadian Surveys'),
+                        ('United Kingdom', 'https://surveys.gov.uk', 'UK Government Surveys'),
+                        ('Australia', 'https://surveys.gov.au', 'Australian Surveys'),
+                        ('Germany', 'https://umfragen.de', 'German Surveys'),
+                        ('France', 'https://sondages.fr', 'French Surveys'),
+                        ('Japan', 'https://surveys.jp', 'Japanese Surveys'),
+                        ('Brazil', 'https://pesquisas.gov.br', 'Brazilian Surveys'),
+                        ('India', 'https://surveys.gov.in', 'Indian Surveys'),
+                        ('Mexico', 'https://encuestas.gob.mx', 'Mexican Surveys')
+                    ) AS v(country, url, description)
+                    WHERE NOT EXISTS (SELECT 1 FROM survey_sites LIMIT 1);
                 """)
 
-                logger.info("✓ All views ready (8 views)")
+                logger.info("✓ Default survey sites inserted")
 
                 # ======================================================
                 # COMMIT & FINISH
@@ -1265,15 +826,26 @@ def create_postgres_tables():
                 logger.info("✅ POSTGRESQL SCHEMA FULLY INITIALIZED")
                 logger.info("=" * 60)
                 logger.info("📊 Schema summary:")
-                logger.info("  • 15 tables (incl. account_extraction_state)")
-                logger.info("  • 17 helper functions")
-                logger.info("  • 8 views (incl. links_with_chat, extraction_state_summary)")
-                logger.info("  • 6 triggers (incl. extraction_state updated_at)")
-                logger.info("  • ~55 indexes")
-                logger.info("🆕 New columns in links table:")
-                logger.info("  • success / failure (execution result tracking)")
-                logger.info("  • tweet_author_user_id (numeric X user ID of tweet author)")
-                logger.info("  • chat_link (https://x.com/i/chat/YOUR_ID-THEIR_ID)")
+                logger.info("  • 10 tables:")
+                logger.info("    - accounts (with country field)")
+                logger.info("    - account_cookies")
+                logger.info("    - survey_sites")
+                logger.info("    - prompts (one per user - UNIQUE constraint)")
+                logger.info("    - prompt_backups")
+                logger.info("    - workflows (linked to survey sites)")
+                logger.info("    - questions (extracted, linked to workflows)")
+                logger.info("    - answers (submitted, linked to workflows)")
+                logger.info("    - extraction_state")
+                logger.info("    - workflow_generation_log")
+                logger.info("  • 7 helper functions")
+                logger.info("  • 6 views")
+                logger.info("  • 7 triggers")
+                logger.info("  • ~40 indexes")
+                logger.info("=" * 60)
+                logger.info("🎯 This schema is optimized for SURVEY AUTOMATION")
+                logger.info("   - Workflows are linked to survey sites")
+                logger.info("   - Questions and answers track which workflow processed them")
+                logger.info("   - One prompt per user for consistent persona")
                 logger.info("=" * 60)
 
                 return True

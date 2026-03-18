@@ -20,11 +20,11 @@ if not logger.handlers:
 
 
 # ============================================================================
-# STATS FUNCTIONS - UPDATED FOR CONTENT-ONLY ARCHITECTURE
+# STATS FUNCTIONS - SURVEY AUTOMATION SCHEMA
 # ============================================================================
 
 def get_accounts_stats_cached() -> Dict[str, Any]:
-    """Get statistics about accounts from the database, cached for performance."""
+    """Get statistics about accounts from the database."""
     try:
         with get_postgres_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cursor:
@@ -35,41 +35,64 @@ def get_accounts_stats_cached() -> Dict[str, Any]:
                 result = cursor.fetchone()
                 stats['total_accounts'] = result['count'] if result else 0
 
-                # Active accounts (have prompts)
+                # Active accounts (is_active = TRUE)
+                cursor.execute("SELECT COUNT(*) AS count FROM accounts WHERE is_active = TRUE")
+                result = cursor.fetchone()
+                stats['active_accounts'] = result['count'] if result else 0
+
+                # Accounts with prompts
                 cursor.execute("""
                     SELECT COUNT(DISTINCT account_id) AS count
                     FROM prompts
                     WHERE is_active = TRUE
                 """)
                 result = cursor.fetchone()
-                stats['active_accounts'] = result['count'] if result else 0
+                stats['accounts_with_prompts'] = result['count'] if result else 0
 
-                # Total prompts
+                # Total active prompts
                 cursor.execute("SELECT COUNT(*) AS count FROM prompts WHERE is_active = TRUE")
                 result = cursor.fetchone()
                 stats['total_prompts'] = result['count'] if result else 0
 
-                # Total content by type
+                # Questions stats
                 cursor.execute("""
                     SELECT
-                        COUNT(*) as total_content,
-                        COUNT(CASE WHEN used = TRUE THEN 1 END) as used_content,
-                        COUNT(CASE WHEN used = FALSE THEN 1 END) as unused_content
-                    FROM content
+                        COUNT(*) as total_questions,
+                        COUNT(CASE WHEN is_active THEN 1 END) as active_questions,
+                        COUNT(DISTINCT survey_site_id) as sites_covered,
+                        COUNT(DISTINCT account_id) as accounts_with_questions
+                    FROM questions
                 """)
                 result = cursor.fetchone()
-                stats['total_content'] = result['total_content'] if result else 0
-                stats['used_content'] = result['used_content'] if result else 0
-                stats['unused_content'] = result['unused_content'] if result else 0
+                stats['total_questions'] = result['total_questions'] if result else 0
+                stats['active_questions'] = result['active_questions'] if result else 0
+                stats['sites_covered'] = result['sites_covered'] if result else 0
+                stats['accounts_with_questions'] = result['accounts_with_questions'] if result else 0
 
-                # Content by custom types
+                # Answers stats
                 cursor.execute("""
-                    SELECT content_type, COUNT(*) as count
-                    FROM content
-                    GROUP BY content_type
+                    SELECT
+                        COUNT(*) as total_answers,
+                        COUNT(DISTINCT account_id) as accounts_with_answers,
+                        COUNT(DISTINCT submission_batch_id) as total_batches,
+                        MAX(submitted_at) as last_answer_at
+                    FROM answers
                 """)
-                content_by_type = cursor.fetchall()
-                stats['content_by_type'] = {row['content_type']: row['count'] for row in content_by_type}
+                result = cursor.fetchone()
+                stats['total_answers'] = result['total_answers'] if result else 0
+                stats['accounts_with_answers'] = result['accounts_with_answers'] if result else 0
+                stats['total_batches'] = result['total_batches'] if result else 0
+                stats['last_answer_at'] = result['last_answer_at'] if result else None
+
+                # Questions by type breakdown
+                cursor.execute("""
+                    SELECT question_type, COUNT(*) as count
+                    FROM questions
+                    WHERE is_active = TRUE
+                    GROUP BY question_type
+                """)
+                rows = cursor.fetchall()
+                stats['questions_by_type'] = {row['question_type']: row['count'] for row in rows}
 
                 logger.info("Successfully retrieved account statistics from PostgreSQL.")
                 return stats
@@ -80,11 +103,17 @@ def get_accounts_stats_cached() -> Dict[str, Any]:
         return {
             'total_accounts': 0,
             'active_accounts': 0,
+            'accounts_with_prompts': 0,
             'total_prompts': 0,
-            'total_content': 0,
-            'used_content': 0,
-            'unused_content': 0,
-            'content_by_type': {}
+            'total_questions': 0,
+            'active_questions': 0,
+            'sites_covered': 0,
+            'accounts_with_questions': 0,
+            'total_answers': 0,
+            'accounts_with_answers': 0,
+            'total_batches': 0,
+            'last_answer_at': None,
+            'questions_by_type': {}
         }
 
 
@@ -103,87 +132,63 @@ def get_detailed_accounts_stats(
                 base_params = []
 
                 if active_filter is not None:
-                    if active_filter:
-                        base_conditions.append("""
-                            EXISTS (
-                                SELECT 1 FROM prompts
-                                WHERE prompts.account_id = accounts.account_id
-                                AND prompts.is_active = TRUE
-                            )
-                        """)
-                    else:
-                        base_conditions.append("""
-                            NOT EXISTS (
-                                SELECT 1 FROM prompts
-                                WHERE prompts.account_id = accounts.account_id
-                                AND prompts.is_active = TRUE
-                            )
-                        """)
+                    base_conditions.append("a.is_active = %s")
+                    base_params.append(active_filter)
 
                 if has_prompts is not None:
                     if has_prompts:
                         base_conditions.append("""
                             EXISTS (
                                 SELECT 1 FROM prompts
-                                WHERE prompts.account_id = accounts.account_id
+                                WHERE prompts.account_id = a.account_id
                             )
                         """)
                     else:
                         base_conditions.append("""
                             NOT EXISTS (
                                 SELECT 1 FROM prompts
-                                WHERE prompts.account_id = accounts.account_id
+                                WHERE prompts.account_id = a.account_id
                             )
                         """)
 
                 if start_time:
-                    base_conditions.append("created_time >= %s")
+                    base_conditions.append("a.created_time >= %s")
                     base_params.append(start_time)
 
                 if end_time:
-                    base_conditions.append("created_time <= %s")
+                    base_conditions.append("a.created_time <= %s")
                     base_params.append(end_time)
 
                 base_where = " AND ".join(base_conditions)
 
-                # Total accounts with filters
-                cursor.execute(f"SELECT COUNT(*) AS count FROM accounts WHERE {base_where}", base_params)
+                cursor.execute(f"SELECT COUNT(*) AS count FROM accounts a WHERE {base_where}", base_params)
                 result = cursor.fetchone()
                 stats['total_accounts'] = result['count'] if result else 0
 
-                # Active accounts (with prompts)
-                active_conditions = base_conditions + ["""
-                    EXISTS (
-                        SELECT 1 FROM prompts
-                        WHERE prompts.account_id = accounts.account_id
-                        AND prompts.is_active = TRUE
-                    )
-                """]
-                active_where = " AND ".join(active_conditions)
-                cursor.execute(f"SELECT COUNT(*) AS count FROM accounts WHERE {active_where}", base_params)
+                cursor.execute(f"""
+                    SELECT COUNT(*) AS count FROM accounts a
+                    WHERE {base_where} AND a.is_active = TRUE
+                """, base_params)
                 result = cursor.fetchone()
                 stats['active_accounts'] = result['count'] if result else 0
 
-                # Total content
                 cursor.execute(f"""
                     SELECT
-                        COUNT(DISTINCT c.content_id) as total_content,
-                        COUNT(DISTINCT c.content_id) FILTER (WHERE c.used = FALSE) as unused_content,
-                        COUNT(DISTINCT c.content_id) FILTER (WHERE c.used = TRUE) as used_content
-                    FROM content c
-                    JOIN accounts a ON c.account_id = a.account_id
+                        COUNT(DISTINCT q.question_id) as total_questions,
+                        COUNT(DISTINCT ans.answer_id) as total_answers
+                    FROM accounts a
+                    LEFT JOIN questions q ON a.account_id = q.account_id
+                    LEFT JOIN answers ans ON a.account_id = ans.account_id
                     WHERE {base_where}
                 """, base_params)
                 result = cursor.fetchone()
-                stats['total_content'] = result['total_content'] if result and result['total_content'] else 0
-                stats['unused_content'] = result['unused_content'] if result and result['unused_content'] else 0
-                stats['used_content'] = result['used_content'] if result and result['used_content'] else 0
+                stats['total_questions'] = result['total_questions'] if result else 0
+                stats['total_answers'] = result['total_answers'] if result else 0
 
-                # Accounts with prompts
                 cursor.execute(f"""
-                    SELECT COUNT(DISTINCT prompts.account_id) as count
-                    FROM prompts
-                    JOIN accounts ON prompts.account_id = accounts.account_id
+                    SELECT COUNT(DISTINCT p.account_id) as count
+                    FROM prompts p
+                    JOIN accounts a ON p.account_id = a.account_id
                     WHERE {base_where}
                 """, base_params)
                 result = cursor.fetchone()
@@ -198,9 +203,8 @@ def get_detailed_accounts_stats(
         return {
             'total_accounts': 0,
             'active_accounts': 0,
-            'total_content': 0,
-            'unused_content': 0,
-            'used_content': 0,
+            'total_questions': 0,
+            'total_answers': 0,
             'accounts_with_prompts': 0
         }
 
@@ -212,45 +216,55 @@ def get_system_overview_stats() -> Dict[str, Any]:
             with conn.cursor(cursor_factory=RealDictCursor) as cursor:
                 stats = {}
 
-                # Total accounts
                 cursor.execute("SELECT COUNT(*) AS count FROM accounts")
                 result = cursor.fetchone()
                 stats['total_accounts'] = result['count'] if result else 0
 
-                # Active prompts
+                cursor.execute("SELECT COUNT(*) AS count FROM accounts WHERE is_active = TRUE")
+                result = cursor.fetchone()
+                stats['active_accounts'] = result['count'] if result else 0
+
                 cursor.execute("SELECT COUNT(*) AS count FROM prompts WHERE is_active = TRUE")
                 result = cursor.fetchone()
                 stats['active_prompts'] = result['count'] if result else 0
 
-                # Content statistics
                 cursor.execute("""
                     SELECT
-                        COUNT(*) AS total,
-                        COUNT(CASE WHEN used = TRUE THEN 1 END) AS used,
-                        COUNT(CASE WHEN used = FALSE THEN 1 END) AS unused
-                    FROM content
+                        COUNT(*) AS total_questions,
+                        COUNT(CASE WHEN is_active THEN 1 END) AS active_questions,
+                        COUNT(DISTINCT question_type) AS unique_question_types,
+                        COUNT(DISTINCT survey_site_id) AS sites_with_questions
+                    FROM questions
                 """)
                 result = cursor.fetchone()
-                stats['total_content'] = result['total'] if result and result['total'] else 0
-                stats['used_content'] = result['used'] if result and result['used'] else 0
-                stats['unused_content'] = result['unused'] if result and result['unused'] else 0
+                stats['total_questions'] = result['total_questions'] if result else 0
+                stats['active_questions'] = result['active_questions'] if result else 0
+                stats['unique_question_types'] = result['unique_question_types'] if result else 0
+                stats['sites_with_questions'] = result['sites_with_questions'] if result else 0
 
-                # Calculate usage percentage
-                if stats['total_content'] > 0:
-                    stats['usage_percentage'] = round(
-                        (stats['used_content'] / stats['total_content']) * 100,
-                        2
+                cursor.execute("""
+                    SELECT
+                        COUNT(*) AS total_answers,
+                        COUNT(DISTINCT account_id) AS answering_accounts,
+                        COUNT(DISTINCT submission_batch_id) AS total_batches
+                    FROM answers
+                """)
+                result = cursor.fetchone()
+                stats['total_answers'] = result['total_answers'] if result else 0
+                stats['answering_accounts'] = result['answering_accounts'] if result else 0
+                stats['total_batches'] = result['total_batches'] if result else 0
+
+                # Response rate: answers / questions
+                if stats['total_questions'] > 0:
+                    stats['response_rate'] = round(
+                        (stats['total_answers'] / stats['total_questions']) * 100, 2
                     )
                 else:
-                    stats['usage_percentage'] = 0.0
+                    stats['response_rate'] = 0.0
 
-                # Unique content types
-                cursor.execute("""
-                    SELECT COUNT(DISTINCT content_type) as count
-                    FROM content
-                """)
+                cursor.execute("SELECT COUNT(*) AS count FROM survey_sites WHERE is_active = TRUE")
                 result = cursor.fetchone()
-                stats['unique_content_types'] = result['count'] if result else 0
+                stats['active_survey_sites'] = result['count'] if result else 0
 
                 logger.info("Successfully retrieved system overview statistics.")
                 return stats
@@ -262,21 +276,22 @@ def get_system_overview_stats() -> Dict[str, Any]:
 
 
 # ============================================================================
-# ACCOUNT CRUD OPERATIONS - UPDATED
+# ACCOUNT CRUD OPERATIONS
 # ============================================================================
 
-def create_account(username: str, profile_id: str, profile_type: str = 'hyperbrowser') -> Optional[int]:
+def create_account(username: str, profile_id: str = None, profile_type: str = 'local_chrome',
+                   country: str = None) -> Optional[int]:
     """Creates a new account in the PostgreSQL accounts table."""
     try:
         with get_postgres_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     '''
-                    INSERT INTO accounts (username, profile_id, profile_type, created_time, updated_time)
-                    VALUES (%s, %s, %s, NOW(), NOW())
+                    INSERT INTO accounts (username, profile_id, profile_type, country, created_time, updated_time)
+                    VALUES (%s, %s, %s, %s, NOW(), NOW())
                     RETURNING account_id
                     ''',
-                    (username, profile_id, profile_type)
+                    (username, profile_id, profile_type, country)
                 )
                 account_id = cursor.fetchone()[0]
                 conn.commit()
@@ -290,7 +305,8 @@ def create_account(username: str, profile_id: str, profile_type: str = 'hyperbro
 
 
 def update_account(account_id: int, username: str = None, profile_id: str = None,
-                   profile_type: str = None) -> bool:
+                   profile_type: str = None, country: str = None,
+                   is_active: bool = None) -> bool:
     """Updates an account in the PostgreSQL accounts table."""
     try:
         with get_postgres_connection() as conn:
@@ -298,15 +314,21 @@ def update_account(account_id: int, username: str = None, profile_id: str = None
                 updates = []
                 params = []
 
-                if username:
+                if username is not None:
                     updates.append("username = %s")
                     params.append(username)
-                if profile_id:
+                if profile_id is not None:
                     updates.append("profile_id = %s")
                     params.append(profile_id)
-                if profile_type:
+                if profile_type is not None:
                     updates.append("profile_type = %s")
                     params.append(profile_type)
+                if country is not None:
+                    updates.append("country = %s")
+                    params.append(country)
+                if is_active is not None:
+                    updates.append("is_active = %s")
+                    params.append(is_active)
 
                 if not updates:
                     return False
@@ -331,10 +353,7 @@ def delete_account(account_id: int) -> bool:
     try:
         with get_postgres_connection() as conn:
             with conn.cursor() as cursor:
-                cursor.execute(
-                    'DELETE FROM accounts WHERE account_id = %s',
-                    (account_id,)
-                )
+                cursor.execute('DELETE FROM accounts WHERE account_id = %s', (account_id,))
                 conn.commit()
                 logger.info(f"Account {account_id} deleted successfully.")
                 return True
@@ -345,8 +364,8 @@ def delete_account(account_id: int) -> bool:
         return False
 
 
-def update_account_stats(account_id: int, content_processed: int = 0) -> bool:
-    """Updates account statistics - SIMPLIFIED for content-only architecture."""
+def update_account_stats(account_id: int, surveys_processed: int = 0) -> bool:
+    """Updates account survey statistics."""
     try:
         with get_postgres_connection() as conn:
             with conn.cursor() as cursor:
@@ -354,11 +373,11 @@ def update_account_stats(account_id: int, content_processed: int = 0) -> bool:
                     '''
                     UPDATE accounts
                     SET
-                        total_content_processed = total_content_processed + %s,
+                        total_surveys_processed = total_surveys_processed + %s,
                         updated_time = NOW()
                     WHERE account_id = %s
                     ''',
-                    (content_processed, account_id)
+                    (surveys_processed, account_id)
                 )
                 conn.commit()
                 logger.info(f"Account {account_id} statistics updated successfully.")
@@ -371,7 +390,7 @@ def update_account_stats(account_id: int, content_processed: int = 0) -> bool:
 
 
 # ============================================================================
-# ACCOUNT RETRIEVAL - UPDATED
+# ACCOUNT RETRIEVAL
 # ============================================================================
 
 def get_account_by_id(account_id: int) -> Optional[Dict[str, Any]]:
@@ -383,14 +402,16 @@ def get_account_by_id(account_id: int) -> Optional[Dict[str, Any]]:
                     SELECT
                         account_id,
                         username,
+                        country,
                         profile_id,
                         profile_type,
                         mongo_object_id,
                         created_time,
                         updated_time,
-                        total_content_processed,
+                        total_surveys_processed,
                         has_cookies,
-                        cookies_last_updated
+                        cookies_last_updated,
+                        is_active
                     FROM accounts
                     WHERE account_id = %s
                 """, (account_id,))
@@ -417,12 +438,14 @@ def get_all_accounts() -> List[Dict[str, Any]]:
                     SELECT
                         account_id,
                         username,
+                        country,
                         profile_id,
                         profile_type,
                         mongo_object_id,
                         created_time,
                         updated_time,
-                        has_cookies
+                        has_cookies,
+                        is_active
                     FROM accounts
                     ORDER BY username
                 """)
@@ -436,6 +459,36 @@ def get_all_accounts() -> List[Dict[str, Any]]:
         return []
 
 
+def get_all_active_accounts() -> List[Dict[str, Any]]:
+    """Get all active accounts with their basic information."""
+    try:
+        with get_postgres_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute("""
+                    SELECT
+                        account_id,
+                        username,
+                        country,
+                        profile_id,
+                        profile_type,
+                        mongo_object_id,
+                        created_time,
+                        updated_time,
+                        total_surveys_processed,
+                        has_cookies,
+                        is_active
+                    FROM accounts
+                    WHERE is_active = TRUE
+                    ORDER BY account_id
+                """)
+                accounts = cursor.fetchall()
+                logger.info(f"Retrieved {len(accounts)} active accounts")
+                return [dict(account) for account in accounts]
+    except Exception as e:
+        logger.error(f"Error fetching active accounts: {e}")
+        return []
+
+
 def get_comprehensive_accounts(
     limit: int = None,
     active: Optional[bool] = None,
@@ -443,7 +496,7 @@ def get_comprehensive_accounts(
     start_time: Optional[datetime] = None,
     end_time: Optional[datetime] = None
 ) -> List[Dict[str, Any]]:
-    """Fetches all accounts with comprehensive filtering - UPDATED."""
+    """Fetches all accounts with comprehensive filtering and survey stats."""
     try:
         with get_postgres_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cursor:
@@ -451,29 +504,32 @@ def get_comprehensive_accounts(
                     SELECT
                         a.account_id,
                         a.username,
+                        a.country,
                         a.profile_id,
                         a.profile_type,
                         a.mongo_object_id,
                         a.created_time,
                         a.updated_time,
-                        a.total_content_processed,
+                        a.total_surveys_processed,
                         a.has_cookies,
                         a.cookies_last_updated,
+                        a.is_active,
                         COUNT(DISTINCT p.prompt_id) as prompt_count,
-                        COUNT(DISTINCT c.content_id) as content_count,
-                        COUNT(DISTINCT c.content_id) FILTER (WHERE c.used = FALSE) as unused_content_count
+                        COUNT(DISTINCT q.question_id) as question_count,
+                        COUNT(DISTINCT ans.answer_id) as answer_count,
+                        COUNT(DISTINCT q.survey_site_id) as sites_participated,
+                        MAX(ans.submitted_at) as last_answer_at
                     FROM accounts a
                     LEFT JOIN prompts p ON a.account_id = p.account_id
-                    LEFT JOIN content c ON a.account_id = c.account_id
+                    LEFT JOIN questions q ON a.account_id = q.account_id
+                    LEFT JOIN answers ans ON a.account_id = ans.account_id
                     WHERE 1=1
                 """
                 params = []
 
                 if active is not None:
-                    if active:
-                        query += " AND EXISTS (SELECT 1 FROM prompts WHERE prompts.account_id = a.account_id AND prompts.is_active = TRUE)"
-                    else:
-                        query += " AND NOT EXISTS (SELECT 1 FROM prompts WHERE prompts.account_id = a.account_id AND prompts.is_active = TRUE)"
+                    query += " AND a.is_active = %s"
+                    params.append(active)
 
                 if has_prompts is not None:
                     if has_prompts:
@@ -489,7 +545,12 @@ def get_comprehensive_accounts(
                     query += " AND a.created_time <= %s"
                     params.append(end_time)
 
-                query += " GROUP BY a.account_id ORDER BY a.created_time DESC"
+                query += """
+                    GROUP BY a.account_id, a.username, a.country, a.profile_id, a.profile_type,
+                             a.mongo_object_id, a.created_time, a.updated_time,
+                             a.total_surveys_processed, a.has_cookies, a.cookies_last_updated, a.is_active
+                    ORDER BY a.created_time DESC
+                """
 
                 if limit is not None:
                     query += " LIMIT %s"
@@ -506,35 +567,8 @@ def get_comprehensive_accounts(
         return []
 
 
-def get_all_active_accounts() -> List[Dict[str, Any]]:
-    """Get all active accounts with their basic information."""
-    try:
-        with get_postgres_connection() as conn:
-            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                cursor.execute("""
-                    SELECT
-                        account_id,
-                        username,
-                        profile_id,
-                        profile_type,
-                        mongo_object_id,
-                        created_time,
-                        updated_time,
-                        total_content_processed,
-                        has_cookies
-                    FROM accounts
-                    ORDER BY account_id
-                """)
-                accounts = cursor.fetchall()
-                logger.info(f"Retrieved {len(accounts)} active accounts")
-                return [dict(account) for account in accounts]
-    except Exception as e:
-        logger.error(f"Error fetching active accounts: {e}")
-        return []
-
-
 # ============================================================================
-# MONGODB INTEGRATION - UPDATED
+# MONGODB INTEGRATION
 # ============================================================================
 
 def get_account_with_mongo_id(account_id: int) -> Optional[Dict[str, Any]]:
@@ -546,6 +580,7 @@ def get_account_with_mongo_id(account_id: int) -> Optional[Dict[str, Any]]:
                     SELECT
                         account_id,
                         username,
+                        country,
                         profile_id,
                         profile_type,
                         mongo_object_id,
@@ -591,6 +626,7 @@ def get_account_by_mongo_id(mongo_object_id: str) -> Optional[Dict[str, Any]]:
                     SELECT
                         account_id,
                         username,
+                        country,
                         profile_id,
                         profile_type,
                         mongo_object_id,
@@ -610,107 +646,132 @@ def get_account_by_mongo_id(mongo_object_id: str) -> Optional[Dict[str, Any]]:
 
 
 # ============================================================================
-# CONTENT & PROMPT ANALYSIS - NEW
+# SURVEY-SPECIFIC ANALYSIS
 # ============================================================================
 
-def get_account_content_summary(account_id: int) -> Dict[str, Any]:
-    """Get a summary of all content for a specific account with dynamic content types."""
+def get_account_survey_summary(account_id: int) -> Dict[str, Any]:
+    """Get a full survey summary for a specific account."""
     try:
         with get_postgres_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cursor:
                 summary = {}
 
-                # Get account info
-                cursor.execute("SELECT username, profile_id, has_cookies FROM accounts WHERE account_id = %s", (account_id,))
+                # Account info
+                cursor.execute("""
+                    SELECT username, country, profile_id, has_cookies, is_active,
+                           total_surveys_processed
+                    FROM accounts WHERE account_id = %s
+                """, (account_id,))
                 account_info = cursor.fetchone()
                 if account_info:
                     summary['account'] = dict(account_info)
 
-                # Get content counts by type
+                # Prompt info (one per account)
                 cursor.execute("""
-                    SELECT
-                        content_type,
-                        COUNT(*) as total,
-                        COUNT(CASE WHEN used = TRUE THEN 1 END) as used,
-                        COUNT(CASE WHEN used = FALSE THEN 1 END) as unused
-                    FROM content
-                    WHERE account_id = %s
-                    GROUP BY content_type
-                """, (account_id,))
-
-                content_counts = cursor.fetchall()
-                summary['content_counts'] = {row['content_type']: dict(row) for row in content_counts}
-
-                # Get prompt counts
-                cursor.execute("""
-                    SELECT
-                        COUNT(*) as total_prompts,
-                        COUNT(CASE WHEN is_active = TRUE THEN 1 END) as active_prompts,
-                        COUNT(DISTINCT prompt_type) as unique_types
+                    SELECT prompt_id, name, content, prompt_type, is_active, created_time
                     FROM prompts
                     WHERE account_id = %s
                 """, (account_id,))
+                prompt = cursor.fetchone()
+                summary['prompt'] = dict(prompt) if prompt else None
 
-                prompt_counts = cursor.fetchone()
-                summary['prompt_counts'] = dict(prompt_counts) if prompt_counts else {
-                    'total_prompts': 0,
-                    'active_prompts': 0,
-                    'unique_types': 0
+                # Questions extracted by this account
+                cursor.execute("""
+                    SELECT
+                        COUNT(*) as total_questions,
+                        COUNT(CASE WHEN is_active THEN 1 END) as active_questions,
+                        COUNT(DISTINCT survey_site_id) as sites_covered,
+                        COUNT(DISTINCT question_type) as question_types
+                    FROM questions
+                    WHERE account_id = %s
+                """, (account_id,))
+                q_stats = cursor.fetchone()
+                summary['question_stats'] = dict(q_stats) if q_stats else {}
+
+                # Questions by type
+                cursor.execute("""
+                    SELECT question_type, COUNT(*) as count
+                    FROM questions
+                    WHERE account_id = %s AND is_active = TRUE
+                    GROUP BY question_type
+                """, (account_id,))
+                summary['questions_by_type'] = {
+                    row['question_type']: row['count'] for row in cursor.fetchall()
                 }
 
-                # Get list of prompt types
+                # Answers submitted by this account
                 cursor.execute("""
-                    SELECT DISTINCT prompt_type
-                    FROM prompts
-                    WHERE account_id = %s AND is_active = TRUE
+                    SELECT
+                        COUNT(*) as total_answers,
+                        COUNT(DISTINCT submission_batch_id) as total_batches,
+                        MIN(submitted_at) as first_answer,
+                        MAX(submitted_at) as last_answer
+                    FROM answers
+                    WHERE account_id = %s
                 """, (account_id,))
+                a_stats = cursor.fetchone()
+                summary['answer_stats'] = dict(a_stats) if a_stats else {}
 
-                prompt_types = cursor.fetchall()
-                summary['prompt_types'] = [row['prompt_type'] for row in prompt_types]
+                # Extraction state per site
+                cursor.execute("""
+                    SELECT
+                        ss.country,
+                        es.last_extraction_time,
+                        es.questions_found_last_run,
+                        es.last_extraction_batch_id
+                    FROM extraction_state es
+                    JOIN survey_sites ss ON es.site_id = ss.site_id
+                    WHERE es.account_id = %s
+                    ORDER BY es.last_extraction_time DESC
+                """, (account_id,))
+                summary['extraction_history'] = [dict(row) for row in cursor.fetchall()]
 
-                logger.info(f"Retrieved content summary for account {account_id}")
+                logger.info(f"Retrieved survey summary for account {account_id}")
                 return summary
     except Exception as e:
-        logger.error(f"Error fetching content summary for account {account_id}: {e}")
+        logger.error(f"Error fetching survey summary for account {account_id}: {e}")
         return {}
 
 
-def get_prompt_effectiveness_analysis() -> List[Dict[str, Any]]:
-    """Get analysis of most effective prompts with dynamic prompt types."""
+def get_account_performance_comparison() -> List[Dict[str, Any]]:
+    """Get performance comparison data for all accounts."""
     try:
         with get_postgres_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cursor:
                 cursor.execute("""
                     SELECT
-                        p.name as prompt_name,
-                        p.content as prompt_text,
-                        p.prompt_type,
                         a.username,
-                        COUNT(c.content_id) as total_usage,
-                        COUNT(CASE WHEN c.used = TRUE THEN 1 END) as used_count,
-                        COUNT(CASE WHEN c.used = FALSE THEN 1 END) as unused_count,
-                        p.created_time,
-                        p.is_active
-                    FROM prompts p
-                    LEFT JOIN accounts a ON p.account_id = a.account_id
-                    LEFT JOIN content c ON p.prompt_id = c.prompt_id
-                    GROUP BY p.prompt_id, p.name, p.content, p.prompt_type, a.username, p.created_time, p.is_active
-                    ORDER BY total_usage DESC, p.created_time DESC
-                    LIMIT 50
+                        a.country,
+                        a.profile_type,
+                        a.total_surveys_processed,
+                        COUNT(DISTINCT p.prompt_id) as prompt_count,
+                        COUNT(DISTINCT q.question_id) as questions_extracted,
+                        COUNT(DISTINCT ans.answer_id) as answers_submitted,
+                        COUNT(DISTINCT q.survey_site_id) as sites_participated,
+                        MAX(ans.submitted_at) as last_active
+                    FROM accounts a
+                    LEFT JOIN prompts p ON a.account_id = p.account_id
+                    LEFT JOIN questions q ON a.account_id = q.account_id
+                    LEFT JOIN answers ans ON a.account_id = ans.account_id
+                    GROUP BY a.account_id, a.username, a.country, a.profile_type, a.total_surveys_processed
+                    ORDER BY answers_submitted DESC
+                    LIMIT 20
                 """)
-                prompt_analysis = cursor.fetchall()
-                logger.info(f"Retrieved effectiveness analysis for {len(prompt_analysis)} prompts")
-                return [dict(row) for row in prompt_analysis]
+                comparison_data = cursor.fetchall()
+                logger.info(f"Retrieved performance comparison for {len(comparison_data)} accounts.")
+                return [dict(row) for row in comparison_data]
     except Exception as e:
-        logger.error(f"Error fetching prompt effectiveness analysis: {e}")
+        logger.error(f"Error fetching account performance comparison: {e}")
         if STREAMLIT_AVAILABLE:
-            st.error(f"❌ Error fetching prompt analysis: {str(e)}")
+            st.error(f"❌ Error fetching performance comparison: {str(e)}")
         return []
 
 
-def get_account_prompts(account_id: int, content_type: Optional[str] = None,
-                       active_only: bool = True) -> List[Dict[str, Any]]:
-    """Get prompts for a specific account."""
+def get_account_prompts(account_id: int, active_only: bool = True) -> Optional[Dict[str, Any]]:
+    """
+    Get prompt for a specific account.
+    Returns a single prompt dict or None (one prompt per account by schema design).
+    """
     try:
         with get_postgres_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cursor:
@@ -728,64 +789,15 @@ def get_account_prompts(account_id: int, content_type: Optional[str] = None,
                 """
                 params = [account_id]
 
-                if content_type:
-                    query += " AND prompt_type = %s"
-                    params.append(content_type)
-
                 if active_only:
                     query += " AND is_active = TRUE"
 
-                query += " ORDER BY updated_time DESC"
-
                 cursor.execute(query, params)
-                prompts = cursor.fetchall()
-                logger.info(f"Retrieved {len(prompts)} prompts for account {account_id}")
-                return [dict(prompt) for prompt in prompts]
+                prompt = cursor.fetchone()
+                if prompt:
+                    logger.info(f"Retrieved prompt for account {account_id}")
+                    return dict(prompt)
+                return None
     except Exception as e:
-        logger.error(f"Error fetching prompts for account {account_id}: {e}")
-        return []
-
-
-def get_account_performance_comparison() -> List[Dict[str, Any]]:
-    """Get performance comparison data for all accounts."""
-    try:
-        with get_postgres_connection() as conn:
-            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                cursor.execute("""
-                    SELECT
-                        a.username,
-                        a.profile_id,
-                        a.profile_type,
-                        a.total_content_processed,
-                        COUNT(DISTINCT p.prompt_id) as prompt_count,
-                        COUNT(DISTINCT c.content_id) as total_content,
-                        COUNT(DISTINCT c.content_id) FILTER (WHERE c.used = FALSE) as unused_content
-                    FROM accounts a
-                    LEFT JOIN prompts p ON a.account_id = p.account_id
-                    LEFT JOIN content c ON a.account_id = c.account_id
-                    GROUP BY a.account_id
-                    ORDER BY a.total_content_processed DESC
-                    LIMIT 20
-                """)
-                comparison_data = cursor.fetchall()
-                logger.info(f"Retrieved performance comparison for {len(comparison_data)} accounts.")
-                return [dict(row) for row in comparison_data]
-    except Exception as e:
-        logger.error(f"Error fetching account performance comparison: {e}")
-        if STREAMLIT_AVAILABLE:
-            st.error(f"❌ Error fetching performance comparison: {str(e)}")
-        return []
-
-
-# ============================================================================
-# DEPRECATED FUNCTIONS (REMOVED)
-# ============================================================================
-
-def create_default_prompts_for_account(account_id: int) -> bool:
-    """
-    DEPRECATED: This function has been removed to support custom prompt types.
-    Users should create prompts with their own custom types through the UI.
-    """
-    logger.warning(f"create_default_prompts_for_account called for account {account_id} but this function is deprecated")
-    logger.info("Users should create prompts with custom types through the Prompts page")
-    return False
+        logger.error(f"Error fetching prompt for account {account_id}: {e}")
+        return None

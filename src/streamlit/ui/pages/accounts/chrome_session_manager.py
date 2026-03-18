@@ -8,7 +8,6 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 import psutil
 import json
-import base64
 from pathlib import Path
 import glob
 
@@ -36,14 +35,7 @@ class ChromeSessionManager:
         """
         Remove all Chrome Singleton lock files.
 
-        This is the permanent fix for the cross-container lock problem:
-        When Chrome sessions are stopped from Streamlit (or crash), they
-        leave behind SingletonLock / SingletonCookie / SingletonSocket files
-        that embed the creating container's hostname. The next container to
-        run the DAG sees a "foreign" lock and Chrome refuses to start even
-        though no Chrome process is actually running.
-
-        We clean up:
+        Clean up:
           - <profile>/SingletonLock|Cookie|Socket
           - <profile>/Default/SingletonLock|Cookie|Socket
           - <profile>/lockfile  (Chrome's internal lock)
@@ -163,9 +155,6 @@ class ChromeSessionManager:
         """
         Force kill ALL Chrome processes (windows, tabs, helpers) and then
         clean up the lock files they leave behind.
-
-        This is called both when stopping a session and before starting a new
-        one to ensure a clean slate.
         """
         logger.info("Force killing ALL Chrome processes...")
 
@@ -203,10 +192,7 @@ class ChromeSessionManager:
         # Clean up orphaned X11/VNC processes
         self._cleanup_x11_orphans()
 
-        # ── CRITICAL: remove lock files left behind by the killed processes ──
-        # Chrome writes Singleton* files when it starts. If killed abruptly it
-        # never cleans them up. The next Chrome invocation (or DAG run) will
-        # see these stale files and refuse to start.
+        # Remove lock files left behind
         self._cleanup_singleton_locks()
 
     # =========================================================================
@@ -214,6 +200,7 @@ class ChromeSessionManager:
     # =========================================================================
 
     def create_profile_for_account(self, account_id: int, username: str) -> Dict[str, Any]:
+        """Create a Chrome profile directory for an account."""
         try:
             if hasattr(account_id, 'item'):
                 account_id = int(account_id)
@@ -268,6 +255,7 @@ class ChromeSessionManager:
             return {'success': False, 'error': str(e)}
 
     def get_profile_path(self, username: str) -> str:
+        """Get the profile path for a username."""
         return os.path.join(self.base_profile_dir, f"account_{username}")
 
     # =========================================================================
@@ -279,10 +267,8 @@ class ChromeSessionManager:
         session_id: str,
         profile_path: str,
         username: str,
-        start_url: str = "about:blank",   # ignored — 3 tabs always open
+        survey_url: str = "https://example-survey.com",
         show_terminal: bool = True,
-        terminal_width: int = 600,
-        terminal_height: int = 400,
     ) -> Dict[str, Any]:
         """
         Start Chrome with 3 tabs + terminal + account cookie script.
@@ -290,37 +276,29 @@ class ChromeSessionManager:
         Opens:
           1. Automa extension (Chrome Web Store)
           2. EditThisCookie extension (Chrome Web Store)
-          3. X.com home page
-
-        Also provides:
-          - Interactive terminal for cookie management
-          - Remote debugging on port 9222
-          - VNC access on port 6080
-          - Account-specific cookie script
+          3. Survey site (provided by survey_url)
         """
-        # ── Enforce single session: stop any existing session first ──
+        # Enforce single session: stop any existing session first
         for sid in list(self.active_processes.keys()):
             self.stop_session(sid)
 
         self._kill_all_chrome_everywhere()
 
-        # ── Clean all singleton locks BEFORE starting Chrome ──
-        # This handles the case where a previous session (possibly in a
-        # different container) left lock files behind.
+        # Clean all singleton locks BEFORE starting Chrome
         self._cleanup_singleton_locks(profile_path)
 
         time.sleep(3)
 
-        # ── Startup URLs ──
+        # Startup URLs
         startup_url_1 = "https://chromewebstore.google.com/detail/automa/infppggnoaenmfagbfknfkancpbljcca"
         startup_url_2 = "https://chromewebstore.google.com/detail/editthiscookie/fngmhnnpilhplaeedifhccceomclgfbg"
-        startup_url_3 = "https://x.com/home"
+        startup_url_3 = survey_url
 
-        # ── Account cookie script path ──
+        # Account cookie script path
         safe_username = "".join(c for c in username if c.isalnum() or c in "-_")
         account_cookie_script = f"/app/cookie_scripts/copy_cookies_{safe_username}.sh"
 
-        # ── Optional terminal window ──
+        # Optional terminal window
         terminal_config = ""
         if show_terminal:
             terminal_config = f"""
@@ -338,7 +316,7 @@ xterm -title "Account: {username}" \\
         echo 'Chrome started with 3 tabs:'
         echo '  1. Automa Extension'
         echo '  2. EditThisCookie Extension'
-        echo '  3. X.com Home'
+        echo '  3. Survey Site: {survey_url}'
         echo ''
         echo 'Account Cookie Script:'
         echo '  {account_cookie_script}'
@@ -362,6 +340,7 @@ CHROME_PROFILE_DIR="{profile_path}"
 SESSION_ID="{session_id}"
 ACCOUNT_USERNAME="{username}"
 ACCOUNT_COOKIE_SCRIPT="{account_cookie_script}"
+SURVEY_URL="{survey_url}"
 
 cleanup() {{
     pkill -TERM -f "chrome.*$CHROME_PROFILE_DIR" || true
@@ -370,7 +349,7 @@ cleanup() {{
     pkill -f "xterm.*$ACCOUNT_USERNAME" || true
     pkill -f "Xvfb|fluxbox|x11vnc|websockify" || true
 
-    # ── Clean up lock files on exit so the DAG won't be blocked ──
+    # Clean up lock files on exit
     for lockfile in SingletonLock SingletonCookie SingletonSocket lockfile; do
         for target in "$CHROME_PROFILE_DIR/$lockfile" "$CHROME_PROFILE_DIR/Default/$lockfile"; do
             [ -e "$target" ] || [ -L "$target" ] && rm -f "$target" 2>/dev/null || true
@@ -382,10 +361,10 @@ cleanup() {{
 
 trap cleanup SIGINT SIGTERM EXIT
 
-# ── Ensure profile directory structure exists ──
+# Ensure profile directory structure exists
 mkdir -p "$CHROME_PROFILE_DIR/Default"
 
-# ── Remove stale session / lock files (prevents restore dialog + lock errors) ──
+# Remove stale session / lock files
 for lockfile in SingletonLock SingletonCookie SingletonSocket lockfile; do
     for target in "$CHROME_PROFILE_DIR/$lockfile" "$CHROME_PROFILE_DIR/Default/$lockfile"; do
         [ -e "$target" ] || [ -L "$target" ] && rm -f "$target" 2>/dev/null || true
@@ -397,7 +376,7 @@ for session_file in "Last Session" "Last Tabs" "Current Session" "Current Tabs";
     [ -e "$target" ] && rm -f "$target" 2>/dev/null || true
 done
 
-# ── Write Preferences to force 3-tab startup ──
+# Write Preferences to force 3-tab startup
 cat > "$CHROME_PROFILE_DIR/Default/Preferences" << 'PREFEOF'
 {{
   "session": {{
@@ -405,7 +384,7 @@ cat > "$CHROME_PROFILE_DIR/Default/Preferences" << 'PREFEOF'
     "startup_urls": [
       "{startup_url_1}",
       "{startup_url_2}",
-      "{startup_url_3}"
+      "{SURVEY_URL}"
     ]
   }},
   "profile": {{
@@ -417,22 +396,22 @@ cat > "$CHROME_PROFILE_DIR/Default/Preferences" << 'PREFEOF'
 }}
 PREFEOF
 
-# ── Start X server ──
+# Start X server
 Xvfb :99 -screen 0 1280x720x24 -ac &
 sleep 3
 export DISPLAY=:99
 
-# ── Start window manager ──
+# Start window manager
 fluxbox &
 sleep 2
 
-# ── Start VNC ──
+# Start VNC
 x11vnc -display :99 -forever -shared -passwd secret -bg
 websockify --web /usr/share/novnc 6080 localhost:5900 &
 
 {terminal_config}
 
-# ── Start Chrome with all 3 URLs on command line ──
+# Start Chrome with all 3 URLs on command line
 google-chrome-stable \\
   --no-sandbox \\
   --disable-setuid-sandbox \\
@@ -453,13 +432,13 @@ google-chrome-stable \\
   --new-window \\
   "{startup_url_1}" \\
   "{startup_url_2}" \\
-  "{startup_url_3}" &
+  "{SURVEY_URL}" &
 
 CHROME_PID=$!
 echo "Chrome started with PID $CHROME_PID"
 echo "  Tab 1: Automa Extension"
 echo "  Tab 2: EditThisCookie Extension"
-echo "  Tab 3: X.com Home"
+echo "  Tab 3: Survey Site: $SURVEY_URL"
 
 wait $CHROME_PID
 
@@ -493,14 +472,14 @@ done
             "started_at": datetime.now(),
             "has_terminal": show_terminal,
             "debug_port": 9222,
-            "startup_urls": [startup_url_1, startup_url_2, startup_url_3],
+            "startup_urls": [startup_url_1, startup_url_2, survey_url],
         }
 
         # Give Chrome a moment to start
         time.sleep(5)
 
         logger.info(f"Chrome session started: {session_id}")
-        logger.info(f"  Tabs: Automa, EditThisCookie, X.com")
+        logger.info(f"  Tabs: Automa, EditThisCookie, Survey Site ({survey_url})")
         logger.info(f"  VNC:  http://localhost:6080/vnc.html")
         logger.info(f"  Debug: localhost:9222")
 
@@ -512,9 +491,9 @@ done
             "profile_path": profile_path,
             "account_cookie_script": account_cookie_script,
             "has_terminal": show_terminal,
-            "startup_urls": [startup_url_1, startup_url_2, startup_url_3],
+            "startup_urls": [startup_url_1, startup_url_2, survey_url],
             "message": (
-                f"Chrome started with 3 tabs: Automa, EditThisCookie, X.com"
+                f"Chrome started with 3 tabs: Automa, EditThisCookie, Survey Site"
                 + (" and interactive terminal" if show_terminal else "")
             ),
         }
@@ -522,8 +501,7 @@ done
     def stop_session(self, session_id: str) -> Dict[str, Any]:
         """
         Stop a Chrome session and ensure ALL windows/tabs are closed and
-        ALL lock files are cleaned up so the next DAG run can start Chrome
-        without Singleton lock errors.
+        ALL lock files are cleaned up.
         """
         proc_info = self.active_processes.get(session_id)
         if not proc_info:
@@ -535,7 +513,7 @@ done
         try:
             proc = proc_info['process']
 
-            # ── 1. Terminate the bash script's process group ──
+            # Terminate the bash script's process group
             if proc.poll() is None:
                 try:
                     os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
@@ -543,17 +521,13 @@ done
                 except ProcessLookupError:
                     pass
 
-            # Give the trap handler a moment to run (it does its own cleanup)
+            # Give the trap handler a moment to run
             time.sleep(3)
 
-            # ── 2. Force kill any surviving Chrome processes ──
-            # _force_kill_all_chrome_processes() calls _cleanup_singleton_locks()
-            # internally, so lock files are cleaned up as part of this step.
+            # Force kill any surviving Chrome processes
             self._force_kill_all_chrome_processes()
 
-            # ── 3. Explicit lock cleanup for THIS profile ──
-            # Belt-and-suspenders: in case _force_kill_all_chrome_processes
-            # missed anything specific to this profile directory.
+            # Explicit lock cleanup for THIS profile
             if profile_path:
                 removed = self._cleanup_singleton_locks(profile_path)
                 if removed:
@@ -562,7 +536,7 @@ done
                         f"removed {len(removed)} file(s)"
                     )
 
-            # ── 4. Clean up the temp bash script ──
+            # Clean up the temp bash script
             script_path = proc_info.get('script_path', '')
             if script_path and os.path.exists(script_path):
                 try:
@@ -570,10 +544,10 @@ done
                 except Exception as e:
                     logger.warning(f"Could not remove script {script_path}: {e}")
 
-            # ── 5. Remove from active processes ──
+            # Remove from active processes
             del self.active_processes[session_id]
 
-            # ── 6. Verify no lock files remain ──
+            # Verify no lock files remain
             remaining = []
             if profile_path:
                 for check_dir in [profile_path, os.path.join(profile_path, 'Default')]:
@@ -605,6 +579,7 @@ done
     # =========================================================================
 
     def list_profiles(self) -> Dict[str, Any]:
+        """List all Chrome profiles."""
         profiles = []
         for p in os.listdir(self.base_profile_dir):
             path = os.path.join(self.base_profile_dir, p)
@@ -617,6 +592,7 @@ done
         return {'success': True, 'profiles': profiles}
 
     def list_active_sessions(self) -> Dict[str, Any]:
+        """List all active Chrome sessions."""
         active = []
         for sid, info in self.active_processes.items():
             active.append({
@@ -631,6 +607,7 @@ done
         return {'success': True, 'sessions': active}
 
     def _get_next_available_port(self, start_port: int = 9222, end_port: int = 9322) -> int:
+        """Get the next available port in range."""
         import socket
         for port in range(start_port, end_port + 1):
             try:

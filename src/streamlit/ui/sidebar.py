@@ -7,13 +7,11 @@ class Sidebar:
     PAGES = [
         "Dashboard",
         "Accounts",
-        "Links",
-        "Content",
-        "Workflows",
+        "Questions",
+        "Answers",
         "Prompts",
         "Manual Executor",
-        "Reverse DAGs",   # ✅ NEW
-        "Settings",
+        "Generate Manual Workflows",   # ✅ This replaces Reverse DAGs
     ]
 
     def render(self) -> str:

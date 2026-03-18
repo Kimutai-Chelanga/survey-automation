@@ -1,7 +1,7 @@
 """
 Manual Executor Page
 Handles manual template upload and workflow package download with single-button execution.
-Replaces the ReverseDAGsPage in the navigation.
+Now integrated with survey sites - each survey site has its own workflows.
 """
 import os
 import streamlit as st
@@ -10,7 +10,7 @@ import json
 import zipfile
 import io
 import random
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from bson import ObjectId
 import logging
 
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 class ManualExecutor:
-    """Manual workflow execution and package management page."""
+    """Manual workflow execution and package management page - Integrated with survey sites."""
 
     def __init__(self, db_manager):
         """Initialize the ManualExecutor page."""
@@ -38,20 +38,174 @@ class ManualExecutor:
         st.markdown("*Upload templates and download workflow packages for manual execution*")
         st.markdown("---")
 
-        tab1, tab2, tab3 = st.tabs([
+        # Load survey sites for dropdowns
+        survey_sites = self._load_survey_sites()
+
+        tab1, tab2, tab3, tab4 = st.tabs([
             "📤 Upload Template",
             "📥 Download Workflows",
-            "⚙️ Manage Template"
+            "⚙️ Manage Template",
+            "🌐 Survey Site Workflows"
         ])
 
         with tab1:
             self._render_template_upload()
 
         with tab2:
-            self._render_download_workflows()
+            self._render_download_workflows(survey_sites)
 
         with tab3:
             self._render_manage_template()
+
+        with tab4:
+            self._render_survey_site_workflows(survey_sites)
+
+    # ============================================================================
+    # SURVEY SITE HELPERS
+    # ============================================================================
+
+    def _load_survey_sites(self) -> List[Dict[str, Any]]:
+        """Load all survey sites from database."""
+        try:
+            from src.core.database.postgres.connection import get_postgres_connection
+            from psycopg2.extras import RealDictCursor
+
+            with get_postgres_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    cursor.execute("""
+                        SELECT site_id, country, url, description, created_at
+                        FROM survey_sites
+                        WHERE is_active = TRUE OR is_active IS NULL
+                        ORDER BY country
+                    """)
+                    return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"Error loading survey sites: {e}")
+            return []
+
+    def _get_site_workflows(self, site_id: int) -> List[Dict[str, Any]]:
+        """Get workflows for a specific survey site."""
+        try:
+            from src.core.database.postgres.connection import get_postgres_connection
+            from psycopg2.extras import RealDictCursor
+
+            with get_postgres_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    cursor.execute("""
+                        SELECT 
+                            w.workflow_id,
+                            w.workflow_name,
+                            w.workflow_type,
+                            w.created_time,
+                            w.updated_time,
+                            w.is_active,
+                            COUNT(DISTINCT q.question_id) as question_count,
+                            COUNT(DISTINCT a.answer_id) as answer_count
+                        FROM workflows w
+                        LEFT JOIN questions q ON w.workflow_id = q.workflow_id
+                        LEFT JOIN answers a ON w.workflow_id = a.workflow_id
+                        WHERE w.site_id = %s
+                        GROUP BY w.workflow_id
+                        ORDER BY w.created_time DESC
+                    """, (site_id,))
+                    return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"Error loading site workflows: {e}")
+            return []
+
+    def _save_workflow_for_site(self, site_id: int, workflow_name: str, workflow_data: Dict, workflow_type: str = "extraction") -> Optional[int]:
+        """Save a workflow for a specific survey site."""
+        try:
+            from src.core.database.postgres.connection import get_postgres_connection
+            from psycopg2.extras import RealDictCursor
+
+            with get_postgres_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    cursor.execute("""
+                        INSERT INTO workflows (
+                            site_id, workflow_name, workflow_type, workflow_data,
+                            created_time, updated_time, is_active
+                        ) VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, TRUE)
+                        RETURNING workflow_id
+                    """, (site_id, workflow_name, workflow_type, json.dumps(workflow_data)))
+                    
+                    result = cursor.fetchone()
+                    conn.commit()
+                    
+                    return result['workflow_id'] if result else None
+        except Exception as e:
+            logger.error(f"Error saving workflow for site: {e}")
+            return None
+
+    def _get_workflows_for_download(self, site_id: Optional[int] = None, workflow_type: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Get workflows ready for download, optionally filtered by site."""
+        try:
+            from src.core.database.postgres.connection import get_postgres_connection
+            from psycopg2.extras import RealDictCursor
+
+            mongo_db = self._get_mongo_connection()
+
+            query = """
+                SELECT 
+                    w.workflow_id,
+                    w.site_id,
+                    w.workflow_name,
+                    w.workflow_type,
+                    w.workflow_data,
+                    w.created_time,
+                    w.updated_time,
+                    s.country as site_country,
+                    s.url as site_url,
+                    COUNT(DISTINCT q.question_id) as question_count
+                FROM workflows w
+                LEFT JOIN survey_sites s ON w.site_id = s.site_id
+                LEFT JOIN questions q ON w.workflow_id = q.workflow_id
+                WHERE w.is_active = TRUE
+            """
+            params = []
+
+            if site_id:
+                query += " AND w.site_id = %s"
+                params.append(site_id)
+
+            if workflow_type:
+                query += " AND w.workflow_type = %s"
+                params.append(workflow_type)
+
+            query += " GROUP BY w.workflow_id, s.country, s.url ORDER BY w.created_time DESC"
+
+            with get_postgres_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    cursor.execute(query, params)
+                    workflows = cursor.fetchall()
+
+            # Enrich with MongoDB workflow data if available
+            enriched = []
+            for wf in workflows:
+                workflow_data = wf.get('workflow_data')
+                if workflow_data and isinstance(workflow_data, str):
+                    try:
+                        workflow_data = json.loads(workflow_data)
+                    except:
+                        workflow_data = {}
+
+                enriched.append({
+                    'workflow_id': wf['workflow_id'],
+                    'site_id': wf['site_id'],
+                    'site_country': wf.get('site_country', 'Unknown'),
+                    'site_url': wf.get('site_url', ''),
+                    'workflow_name': wf['workflow_name'],
+                    'workflow_type': wf['workflow_type'],
+                    'workflow_data': workflow_data,
+                    'question_count': wf.get('question_count', 0),
+                    'created_time': wf['created_time']
+                })
+
+            return enriched
+
+        except Exception as e:
+            logger.error(f"Error getting workflows for download: {e}")
+            return []
 
     # ============================================================================
     # TEMPLATE FILE HELPERS
@@ -107,16 +261,15 @@ class ManualExecutor:
     # TABS
     # ============================================================================
 
-    def _render_download_workflows(self):
-        """Render download filtered workflows section - SINGLE BUTTON VERSION."""
-        st.subheader("📥 Download Filtered Workflows")
-        st.caption("Download workflows that were filtered and assigned links")
+    def _render_download_workflows(self, survey_sites: List[Dict[str, Any]]):
+        """Render download filtered workflows section - NOW WITH SURVEY SITE SELECTION."""
+        st.subheader("📥 Download Workflows by Survey Site")
+        st.caption("Download workflows for specific survey sites")
 
         manual_template = self._get_or_auto_save_manual_template()
         if not manual_template:
             st.warning(
-                "⚠️ No manual execution template found and could not auto-load from "
-                "`src/templates/manual_orchestrator_template.automa.json`. "
+                "⚠️ No manual execution template found. "
                 "Please upload one in the **Upload Template** tab."
             )
             return
@@ -133,12 +286,25 @@ class ManualExecutor:
             st.warning("⚠️ No gap configuration found. Using defaults: 0.5s - 5.0s")
             gap_config = {'min_milliseconds': 500, 'max_milliseconds': 5000}
 
-        weekly_settings = self._get_system_setting('weekly_workflow_settings', {})
-        current_day = datetime.now().strftime('%A').lower()
-        day_config = weekly_settings.get(current_day, {})
-        filtering_config = day_config.get('filtering_config', {})
-
         st.markdown("---")
+
+        # Survey site selection
+        col1, col2 = st.columns(2)
+
+        with col1:
+            site_options = {f"{s['country']}": s['site_id'] for s in survey_sites}
+            selected_site = st.selectbox(
+                "Select Survey Site:",
+                options=["All Sites"] + list(site_options.keys()),
+                key="download_site_select"
+            )
+
+        with col2:
+            workflow_type = st.selectbox(
+                "Workflow Type:",
+                options=["All Types", "extraction", "submission", "validation"],
+                key="download_type_select"
+            )
 
         filter_date = st.date_input(
             "Filter by date:",
@@ -146,92 +312,169 @@ class ManualExecutor:
             key="download_filter_date"
         )
 
-        try:
-            category = filtering_config.get('destination_category')
-            workflow_type = filtering_config.get('workflow_type_name')
-            collection_name = filtering_config.get('collection_name')
+        # Get workflows based on selection
+        site_id = None if selected_site == "All Sites" else site_options[selected_site]
+        wf_type = None if workflow_type == "All Types" else workflow_type
 
-            filtered_workflows = self._get_filtered_workflows_with_links(
-                category=category,
-                workflow_type=workflow_type,
-                collection_name=collection_name,
-                date_filter=filter_date
-            )
+        workflows = self._get_workflows_for_download(
+            site_id=site_id,
+            workflow_type=wf_type
+        )
 
-            if not filtered_workflows:
-                st.warning("⚠️ No workflows found")
-                return
+        if not workflows:
+            st.warning("⚠️ No workflows found for the selected criteria")
+            return
 
-            st.success(f"✅ Found **{len(filtered_workflows)}** workflows")
+        st.success(f"✅ Found **{len(workflows)}** workflows")
 
-            delay_count = len(filtered_workflows) - 1
-            if delay_count > 0:
-                st.info(f"🔄 Will add **{delay_count}** delay blocks between workflows")
+        # Show workflow details
+        with st.expander("📋 Workflow Details", expanded=False):
+            for wf in workflows:
+                st.markdown(f"""
+                - **{wf['workflow_name']}** ({wf['workflow_type']})
+                  - Site: {wf['site_country']}
+                  - Questions: {wf['question_count']}
+                  - Created: {wf['created_time'].strftime('%Y-%m-%d %H:%M') if wf.get('created_time') else 'Unknown'}
+                """)
 
-            st.markdown("---")
+        delay_count = len(workflows) - 1
+        if delay_count > 0:
+            st.info(f"🔄 Will add **{delay_count}** delay blocks between workflows")
 
-            if st.button("🚀 Generate & Download ZIP Package", type="primary", use_container_width=True, key="generate_download_single_btn"):
-                with st.spinner("Generating workflows with delays..."):
-                    try:
-                        template_data = manual_template.get('template_data', {})
+        st.markdown("---")
 
-                        master_workflow = self._create_master_execution_workflow_with_delays(
-                            filtered_workflows,
-                            template_data,
-                            gap_config
-                        )
+        if st.button("🚀 Generate & Download ZIP Package", type="primary", use_container_width=True, key="generate_download_site_btn"):
+            with st.spinner("Generating workflows with delays..."):
+                try:
+                    template_data = manual_template.get('template_data', {})
 
-                        if not master_workflow:
-                            st.error("❌ Failed to create master workflow")
-                            return
+                    master_workflow = self._create_master_execution_workflow_with_delays(
+                        workflows,
+                        template_data,
+                        gap_config
+                    )
 
-                        zip_buffer = self._create_zip_package(filtered_workflows, master_workflow)
+                    if not master_workflow:
+                        st.error("❌ Failed to create master workflow")
+                        return
 
-                        if not zip_buffer:
-                            st.error("❌ Failed to create ZIP")
-                            return
+                    zip_buffer = self._create_zip_package(workflows, master_workflow)
 
-                        success_update = self._update_links_success_status(filtered_workflows)
+                    if not zip_buffer:
+                        st.error("❌ Failed to create ZIP")
+                        return
 
-                        if success_update.get('success'):
-                            st.success(f"✅ Marked {success_update.get('updated_count', 0)} links as SUCCESS")
-                        else:
-                            st.warning(f"⚠️ Could not update success status: {success_update.get('error', 'Unknown error')}")
+                    now = datetime.now()
+                    date_str = now.strftime("%Y-%m-%d")
+                    time_str = now.strftime("%H-%M-%S")
+                    site_str = selected_site.replace(" ", "_") if selected_site != "All Sites" else "all_sites"
+                    filename = f"workflows_{site_str}_{date_str}_{time_str}.zip"
 
-                        mark_success = self._mark_links_as_executed(filtered_workflows)
+                    st.info(f"📦 Package name: `{filename}`")
 
-                        if mark_success.get('success'):
-                            st.success(f"✅ Marked {mark_success.get('postgres_updated', 0)} links as executed")
+                    st.download_button(
+                        label="📥 Download ZIP Package",
+                        data=zip_buffer,
+                        file_name=filename,
+                        mime="application/zip",
+                        use_container_width=True,
+                        key="download_zip_btn_site"
+                    )
 
-                        now = datetime.now()
-                        date_str = now.strftime("%Y-%m-%d")
-                        time_str = now.strftime("%H-%M-%S")
-                        day_str = now.strftime("%A")
-                        filename = f"workflows_{date_str}_{time_str}_{day_str}.zip"
+                    st.success("✅ Package generated successfully and ready to download!")
+                    st.balloons()
 
-                        st.info(f"📦 Package name: `{filename}`")
+                except Exception as e:
+                    st.error(f"❌ Error: {e}")
+                    import traceback
+                    st.code(traceback.format_exc())
 
-                        st.download_button(
-                            label="📥 Download ZIP Package",
-                            data=zip_buffer,
-                            file_name=filename,
-                            mime="application/zip",
-                            use_container_width=True,
-                            key="download_zip_btn_after_generation"
-                        )
+    def _render_survey_site_workflows(self, survey_sites: List[Dict[str, Any]]):
+        """Render survey site workflows management tab."""
+        st.subheader("🌐 Survey Site Workflows")
+        st.caption("View and manage workflows for each survey site")
 
-                        st.success("✅ Package generated successfully and ready to download!")
-                        st.balloons()
+        if not survey_sites:
+            st.warning("No survey sites found. Add them in the Accounts page first.")
+            return
 
-                    except Exception as e:
-                        st.error(f"❌ Error: {e}")
-                        import traceback
-                        st.code(traceback.format_exc())
+        # Site selector
+        site_options = {f"{s['country']} - {s['url']}": s for s in survey_sites}
+        selected_site_name = st.selectbox(
+            "Select Survey Site:",
+            options=list(site_options.keys()),
+            key="site_workflow_select"
+        )
+        selected_site = site_options[selected_site_name]
 
-        except Exception as e:
-            st.error(f"❌ Error: {e}")
-            import traceback
-            st.code(traceback.format_exc())
+        st.markdown("---")
+
+        # Show site details
+        col1, col2 = st.columns(2)
+        with col1:
+            st.info(f"**Country:** {selected_site['country']}")
+        with col2:
+            st.info(f"**URL:** {selected_site['url']}")
+
+        # Get workflows for this site
+        site_workflows = self._get_site_workflows(selected_site['site_id'])
+
+        if site_workflows:
+            st.success(f"✅ Found {len(site_workflows)} workflows for this site")
+
+            for wf in site_workflows:
+                with st.expander(f"📋 {wf['workflow_name']} ({wf['workflow_type']})", expanded=False):
+                    col1, col2, col3 = st.columns(3)
+
+                    with col1:
+                        st.metric("Questions", wf.get('question_count', 0))
+                    with col2:
+                        st.metric("Answers", wf.get('answer_count', 0))
+                    with col3:
+                        status = "✅ Active" if wf.get('is_active') else "❌ Inactive"
+                        st.metric("Status", status)
+
+                    st.caption(f"Created: {wf['created_time'].strftime('%Y-%m-%d %H:%M') if wf.get('created_time') else 'Unknown'}")
+        else:
+            st.info("No workflows found for this site yet.")
+
+            # Form to add new workflow
+            with st.form("add_site_workflow_form"):
+                st.subheader("➕ Add New Workflow")
+
+                workflow_name = st.text_input("Workflow Name *", placeholder="e.g., survey_extraction_v1")
+                workflow_type = st.selectbox(
+                    "Workflow Type *",
+                    options=["extraction", "submission", "validation"]
+                )
+
+                workflow_json = st.text_area(
+                    "Workflow JSON *",
+                    height=300,
+                    placeholder='{\n  "extVersion": "1.30.00",\n  "name": "workflow_name",\n  ...\n}'
+                )
+
+                if st.form_submit_button("✅ Save Workflow", type="primary"):
+                    if not workflow_name.strip() or not workflow_json.strip():
+                        st.error("Workflow name and JSON are required!")
+                    else:
+                        try:
+                            workflow_data = json.loads(workflow_json)
+                            wf_id = self._save_workflow_for_site(
+                                site_id=selected_site['site_id'],
+                                workflow_name=workflow_name.strip(),
+                                workflow_data=workflow_data,
+                                workflow_type=workflow_type
+                            )
+                            if wf_id:
+                                st.success(f"✅ Workflow saved with ID: {wf_id}")
+                                st.cache_data.clear()
+                                time.sleep(1)
+                                st.rerun()
+                            else:
+                                st.error("❌ Failed to save workflow")
+                        except json.JSONDecodeError as e:
+                            st.error(f"❌ Invalid JSON: {e}")
 
     def _render_template_upload(self):
         """Render manual template upload section."""
@@ -472,34 +715,6 @@ class ManualExecutor:
             except Exception as e:
                 st.error(f"❌ Failed to delete: {e}")
 
-        # ── Reset executed links ──────────────────────────────────────────────
-        st.markdown("---")
-        st.markdown("### 🔄 Reset Executed Links")
-        st.caption(
-            "Undo a download — marks links as un-executed in PostgreSQL and MongoDB "
-            "so they reappear in the next download run."
-        )
-
-        raw_ids = st.text_input(
-            "Paste comma-separated link IDs to reset:",
-            placeholder="e.g. 101, 102, 103",
-            key="reset_link_ids_input"
-        )
-
-        if st.button("🔄 Reset Links", type="secondary", key="reset_links_btn"):
-            if not raw_ids.strip():
-                st.error("❌ Please enter at least one link ID.")
-            else:
-                try:
-                    link_ids = [int(x.strip()) for x in raw_ids.split(',') if x.strip()]
-                    result = self._reset_executed_links(link_ids)
-                    if result['success']:
-                        st.success(f"✅ Reset {result['reset_count']} link(s) successfully.")
-                    else:
-                        st.error(f"❌ Reset failed: {result.get('error')}")
-                except ValueError:
-                    st.error("❌ Invalid input — all IDs must be integers.")
-
     # ============================================================================
     # DATABASE HELPERS
     # ============================================================================
@@ -553,177 +768,12 @@ class ManualExecutor:
             logger.error(f"Error deleting system setting {key}: {e}")
             raise
 
-    def _reset_executed_links(self, link_ids: list) -> dict:
-        """Reset executed status on links in PostgreSQL and MongoDB (undo a download)."""
-        try:
-            from src.core.database.postgres.connection import get_postgres_connection
-            from psycopg2.extras import RealDictCursor
-
-            mongo_db = self._get_mongo_connection()
-
-            with get_postgres_connection() as conn:
-                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                    cursor.execute("""
-                        UPDATE links
-                        SET
-                            executed = FALSE,
-                            processed_by_workflow = FALSE,
-                            workflow_status = NULL,
-                            workflow_processed_time = NULL,
-                            success = FALSE
-                        WHERE links_id = ANY(%s)
-                        RETURNING links_id
-                    """, (link_ids,))
-                    updated = cursor.fetchall()
-                    conn.commit()
-
-            mongo_db.workflow_metadata.update_many(
-                {'postgres_content_id': {'$in': link_ids}},
-                {'$set': {
-                    'executed': False,
-                    'success': False,
-                    'status': 'ready_to_execute',
-                    'updated_at': datetime.now().isoformat()
-                }}
-            )
-
-            return {'success': True, 'reset_count': len(updated)}
-
-        except Exception as e:
-            logger.error(f"Error resetting executed links: {e}")
-            return {'success': False, 'error': str(e)}
-
     # ============================================================================
     # WORKFLOW HELPERS
     # ============================================================================
 
-    def _get_filtered_workflows_with_links(self, category=None, workflow_type=None, collection_name=None, date_filter=None):
-        """Get workflows that match filtering logic."""
-        try:
-            from src.core.database.postgres.connection import get_postgres_connection
-            from psycopg2.extras import RealDictCursor
-
-            mongo_db = self._get_mongo_connection()
-
-            if date_filter is None:
-                date_filter = datetime.now().date()
-
-            logger.info("Step 1: Fetching eligible links from PostgreSQL...")
-
-            eligible_links_query = """
-                SELECT
-                    l.links_id,
-                    l.link,
-                    l.tweet_id,
-                    l.tweeted_date,
-                    l.tweeted_time,
-                    l.workflow_type,
-                    l.within_limit,
-                    l.account_id,
-                    l.used,
-                    l.processed_by_workflow,
-                    l.executed,
-                    l.workflow_status
-                FROM links l
-                WHERE l.within_limit = TRUE
-                    AND l.filtered = TRUE
-                    AND l.used = TRUE
-                    AND COALESCE(l.executed, FALSE) = FALSE
-                ORDER BY l.tweeted_date DESC, l.links_id ASC
-            """
-
-            with get_postgres_connection() as conn:
-                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                    cursor.execute(eligible_links_query)
-                    eligible_links = cursor.fetchall()
-
-            if not eligible_links:
-                logger.info("No eligible links found in PostgreSQL")
-                return []
-
-            logger.info(f"✓ Found {len(eligible_links)} eligible links in PostgreSQL")
-
-            mongo_filter = {
-                "has_link": True,
-                "has_content": True,
-                "status": "ready_to_execute",
-                "executed": False
-            }
-
-            if category:
-                mongo_filter["category"] = category.lower()
-            if workflow_type:
-                mongo_filter["workflow_type"] = workflow_type
-            if collection_name:
-                mongo_filter["collection_name"] = collection_name
-
-            link_ids = [link['links_id'] for link in eligible_links]
-            mongo_filter["postgres_content_id"] = {"$in": link_ids}
-
-            workflow_assignments = list(
-                mongo_db.workflow_metadata.find(mongo_filter).sort("link_assigned_at", -1)
-            )
-
-            if not workflow_assignments:
-                logger.info("No workflow assignments found matching filters")
-                return []
-
-            logger.info(f"✓ Found {len(workflow_assignments)} matching workflow assignments")
-
-            enriched_workflows = []
-
-            for link in eligible_links:
-                assignments = [
-                    a for a in workflow_assignments
-                    if a.get('postgres_content_id') == link['links_id']
-                ]
-
-                for assignment in assignments:
-                    try:
-                        database_name = assignment.get('database_name', 'execution_workflows')
-                        actual_collection = assignment.get('collection_name')
-                        automa_wf_id = assignment.get('automa_workflow_id')
-
-                        if not actual_collection or not automa_wf_id:
-                            continue
-
-                        workflow_db = mongo_db.client[database_name]
-                        workflow_collection = workflow_db[actual_collection]
-                        workflow_doc = workflow_collection.find_one({'_id': automa_wf_id})
-
-                        if workflow_doc:
-                            enriched_workflows.append({
-                                'metadata': assignment,
-                                'workflow': workflow_doc,
-                                'workflow_id': str(automa_wf_id),
-                                'workflow_name': workflow_doc.get('name', assignment.get('workflow_name', 'Unknown')),
-                                'link_url': link['link'],
-                                'link_id': link['links_id'],
-                                'assigned_at': assignment.get('link_assigned_at'),
-                                'category': assignment.get('category', ''),
-                                'workflow_type': assignment.get('workflow_type', ''),
-                                'collection_name': actual_collection,
-                                'database_name': database_name,
-                                'account_id': assignment.get('account_id'),
-                                'tweet_id': link['tweet_id'],
-                                'tweeted_date': link['tweeted_date']
-                            })
-
-                    except Exception as e:
-                        logger.error(f"Error enriching workflow: {e}")
-                        continue
-
-            logger.info(f"✓ Created {len(enriched_workflows)} link-workflow combinations")
-            return enriched_workflows
-
-        except Exception as e:
-            logger.error(f"Error fetching filtered workflows: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-            return []
-
-    def _create_master_execution_workflow_with_delays(self, filtered_workflows, template_data, gap_config):
-        """Create a master workflow that executes all filtered workflows sequentially with delays."""
+    def _create_master_execution_workflow_with_delays(self, workflows, template_data, gap_config):
+        """Create a master workflow that executes all workflows sequentially with delays."""
         try:
             master_workflow = {
                 "extVersion": template_data.get("extVersion", "1.30.00"),
@@ -733,7 +783,7 @@ class ManualExecutor:
                 "version": template_data.get("version", "1.30.00"),
                 "settings": template_data.get("settings", {}),
                 "globalData": template_data.get("globalData", '{\n\t"key": "value"\n}'),
-                "description": f"Master workflow to execute {len(filtered_workflows)} filtered workflows with delays",
+                "description": f"Master workflow to execute {len(workflows)} workflows with delays",
                 "includedWorkflows": {}
             }
 
@@ -793,10 +843,10 @@ class ManualExecutor:
             min_gap = gap_config.get('min_milliseconds', 500)
             max_gap = gap_config.get('max_milliseconds', 5000)
 
-            for idx, wf in enumerate(filtered_workflows):
+            for idx, wf in enumerate(workflows):
                 exec_node_id = f"exec_{idx}"
-                workflow_id = wf['workflow_id']
-                workflow_name = wf['workflow_name']
+                workflow_id = str(wf.get('workflow_id', idx))
+                workflow_name = wf.get('workflow_name', f'workflow_{idx}')
 
                 exec_node = {
                     "id": exec_node_id,
@@ -808,7 +858,7 @@ class ManualExecutor:
                         "executeId": "",
                         "workflowId": workflow_id,
                         "globalData": "",
-                        "description": f"Execute {workflow_name}",
+                        "description": f"Execute {workflow_name} for {wf.get('site_country', 'Unknown')}",
                         "insertAllVars": False,
                         "insertAllGlobalData": False
                     },
@@ -832,9 +882,11 @@ class ManualExecutor:
                 }
                 edges.append(edge)
 
-                master_workflow["includedWorkflows"][workflow_id] = wf['workflow']
+                # Add workflow data to includedWorkflows
+                if wf.get('workflow_data'):
+                    master_workflow["includedWorkflows"][workflow_id] = wf['workflow_data']
 
-                if idx < len(filtered_workflows) - 1:
+                if idx < len(workflows) - 1:
                     delay_node_id = f"delay_{idx}"
                     delay_time = random.randint(min_gap, max_gap)
 
@@ -882,7 +934,7 @@ class ManualExecutor:
                 "viewport": {"x": 0, "y": 0, "zoom": 1.0}
             }
 
-            logger.info(f"✅ Created master workflow with {len(filtered_workflows)} workflows and {len(filtered_workflows)-1} delays")
+            logger.info(f"✅ Created master workflow with {len(workflows)} workflows and {len(workflows)-1} delays")
             return master_workflow
 
         except Exception as e:
@@ -892,7 +944,7 @@ class ManualExecutor:
             st.error(f"❌ Error creating master workflow: {e}")
             return None
 
-    def _create_zip_package(self, filtered_workflows, master_workflow):
+    def _create_zip_package(self, workflows, master_workflow):
         """Create a ZIP package with all workflows at root level."""
         try:
             zip_buffer = io.BytesIO()
@@ -901,10 +953,13 @@ class ManualExecutor:
                 master_json = json.dumps(master_workflow, indent=2, default=str)
                 zip_file.writestr('master_execution.json', master_json)
 
-                for idx, wf in enumerate(filtered_workflows):
-                    workflow_name = wf['workflow_name'].replace(' ', '_').replace('/', '_')
-                    workflow_json = json.dumps(wf['workflow'], indent=2, default=str)
-                    zip_file.writestr(f'{workflow_name}.json', workflow_json)
+                for idx, wf in enumerate(workflows):
+                    workflow_name = wf.get('workflow_name', f'workflow_{idx}').replace(' ', '_').replace('/', '_')
+                    site_country = wf.get('site_country', 'unknown').replace(' ', '_')
+                    
+                    if wf.get('workflow_data'):
+                        workflow_json = json.dumps(wf['workflow_data'], indent=2, default=str)
+                        zip_file.writestr(f'{site_country}_{workflow_name}.json', workflow_json)
 
             zip_buffer.seek(0)
             return zip_buffer
@@ -914,160 +969,3 @@ class ManualExecutor:
             import traceback
             st.code(traceback.format_exc())
             return None
-
-    def _update_links_success_status(self, filtered_workflows):
-        """Update success and failure status in PostgreSQL links table."""
-        try:
-            from src.core.database.postgres.connection import get_postgres_connection
-            from psycopg2.extras import RealDictCursor
-
-            link_ids = []
-            for wf in filtered_workflows:
-                postgres_content_id = wf['metadata'].get('postgres_content_id')
-                if postgres_content_id:
-                    link_ids.append(postgres_content_id)
-
-            if not link_ids:
-                return {
-                    'success': False,
-                    'updated_count': 0,
-                    'error': 'No link IDs found'
-                }
-
-            with get_postgres_connection() as conn:
-                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                    cursor.execute("""
-                        SELECT column_name
-                        FROM information_schema.columns
-                        WHERE table_name = 'links'
-                        AND column_name IN ('success', 'failure')
-                    """)
-                    existing_columns = [row['column_name'] for row in cursor.fetchall()]
-
-                    if 'success' not in existing_columns:
-                        cursor.execute("ALTER TABLE links ADD COLUMN success BOOLEAN DEFAULT FALSE")
-                        st.info("✅ Added 'success' column to links table")
-
-                    if 'failure' not in existing_columns:
-                        cursor.execute("ALTER TABLE links ADD COLUMN failure BOOLEAN DEFAULT FALSE")
-                        st.info("✅ Added 'failure' column to links table")
-
-                    update_query = """
-                        UPDATE links
-                        SET
-                            success = TRUE,
-                            failure = FALSE
-                        WHERE links_id = ANY(%s)
-                        RETURNING links_id, success, failure
-                    """
-
-                    cursor.execute(update_query, (link_ids,))
-                    updated_rows = cursor.fetchall()
-                    updated_count = len(updated_rows)
-
-                    conn.commit()
-
-                    return {
-                        'success': True,
-                        'updated_count': updated_count,
-                        'link_ids': [row['links_id'] for row in updated_rows],
-                        'timestamp': datetime.now().isoformat()
-                    }
-
-        except Exception as e:
-            logger.error(f"❌ Error updating links success status: {e}")
-            return {
-                'success': False,
-                'updated_count': 0,
-                'error': str(e),
-                'timestamp': datetime.now().isoformat()
-            }
-
-    def _mark_links_as_executed(self, filtered_workflows):
-        """Mark links as executed in BOTH PostgreSQL AND MongoDB with success tracking."""
-        try:
-            from src.core.database.postgres.connection import get_postgres_connection
-            from psycopg2.extras import RealDictCursor
-
-            mongo_db = self._get_mongo_connection()
-
-            link_ids = []
-            metadata_ids = []
-
-            for wf in filtered_workflows:
-                postgres_content_id = wf['metadata'].get('postgres_content_id')
-                if postgres_content_id:
-                    link_ids.append(postgres_content_id)
-
-                metadata_id = wf['metadata'].get('_id')
-                if metadata_id:
-                    metadata_ids.append(ObjectId(metadata_id))
-
-            if not link_ids:
-                return {
-                    'success': False,
-                    'postgres_updated': 0,
-                    'mongo_updated': 0,
-                    'error': 'No link IDs found'
-                }
-
-            with get_postgres_connection() as conn:
-                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                    update_query = """
-                        UPDATE links
-                        SET
-                            executed = TRUE,
-                            processed_by_workflow = TRUE,
-                            workflow_status = 'completed',
-                            workflow_processed_time = CURRENT_TIMESTAMP,
-                            success = TRUE,
-                            failure = FALSE
-                        WHERE links_id = ANY(%s)
-                        RETURNING links_id, workflow_status, executed, success, failure
-                    """
-
-                    cursor.execute(update_query, (link_ids,))
-                    updated_rows = cursor.fetchall()
-                    postgres_updated = len(updated_rows)
-
-                    conn.commit()
-
-            if metadata_ids:
-                mongo_update = {
-                    '$set': {
-                        'executed': True,
-                        'success': True,
-                        'executed_at': datetime.now().isoformat(),
-                        'status': 'completed',
-                        'updated_at': datetime.now().isoformat(),
-                        'execution_mode': 'manual_download',
-                        'execution_source': 'streamlit_ui'
-                    }
-                }
-
-                result = mongo_db.workflow_metadata.update_many(
-                    {'_id': {'$in': metadata_ids}},
-                    mongo_update
-                )
-                mongo_updated = result.modified_count
-            else:
-                mongo_updated = 0
-
-            return {
-                'success': True,
-                'postgres_updated': postgres_updated,
-                'mongo_updated': mongo_updated,
-                'link_ids': [row['links_id'] for row in updated_rows],
-                'timestamp': datetime.now().isoformat(),
-                'success_status_updated': True
-            }
-
-        except Exception as e:
-            logger.error(f"❌ Error marking links as executed: {e}")
-            return {
-                'success': False,
-                'postgres_updated': 0,
-                'mongo_updated': 0,
-                'error': str(e),
-                'timestamp': datetime.now().isoformat()
-            }
