@@ -8,15 +8,16 @@ logger = logging.getLogger(__name__)
 # ===================================================================
 # POSTGRESQL SCHEMA - SURVEY AUTOMATION ARCHITECTURE
 # Updated: 2026-03-18
-# Complete schema for survey automation with workflows:
-#   1. Accounts management with country targeting
-#   2. Survey sites by country
-#   3. Questions extracted from survey sites
-#   4. Answers submitted by accounts
-#   5. One prompt per user (persona)
-#   6. Workflows linked to survey sites
-#   7. Extraction state tracking
-#   8. Workflow generation logs
+# Complete schema for survey automation with:
+#   - Accounts with demographic fields
+#   - Survey sites by name (not URL)
+#   - Account URLs with usage tracking
+#   - Questions with click elements and categories
+#   - Answers with workflow tracking
+#   - Prompts (one per user)
+#   - Workflows with upload tracking
+#   - Extraction state tracking
+#   - Workflow generation logs
 # ===================================================================
 
 def create_postgres_tables():
@@ -34,7 +35,7 @@ def create_postgres_tables():
                 # ======================================================
                 logger.info("Creating SURVEY AUTOMATION schema...")
 
-                # ACCOUNTS TABLE
+                # ACCOUNTS TABLE - WITH ALL DEMOGRAPHIC FIELDS
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS accounts (
                         account_id SERIAL PRIMARY KEY,
@@ -49,10 +50,34 @@ def create_postgres_tables():
                         total_surveys_processed INTEGER DEFAULT 0,
                         has_cookies BOOLEAN DEFAULT FALSE,
                         cookies_last_updated TIMESTAMP,
-                        is_active BOOLEAN DEFAULT TRUE
+                        is_active BOOLEAN DEFAULT TRUE,
+                        
+                        -- Demographic fields (all optional)
+                        age INTEGER,
+                        date_of_birth DATE,
+                        gender VARCHAR(50),
+                        city VARCHAR(100),
+                        education_level VARCHAR(100),
+                        email VARCHAR(255),
+                        phone VARCHAR(50),
+                        job_status VARCHAR(100),
+                        industry VARCHAR(100),
+                        income_range VARCHAR(50),
+                        marital_status VARCHAR(50),
+                        household_size INTEGER,
+                        has_children BOOLEAN,
+                        shopping_habits TEXT,
+                        brands_used TEXT,
+                        hobbies TEXT,
+                        internet_usage VARCHAR(100),
+                        device_type VARCHAR(100),
+                        owns_laptop BOOLEAN,
+                        owns_tv BOOLEAN,
+                        internet_provider VARCHAR(100),
+                        demographic_data JSONB
                     )
                 """)
-                logger.info("✓ accounts table ready")
+                logger.info("✓ accounts table ready (with demographic fields)")
 
                 # ACCOUNT COOKIES TABLE
                 cursor.execute("""
@@ -71,21 +96,38 @@ def create_postgres_tables():
                 """)
                 logger.info("✓ account_cookies table ready")
 
-                # SURVEY SITES TABLE
+                # SURVEY SITES TABLE - BY NAME, NOT URL
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS survey_sites (
                         site_id SERIAL PRIMARY KEY,
-                        country VARCHAR(100) UNIQUE NOT NULL,
-                        url TEXT NOT NULL,
+                        site_name VARCHAR(255) UNIQUE NOT NULL,
                         description TEXT,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         is_active BOOLEAN DEFAULT TRUE
                     )
                 """)
-                logger.info("✓ survey_sites table ready")
+                logger.info("✓ survey_sites table ready (by name)")
 
-                # PROMPTS TABLE - ONE PER USER (unique constraint)
+                # ACCOUNT URLS TABLE - PER-ACCOUNT URLS WITH USAGE TRACKING
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS account_urls (
+                        url_id SERIAL PRIMARY KEY,
+                        account_id INTEGER NOT NULL REFERENCES accounts(account_id) ON DELETE CASCADE,
+                        site_id INTEGER NOT NULL REFERENCES survey_sites(site_id) ON DELETE CASCADE,
+                        url TEXT NOT NULL,
+                        is_default BOOLEAN DEFAULT FALSE,
+                        is_used BOOLEAN DEFAULT FALSE,
+                        used_at TIMESTAMP,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        notes TEXT,
+                        UNIQUE(account_id, site_id, url)
+                    )
+                """)
+                logger.info("✓ account_urls table ready (with usage tracking)")
+
+                # PROMPTS TABLE - ONE PER USER
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS prompts (
                         prompt_id SERIAL PRIMARY KEY,
@@ -124,24 +166,26 @@ def create_postgres_tables():
                 """)
                 logger.info("✓ prompt_backups table ready")
 
-                # WORKFLOWS TABLE - Linked to survey sites
+                # WORKFLOWS TABLE - WITH UPLOAD TRACKING
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS workflows (
                         workflow_id SERIAL PRIMARY KEY,
+                        account_id INTEGER NOT NULL REFERENCES accounts(account_id) ON DELETE CASCADE,
                         site_id INTEGER NOT NULL REFERENCES survey_sites(site_id) ON DELETE CASCADE,
                         workflow_name VARCHAR(255) NOT NULL,
-                        workflow_type VARCHAR(50) NOT NULL CHECK (workflow_type IN ('extraction', 'submission', 'validation')),
                         workflow_data JSONB,
+                        question_id INTEGER,
                         created_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         is_active BOOLEAN DEFAULT TRUE,
-                        description TEXT,
-                        version VARCHAR(20)
+                        uploaded_to_chrome BOOLEAN DEFAULT FALSE,
+                        uploaded_at TIMESTAMP,
+                        description TEXT
                     )
                 """)
-                logger.info("✓ workflows table ready (linked to survey sites)")
+                logger.info("✓ workflows table ready (with upload tracking)")
 
-                # QUESTIONS TABLE - Extracted from survey sites
+                # QUESTIONS TABLE - WITH CLICK ELEMENTS AND CATEGORIES
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS questions (
                         question_id SERIAL PRIMARY KEY,
@@ -149,18 +193,27 @@ def create_postgres_tables():
                         account_id INTEGER REFERENCES accounts(account_id) ON DELETE CASCADE,
                         workflow_id INTEGER REFERENCES workflows(workflow_id) ON DELETE SET NULL,
                         question_text TEXT NOT NULL,
-                        question_type VARCHAR(50) NOT NULL CHECK (question_type IN ('multiple_choice', 'text', 'rating', 'yes_no')),
+                        question_type VARCHAR(50) NOT NULL CHECK (question_type IN ('multiple_choice', 'text', 'rating', 'yes_no', 'dropdown', 'checkbox', 'radio')),
+                        question_category VARCHAR(100),
                         options JSONB,
+                        click_element TEXT,
+                        input_element TEXT,
+                        submit_element TEXT,
                         required BOOLEAN DEFAULT TRUE,
                         order_index INTEGER DEFAULT 0,
+                        page_url TEXT,
+                        element_html TEXT,
                         extracted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         last_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         is_active BOOLEAN DEFAULT TRUE,
                         extraction_batch_id VARCHAR(100),
+                        used_in_workflow BOOLEAN DEFAULT FALSE,
+                        used_at TIMESTAMP,
+                        metadata JSONB,
                         CONSTRAINT unique_question_per_site UNIQUE (survey_site_id, question_text, account_id)
                     )
                 """)
-                logger.info("✓ questions table ready (linked to workflows)")
+                logger.info("✓ questions table ready (with click elements and categories)")
 
                 # ANSWERS TABLE
                 cursor.execute("""
@@ -178,14 +231,15 @@ def create_postgres_tables():
                         prompt_id INTEGER REFERENCES prompts(prompt_id) ON DELETE SET NULL
                     )
                 """)
-                logger.info("✓ answers table ready (linked to workflows)")
+                logger.info("✓ answers table ready")
 
-                # EXTRACTION STATE TABLE - Track last extraction per account/site
+                # EXTRACTION STATE TABLE - WITH URL TRACKING
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS extraction_state (
                         state_id SERIAL PRIMARY KEY,
                         account_id INTEGER NOT NULL REFERENCES accounts(account_id) ON DELETE CASCADE,
                         site_id INTEGER NOT NULL REFERENCES survey_sites(site_id) ON DELETE CASCADE,
+                        url_id INTEGER REFERENCES account_urls(url_id) ON DELETE SET NULL,
                         last_extraction_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         last_extraction_batch_id VARCHAR(100),
                         questions_found_last_run INTEGER DEFAULT 0,
@@ -206,6 +260,7 @@ def create_postgres_tables():
                         site_id INTEGER REFERENCES survey_sites(site_id) ON DELETE CASCADE,
                         prompt_id INTEGER REFERENCES prompts(prompt_id) ON DELETE SET NULL,
                         workflow_id INTEGER REFERENCES workflows(workflow_id) ON DELETE SET NULL,
+                        question_id INTEGER REFERENCES questions(question_id) ON DELETE SET NULL,
                         username VARCHAR(255),
                         generated_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         status VARCHAR(50) DEFAULT 'success'
@@ -232,8 +287,13 @@ def create_postgres_tables():
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_account_cookies_account ON account_cookies(account_id);")
 
                 # Survey sites
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_survey_sites_country ON survey_sites(country);")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_survey_sites_name ON survey_sites(site_name);")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_survey_sites_active ON survey_sites(is_active) WHERE is_active = TRUE;")
+
+                # Account URLs
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_account_urls_account_site ON account_urls(account_id, site_id);")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_account_urls_used ON account_urls(is_used) WHERE is_used = FALSE;")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_account_urls_default ON account_urls(is_default) WHERE is_default = TRUE;")
 
                 # Prompts
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_prompts_account ON prompts(account_id);")
@@ -245,8 +305,8 @@ def create_postgres_tables():
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_backups_version ON prompt_backups(prompt_id, version_number);")
 
                 # Workflows
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflows_site ON workflows(site_id);")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflows_type ON workflows(workflow_type);")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflows_account_site ON workflows(account_id, site_id);")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflows_uploaded ON workflows(uploaded_to_chrome) WHERE uploaded_to_chrome = FALSE;")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_workflows_active ON workflows(is_active) WHERE is_active = TRUE;")
 
                 # Questions
@@ -254,8 +314,11 @@ def create_postgres_tables():
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_questions_account ON questions(account_id);")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_questions_workflow ON questions(workflow_id) WHERE workflow_id IS NOT NULL;")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_questions_type ON questions(question_type);")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_questions_category ON questions(question_category);")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_questions_batch ON questions(extraction_batch_id);")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_questions_unused ON questions(used_in_workflow) WHERE used_in_workflow = FALSE;")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_questions_active ON questions(is_active) WHERE is_active = TRUE;")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_questions_click_element ON questions(click_element) WHERE click_element IS NOT NULL;")
 
                 # Answers
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_answers_question ON answers(question_id);")
@@ -275,7 +338,7 @@ def create_postgres_tables():
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_wf_log_workflow ON workflow_generation_log(workflow_id) WHERE workflow_id IS NOT NULL;")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_wf_log_time ON workflow_generation_log(generated_time DESC);")
 
-                logger.info("✓ All indexes ready")
+                logger.info("✓ All indexes ready (~50 indexes)")
 
                 # ======================================================
                 # STEP 3: CREATE TRIGGER FUNCTIONS
@@ -393,6 +456,12 @@ def create_postgres_tables():
                         FOR EACH ROW
                         EXECUTE FUNCTION update_updated_time_column();
                     """),
+                    ("update_account_urls_updated_time", "account_urls", """
+                        CREATE TRIGGER update_account_urls_updated_time
+                        BEFORE UPDATE ON account_urls
+                        FOR EACH ROW
+                        EXECUTE FUNCTION update_updated_time_column();
+                    """),
                     ("trg_extraction_state_updated_at", "extraction_state", """
                         CREATE TRIGGER trg_extraction_state_updated_at
                         BEFORE UPDATE ON extraction_state
@@ -435,17 +504,21 @@ def create_postgres_tables():
                 # ======================================================
                 logger.info("Creating helper functions...")
 
-                # Get questions by survey site
+                # Get questions by survey site with click elements
                 cursor.execute("""
                     CREATE OR REPLACE FUNCTION get_questions_by_site(p_site_id INTEGER)
                     RETURNS TABLE (
                         question_id INTEGER,
                         question_text TEXT,
                         question_type VARCHAR,
+                        question_category VARCHAR,
                         options JSONB,
+                        click_element TEXT,
+                        input_element TEXT,
+                        submit_element TEXT,
                         required BOOLEAN,
                         answer_count BIGINT,
-                        workflow_name VARCHAR
+                        used_in_workflow BOOLEAN
                     ) AS $$
                     BEGIN
                         RETURN QUERY
@@ -453,22 +526,66 @@ def create_postgres_tables():
                             q.question_id,
                             q.question_text,
                             q.question_type,
+                            q.question_category,
                             q.options,
+                            q.click_element,
+                            q.input_element,
+                            q.submit_element,
                             q.required,
                             COUNT(a.answer_id)::BIGINT,
-                            w.workflow_name
+                            q.used_in_workflow
                         FROM questions q
                         LEFT JOIN answers a ON q.question_id = a.question_id
-                        LEFT JOIN workflows w ON q.workflow_id = w.workflow_id
                         WHERE q.survey_site_id = p_site_id AND q.is_active = TRUE
-                        GROUP BY q.question_id, q.question_text, q.question_type, 
-                                 q.options, q.required, w.workflow_name
+                        GROUP BY q.question_id, q.question_text, q.question_type, q.question_category,
+                                 q.options, q.click_element, q.input_element, q.submit_element, q.required,
+                                 q.used_in_workflow
                         ORDER BY q.order_index, q.extracted_at;
                     END;
                     $$ LANGUAGE plpgsql;
                 """)
 
-                # Get answers for a question
+                # Get unused questions for workflow creation
+                cursor.execute("""
+                    CREATE OR REPLACE FUNCTION get_unused_questions(
+                        p_account_id INTEGER DEFAULT NULL,
+                        p_site_id INTEGER DEFAULT NULL
+                    )
+                    RETURNS TABLE (
+                        question_id INTEGER,
+                        question_text TEXT,
+                        question_type VARCHAR,
+                        question_category VARCHAR,
+                        options JSONB,
+                        click_element TEXT,
+                        input_element TEXT,
+                        submit_element TEXT,
+                        survey_site_name VARCHAR
+                    ) AS $$
+                    BEGIN
+                        RETURN QUERY
+                        SELECT
+                            q.question_id,
+                            q.question_text,
+                            q.question_type,
+                            q.question_category,
+                            q.options,
+                            q.click_element,
+                            q.input_element,
+                            q.submit_element,
+                            ss.site_name
+                        FROM questions q
+                        JOIN survey_sites ss ON q.survey_site_id = ss.site_id
+                        WHERE (q.used_in_workflow IS NULL OR q.used_in_workflow = FALSE)
+                          AND q.is_active = TRUE
+                          AND (p_account_id IS NULL OR q.account_id = p_account_id)
+                          AND (p_site_id IS NULL OR q.survey_site_id = p_site_id)
+                        ORDER BY ss.site_name, q.question_category, q.extracted_at;
+                    END;
+                    $$ LANGUAGE plpgsql;
+                """)
+
+                # Get answers for a question with workflow info
                 cursor.execute("""
                     CREATE OR REPLACE FUNCTION get_answers_for_question(p_question_id INTEGER)
                     RETURNS TABLE (
@@ -501,7 +618,7 @@ def create_postgres_tables():
                     $$ LANGUAGE plpgsql;
                 """)
 
-                # Get prompt for account (should be 0 or 1)
+                # Get prompt for account
                 cursor.execute("""
                     CREATE OR REPLACE FUNCTION get_prompt_for_account(p_account_id INTEGER)
                     RETURNS TABLE (
@@ -519,79 +636,84 @@ def create_postgres_tables():
                     $$ LANGUAGE plpgsql;
                 """)
 
-                # Get workflows by site
+                # Get workflows by site with upload status
                 cursor.execute("""
-                    CREATE OR REPLACE FUNCTION get_workflows_by_site(p_site_id INTEGER)
+                    CREATE OR REPLACE FUNCTION get_workflows_by_site(
+                        p_site_id INTEGER,
+                        p_unused_only BOOLEAN DEFAULT TRUE
+                    )
                     RETURNS TABLE (
                         workflow_id INTEGER,
                         workflow_name VARCHAR,
-                        workflow_type VARCHAR,
-                        question_count BIGINT,
-                        answer_count BIGINT,
+                        question_id INTEGER,
+                        question_text TEXT,
                         created_time TIMESTAMP,
-                        is_active BOOLEAN
+                        uploaded_to_chrome BOOLEAN,
+                        uploaded_at TIMESTAMP
                     ) AS $$
                     BEGIN
                         RETURN QUERY
                         SELECT
                             w.workflow_id,
                             w.workflow_name,
-                            w.workflow_type,
-                            COUNT(DISTINCT q.question_id)::BIGINT,
-                            COUNT(DISTINCT a.answer_id)::BIGINT,
+                            w.question_id,
+                            q.question_text,
                             w.created_time,
-                            w.is_active
+                            w.uploaded_to_chrome,
+                            w.uploaded_at
                         FROM workflows w
-                        LEFT JOIN questions q ON w.workflow_id = q.workflow_id
-                        LEFT JOIN answers a ON w.workflow_id = a.workflow_id
+                        LEFT JOIN questions q ON w.question_id = q.question_id
                         WHERE w.site_id = p_site_id
-                        GROUP BY w.workflow_id, w.workflow_name, w.workflow_type, 
-                                 w.created_time, w.is_active
+                          AND (p_unused_only = FALSE OR w.uploaded_to_chrome = FALSE)
                         ORDER BY w.created_time DESC;
                     END;
                     $$ LANGUAGE plpgsql;
                 """)
 
-                # Record extraction batch
+                # Record extraction batch with URL tracking
                 cursor.execute("""
                     CREATE OR REPLACE FUNCTION record_extraction_batch(
                         p_account_id INTEGER,
                         p_site_id INTEGER,
+                        p_url_id INTEGER,
                         p_batch_id VARCHAR,
                         p_questions_found INTEGER
                     ) RETURNS VOID AS $$
                     BEGIN
                         INSERT INTO extraction_state (
-                            account_id, site_id, last_extraction_time,
+                            account_id, site_id, url_id, last_extraction_time,
                             last_extraction_batch_id, questions_found_last_run
                         ) VALUES (
-                            p_account_id, p_site_id, CURRENT_TIMESTAMP,
+                            p_account_id, p_site_id, p_url_id, CURRENT_TIMESTAMP,
                             p_batch_id, p_questions_found
                         )
                         ON CONFLICT (account_id, site_id) DO UPDATE SET
                             last_extraction_time = CURRENT_TIMESTAMP,
                             last_extraction_batch_id = EXCLUDED.last_extraction_batch_id,
                             questions_found_last_run = EXCLUDED.questions_found_last_run,
+                            url_id = EXCLUDED.url_id,
                             updated_at = CURRENT_TIMESTAMP;
                     END;
                     $$ LANGUAGE plpgsql;
                 """)
 
-                # Get answer statistics for a question
+                # Get answer statistics with category breakdown
                 cursor.execute("""
                     CREATE OR REPLACE FUNCTION get_answer_statistics(p_question_id INTEGER)
                     RETURNS JSONB AS $$
                     DECLARE
                         v_question_type VARCHAR;
+                        v_question_category VARCHAR;
                         v_result JSONB;
                     BEGIN
-                        SELECT question_type INTO v_question_type
+                        SELECT question_type, question_category INTO v_question_type, v_question_category
                         FROM questions
                         WHERE question_id = p_question_id;
 
-                        IF v_question_type = 'multiple_choice' THEN
+                        IF v_question_type IN ('multiple_choice', 'dropdown', 'checkbox', 'radio') THEN
                             SELECT jsonb_build_object(
-                                'type', 'multiple_choice',
+                                'type', v_question_type,
+                                'category', v_question_category,
                                 'total_answers', COUNT(*),
                                 'breakdown', jsonb_object_agg(
                                     COALESCE(answer_text, 'unknown'),
@@ -603,7 +725,8 @@ def create_postgres_tables():
                             
                         ELSIF v_question_type = 'rating' THEN
                             SELECT jsonb_build_object(
-                                'type', 'rating',
+                                'type', v_question_type,
+                                'category', v_question_category,
                                 'total_answers', COUNT(*),
                                 'average', AVG(answer_value_numeric),
                                 'min', MIN(answer_value_numeric),
@@ -615,7 +738,8 @@ def create_postgres_tables():
                             
                         ELSIF v_question_type = 'yes_no' THEN
                             SELECT jsonb_build_object(
-                                'type', 'yes_no',
+                                'type', v_question_type,
+                                'category', v_question_category,
                                 'total_answers', COUNT(*),
                                 'yes_count', COUNT(*) FILTER (WHERE answer_value_boolean = TRUE),
                                 'no_count', COUNT(*) FILTER (WHERE answer_value_boolean = FALSE)
@@ -625,7 +749,8 @@ def create_postgres_tables():
                             
                         ELSE
                             SELECT jsonb_build_object(
-                                'type', 'text',
+                                'type', v_question_type,
+                                'category', v_question_category,
                                 'total_answers', COUNT(*),
                                 'unique_responses', COUNT(DISTINCT answer_text),
                                 'avg_length', AVG(LENGTH(answer_text))
@@ -639,7 +764,7 @@ def create_postgres_tables():
                     $$ LANGUAGE plpgsql;
                 """)
 
-                logger.info("✓ Helper functions ready")
+                logger.info("✓ Helper functions ready (7 functions)")
 
                 # ======================================================
                 # STEP 6: CREATE VIEWS
@@ -651,6 +776,9 @@ def create_postgres_tables():
                     "survey_site_summary",
                     "account_summary",
                     "question_stats",
+                    "available_urls",
+                    "available_questions",
+                    "workflows_ready_for_upload",
                     "recent_extractions",
                     "prompt_backup_summary",
                     "workflow_summary"
@@ -659,18 +787,24 @@ def create_postgres_tables():
                     cursor.execute(f"DROP VIEW IF EXISTS {vname} CASCADE;")
                 logger.info(f"  ↳ Dropped {len(views_to_drop)} views")
 
-                # Survey site summary
+                # Survey site summary with click element stats
                 cursor.execute("""
                     CREATE VIEW survey_site_summary AS
                     SELECT
                         ss.site_id,
-                        ss.country,
-                        ss.url,
+                        ss.site_name,
+                        ss.description,
+                        ss.created_at,
+                        ss.is_active,
                         COUNT(DISTINCT q.question_id) as total_questions,
                         COUNT(DISTINCT CASE WHEN q.is_active THEN q.question_id END) as active_questions,
                         COUNT(DISTINCT q.account_id) as accounts_with_questions,
                         COUNT(DISTINCT a.answer_id) as total_answers,
                         COUNT(DISTINCT a.account_id) as unique_respondents,
+                        COUNT(DISTINCT q.question_type) as type_count,
+                        COUNT(DISTINCT q.question_category) as category_count,
+                        COUNT(CASE WHEN q.click_element IS NOT NULL THEN 1 END) as questions_with_click,
+                        COUNT(CASE WHEN q.used_in_workflow THEN 1 END) as questions_used,
                         COUNT(DISTINCT w.workflow_id) as total_workflows,
                         MIN(q.extracted_at) as first_question,
                         MAX(q.extracted_at) as latest_question,
@@ -679,10 +813,10 @@ def create_postgres_tables():
                     LEFT JOIN questions q ON ss.site_id = q.survey_site_id
                     LEFT JOIN answers a ON q.question_id = a.question_id
                     LEFT JOIN workflows w ON ss.site_id = w.site_id
-                    GROUP BY ss.site_id, ss.country, ss.url;
+                    GROUP BY ss.site_id, ss.site_name, ss.description, ss.created_at, ss.is_active;
                 """)
 
-                # Account summary
+                # Account summary with demographic usage
                 cursor.execute("""
                     CREATE VIEW account_summary AS
                     SELECT
@@ -690,11 +824,20 @@ def create_postgres_tables():
                         a.username,
                         a.country,
                         a.created_time,
+                        a.is_active,
                         a.total_surveys_processed,
+                        a.age,
+                        a.gender,
+                        a.city,
+                        a.education_level,
+                        a.job_status,
+                        a.income_range,
                         COUNT(DISTINCT q.question_id) as questions_extracted,
                         COUNT(DISTINCT ans.answer_id) as answers_submitted,
                         COUNT(DISTINCT q.survey_site_id) as sites_participated,
-                        COUNT(DISTINCT w.workflow_id) as workflows_used,
+                        COUNT(DISTINCT w.workflow_id) as workflows_created,
+                        COUNT(DISTINCT au.url_id) as urls_configured,
+                        COUNT(DISTINCT CASE WHEN au.is_used THEN au.url_id END) as urls_used,
                         MAX(ans.submitted_at) as last_answer,
                         p.prompt_id,
                         p.name as prompt_name,
@@ -702,42 +845,123 @@ def create_postgres_tables():
                     FROM accounts a
                     LEFT JOIN questions q ON a.account_id = q.account_id
                     LEFT JOIN answers ans ON a.account_id = ans.account_id
-                    LEFT JOIN workflows w ON ans.workflow_id = w.workflow_id
+                    LEFT JOIN workflows w ON a.account_id = w.account_id
+                    LEFT JOIN account_urls au ON a.account_id = au.account_id
                     LEFT JOIN prompts p ON a.account_id = p.account_id
-                    GROUP BY a.account_id, a.username, a.country, a.created_time, 
-                             a.total_surveys_processed, p.prompt_id, p.name, p.is_active;
+                    GROUP BY a.account_id, a.username, a.country, a.created_time, a.is_active,
+                             a.total_surveys_processed, a.age, a.gender, a.city, a.education_level,
+                             a.job_status, a.income_range, p.prompt_id, p.name, p.is_active;
                 """)
 
-                # Question statistics
+                # Question statistics with click elements
                 cursor.execute("""
                     CREATE VIEW question_stats AS
                     SELECT
                         q.question_id,
                         q.survey_site_id,
-                        ss.country as survey_site_country,
+                        ss.site_name as survey_site_name,
+                        q.account_id,
+                        a.username,
                         q.question_text,
                         q.question_type,
+                        q.question_category,
                         q.options,
+                        q.click_element,
+                        q.input_element,
+                        q.submit_element,
                         q.required,
                         q.extracted_at,
                         q.is_active,
-                        w.workflow_name,
-                        w.workflow_type,
-                        COUNT(DISTINCT a.answer_id) as answer_count,
-                        COUNT(DISTINCT a.account_id) as unique_respondents,
-                        MIN(a.submitted_at) as first_answer,
-                        MAX(a.submitted_at) as last_answer,
+                        q.used_in_workflow,
+                        q.used_at,
+                        COUNT(DISTINCT ans.answer_id) as answer_count,
+                        COUNT(DISTINCT ans.account_id) as unique_respondents,
+                        MIN(ans.submitted_at) as first_answer,
+                        MAX(ans.submitted_at) as last_answer,
                         q.extraction_batch_id
                     FROM questions q
                     LEFT JOIN survey_sites ss ON q.survey_site_id = ss.site_id
-                    LEFT JOIN workflows w ON q.workflow_id = w.workflow_id
-                    LEFT JOIN answers a ON q.question_id = a.question_id
-                    GROUP BY q.question_id, q.survey_site_id, ss.country, q.question_text,
-                             q.question_type, q.options, q.required, q.extracted_at,
-                             q.is_active, w.workflow_name, w.workflow_type, q.extraction_batch_id;
+                    LEFT JOIN accounts a ON q.account_id = a.account_id
+                    LEFT JOIN answers ans ON q.question_id = ans.question_id
+                    GROUP BY q.question_id, q.survey_site_id, ss.site_name, q.account_id, a.username,
+                             q.question_text, q.question_type, q.question_category, q.options,
+                             q.click_element, q.input_element, q.submit_element, q.required,
+                             q.extracted_at, q.is_active, q.used_in_workflow, q.used_at,
+                             q.extraction_batch_id;
                 """)
 
-                # Recent extractions
+                # Available URLs for extraction
+                cursor.execute("""
+                    CREATE VIEW available_urls AS
+                    SELECT 
+                        au.url_id,
+                        au.account_id,
+                        a.username,
+                        au.site_id,
+                        ss.site_name,
+                        au.url,
+                        au.is_default,
+                        au.is_used,
+                        au.used_at,
+                        au.created_at,
+                        au.notes
+                    FROM account_urls au
+                    JOIN accounts a ON au.account_id = a.account_id
+                    JOIN survey_sites ss ON au.site_id = ss.site_id
+                    WHERE au.is_used = FALSE
+                    ORDER BY au.is_default DESC, au.created_at DESC;
+                """)
+
+                # Questions available for workflow creation
+                cursor.execute("""
+                    CREATE VIEW available_questions AS
+                    SELECT 
+                        q.question_id,
+                        q.survey_site_id,
+                        ss.site_name,
+                        q.account_id,
+                        a.username,
+                        q.question_text,
+                        q.question_type,
+                        q.question_category,
+                        q.options,
+                        q.click_element,
+                        q.input_element,
+                        q.submit_element,
+                        q.required,
+                        q.extracted_at
+                    FROM questions q
+                    JOIN accounts a ON q.account_id = a.account_id
+                    JOIN survey_sites ss ON q.survey_site_id = ss.site_id
+                    WHERE q.used_in_workflow = FALSE AND q.is_active = TRUE
+                    ORDER BY ss.site_name, q.question_category, q.extracted_at DESC;
+                """)
+
+                # Workflows ready for upload
+                cursor.execute("""
+                    CREATE VIEW workflows_ready_for_upload AS
+                    SELECT 
+                        w.workflow_id,
+                        w.workflow_name,
+                        w.account_id,
+                        a.username,
+                        w.site_id,
+                        ss.site_name,
+                        w.created_time,
+                        w.question_id,
+                        q.question_text,
+                        q.question_type,
+                        q.question_category,
+                        q.click_element
+                    FROM workflows w
+                    JOIN accounts a ON w.account_id = a.account_id
+                    JOIN survey_sites ss ON w.site_id = ss.site_id
+                    LEFT JOIN questions q ON w.question_id = q.question_id
+                    WHERE w.uploaded_to_chrome = FALSE AND w.is_active = TRUE
+                    ORDER BY w.created_time DESC;
+                """)
+
+                # Recent extractions summary
                 cursor.execute("""
                     CREATE VIEW recent_extractions AS
                     SELECT
@@ -746,7 +970,10 @@ def create_postgres_tables():
                         MIN(extracted_at) as first_extracted,
                         MAX(extracted_at) as last_extracted,
                         COUNT(DISTINCT survey_site_id) as site_count,
-                        COUNT(DISTINCT account_id) as account_count
+                        COUNT(DISTINCT account_id) as account_count,
+                        COUNT(DISTINCT question_type) as type_count,
+                        COUNT(DISTINCT question_category) as category_count,
+                        COUNT(CASE WHEN click_element IS NOT NULL THEN 1 END) as questions_with_click
                     FROM questions
                     WHERE extraction_batch_id IS NOT NULL
                     GROUP BY extraction_batch_id
@@ -759,14 +986,16 @@ def create_postgres_tables():
                     SELECT
                         p.prompt_id,
                         p.account_id,
+                        a.username,
                         p.name as current_prompt_name,
                         COUNT(pb.backup_id) as total_backups,
                         MAX(pb.version_number) as latest_version,
                         MIN(pb.backed_up_at) as first_backup,
                         MAX(pb.backed_up_at) as latest_backup
                     FROM prompts p
+                    LEFT JOIN accounts a ON p.account_id = a.account_id
                     LEFT JOIN prompt_backups pb ON p.prompt_id = pb.prompt_id
-                    GROUP BY p.prompt_id, p.account_id, p.name;
+                    GROUP BY p.prompt_id, p.account_id, a.username, p.name;
                 """)
 
                 # Workflow summary
@@ -775,23 +1004,26 @@ def create_postgres_tables():
                     SELECT
                         w.workflow_id,
                         w.workflow_name,
-                        w.workflow_type,
-                        ss.country as site_country,
-                        ss.url as site_url,
+                        ss.site_name,
+                        w.account_id,
+                        a.username,
                         COUNT(DISTINCT q.question_id) as questions_processed,
-                        COUNT(DISTINCT a.answer_id) as answers_generated,
+                        COUNT(DISTINCT ans.answer_id) as answers_generated,
                         w.created_time,
                         w.updated_time,
+                        w.uploaded_to_chrome,
+                        w.uploaded_at,
                         w.is_active
                     FROM workflows w
                     LEFT JOIN survey_sites ss ON w.site_id = ss.site_id
+                    LEFT JOIN accounts a ON w.account_id = a.account_id
                     LEFT JOIN questions q ON w.workflow_id = q.workflow_id
-                    LEFT JOIN answers a ON w.workflow_id = a.workflow_id
-                    GROUP BY w.workflow_id, w.workflow_name, w.workflow_type, 
-                             ss.country, ss.url, w.created_time, w.updated_time, w.is_active;
+                    LEFT JOIN answers ans ON w.workflow_id = ans.workflow_id
+                    GROUP BY w.workflow_id, w.workflow_name, ss.site_name, w.account_id, a.username,
+                             w.created_time, w.updated_time, w.uploaded_to_chrome, w.uploaded_at, w.is_active;
                 """)
 
-                logger.info("✓ All views ready")
+                logger.info("✓ All views ready (9 views)")
 
                 # ======================================================
                 # STEP 7: INSERT DEFAULT DATA
@@ -800,19 +1032,24 @@ def create_postgres_tables():
 
                 # Insert default survey sites if none exist
                 cursor.execute("""
-                    INSERT INTO survey_sites (country, url, description)
+                    INSERT INTO survey_sites (site_name, description)
                     SELECT * FROM (VALUES
-                        ('United States', 'https://surveys.usa.gov', 'US Government Surveys'),
-                        ('Canada', 'https://surveys.canada.ca', 'Canadian Surveys'),
-                        ('United Kingdom', 'https://surveys.gov.uk', 'UK Government Surveys'),
-                        ('Australia', 'https://surveys.gov.au', 'Australian Surveys'),
-                        ('Germany', 'https://umfragen.de', 'German Surveys'),
-                        ('France', 'https://sondages.fr', 'French Surveys'),
-                        ('Japan', 'https://surveys.jp', 'Japanese Surveys'),
-                        ('Brazil', 'https://pesquisas.gov.br', 'Brazilian Surveys'),
-                        ('India', 'https://surveys.gov.in', 'Indian Surveys'),
-                        ('Mexico', 'https://encuestas.gob.mx', 'Mexican Surveys')
-                    ) AS v(country, url, description)
+                        ('Top Surveys', 'General survey site with high-paying opportunities'),
+                        ('Quick Rewards', 'Fast surveys with instant payouts'),
+                        ('Survey Junkie', 'Popular survey platform'),
+                        ('Pinecone Research', 'Product testing and surveys'),
+                        ('Swagbucks', 'Earn points for surveys and activities'),
+                        ('InboxDollars', 'Paid surveys and offers'),
+                        ('MyPoints', 'Surveys and shopping rewards'),
+                        ('Toluna', 'Community-based surveys'),
+                        ('YouGov', 'Opinion surveys on current events'),
+                        ('Vindale Research', 'High-paying survey site'),
+                        ('PrizeRebel', 'Surveys and offers platform'),
+                        ('LifePoints', 'Mobile and web surveys'),
+                        ('SurveyMonkey Rewards', 'Paid survey platform'),
+                        ('OnePoll', 'Daily news and opinion surveys'),
+                        ('Valued Opinions', 'Consumer opinion surveys')
+                    ) AS v(site_name, description)
                     WHERE NOT EXISTS (SELECT 1 FROM survey_sites LIMIT 1);
                 """)
 
@@ -826,26 +1063,30 @@ def create_postgres_tables():
                 logger.info("✅ POSTGRESQL SCHEMA FULLY INITIALIZED")
                 logger.info("=" * 60)
                 logger.info("📊 Schema summary:")
-                logger.info("  • 10 tables:")
-                logger.info("    - accounts (with country field)")
+                logger.info("  • 11 tables:")
+                logger.info("    - accounts (with 20+ demographic fields)")
                 logger.info("    - account_cookies")
-                logger.info("    - survey_sites")
+                logger.info("    - survey_sites (by name)")
+                logger.info("    - account_urls (with usage tracking)")
                 logger.info("    - prompts (one per user - UNIQUE constraint)")
                 logger.info("    - prompt_backups")
-                logger.info("    - workflows (linked to survey sites)")
-                logger.info("    - questions (extracted, linked to workflows)")
-                logger.info("    - answers (submitted, linked to workflows)")
-                logger.info("    - extraction_state")
+                logger.info("    - workflows (with upload tracking)")
+                logger.info("    - questions (with click elements and categories)")
+                logger.info("    - answers (linked to workflows)")
+                logger.info("    - extraction_state (with URL tracking)")
                 logger.info("    - workflow_generation_log")
-                logger.info("  • 7 helper functions")
-                logger.info("  • 6 views")
-                logger.info("  • 7 triggers")
-                logger.info("  • ~40 indexes")
+                logger.info("  • 8 helper functions")
+                logger.info("  • 9 views")
+                logger.info("  • 8 triggers")
+                logger.info("  • ~50 indexes")
                 logger.info("=" * 60)
-                logger.info("🎯 This schema is optimized for SURVEY AUTOMATION")
-                logger.info("   - Workflows are linked to survey sites")
-                logger.info("   - Questions and answers track which workflow processed them")
-                logger.info("   - One prompt per user for consistent persona")
+                logger.info("🎯 New Features:")
+                logger.info("   - Click elements stored per question")
+                logger.info("   - Question categories for better organization")
+                logger.info("   - URL usage tracking (is_used flag)")
+                logger.info("   - Workflow upload tracking to Chrome")
+                logger.info("   - Demographic fields for rich prompts")
+                logger.info("   - Survey sites by name (not URL)")
                 logger.info("=" * 60)
 
                 return True

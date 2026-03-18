@@ -1,5 +1,5 @@
 """
-Simplified Prompts Page - One prompt per user for answering questions
+Enhanced Prompts Page - One prompt per user using all available demographic information
 """
 
 import streamlit as st
@@ -8,7 +8,8 @@ import plotly.express as px
 from datetime import datetime
 import time
 import logging
-from typing import Optional
+import json
+from typing import Optional, Dict, Any
 
 from src.core.database.postgres import prompts as pg_prompts
 from src.core.database.postgres import accounts as pg_utils
@@ -23,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 class PromptsPage:
-    """Simplified Prompts page - One prompt per user for answering questions."""
+    """Enhanced Prompts page - One prompt per user using all available demographic info."""
 
     def __init__(self, db_manager):
         self.db_manager = db_manager
@@ -34,6 +35,9 @@ class PromptsPage:
 
         if 'editing_prompt_id' not in st.session_state:
             st.session_state.editing_prompt_id = None
+
+        if 'generated_prompt' not in st.session_state:
+            st.session_state.generated_prompt = None
 
     def add_log(self, message, level="INFO"):
         """Add a log message."""
@@ -79,27 +83,49 @@ class PromptsPage:
                     )
 
     @st.cache_data(ttl=60)
-    def load_accounts(_self) -> pd.DataFrame:
-        """Load accounts for selection."""
+    def load_accounts_with_demographics(_self) -> pd.DataFrame:
+        """Load accounts with all demographic information."""
         try:
-            accounts_data = pg_utils.get_all_accounts()
-            if not accounts_data:
-                return pd.DataFrame(columns=['account_id', 'username', 'country'])
-
-            df = pd.DataFrame(accounts_data)
-            required_cols = ['account_id', 'username']
-            if 'country' not in df.columns:
-                df['country'] = 'Unknown'
-
-            return df[required_cols + ['country']].drop_duplicates()
-
+            with get_postgres_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    cursor.execute("""
+                        SELECT 
+                            a.account_id,
+                            a.username,
+                            a.country,
+                            a.age,
+                            a.gender,
+                            a.city,
+                            a.education_level,
+                            a.email,
+                            a.phone,
+                            a.job_status,
+                            a.industry,
+                            a.income_range,
+                            a.marital_status,
+                            a.household_size,
+                            a.has_children,
+                            a.shopping_habits,
+                            a.brands_used,
+                            a.hobbies,
+                            a.internet_usage,
+                            a.device_type,
+                            a.owns_laptop,
+                            a.owns_tv,
+                            a.internet_provider,
+                            a.created_time,
+                            a.is_active
+                        FROM accounts a
+                        ORDER BY a.username
+                    """)
+                    return pd.DataFrame([dict(row) for row in cursor.fetchall()])
         except Exception as e:
-            logger.error(f"Error loading accounts: {e}")
-            return pd.DataFrame(columns=['account_id', 'username', 'country'])
+            logger.error(f"Error loading accounts with demographics: {e}")
+            return pd.DataFrame()
 
     @st.cache_data(ttl=60)
     def load_prompts_data(_self) -> pd.DataFrame:
-        """Load all prompts (one per user)."""
+        """Load all prompts with answer counts."""
         try:
             with get_postgres_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
@@ -125,27 +151,161 @@ class PromptsPage:
                         ORDER BY a.username
                     """)
                     return pd.DataFrame([dict(row) for row in cursor.fetchall()])
-
         except Exception as e:
             logger.error(f"Error loading prompts: {e}")
             return pd.DataFrame()
 
+    def _generate_prompt_from_demographics(self, user_data: Dict[str, Any]) -> str:
+        """Generate a rich prompt using all available demographic information."""
+        
+        # Start with base persona
+        prompt_parts = []
+        
+        # Basic identification
+        prompt_parts.append(f"You are {user_data.get('username', 'a user')}.")
+        
+        # Location
+        location_parts = []
+        if user_data.get('city'):
+            location_parts.append(f"from {user_data['city']}")
+        if user_data.get('country'):
+            location_parts.append(user_data['country'])
+        if location_parts:
+            prompt_parts.append(f"You are {', '.join(location_parts)}.")
+        
+        # Age and gender
+        if user_data.get('age'):
+            prompt_parts.append(f"You are {user_data['age']} years old.")
+        if user_data.get('gender'):
+            prompt_parts.append(f"Your gender is {user_data['gender']}.")
+        
+        # Education
+        if user_data.get('education_level'):
+            prompt_parts.append(f"Your education level is {user_data['education_level']}.")
+        
+        # Employment
+        employment_parts = []
+        if user_data.get('job_status'):
+            employment_parts.append(user_data['job_status'])
+        if user_data.get('industry'):
+            employment_parts.append(f"working in {user_data['industry']}")
+        if employment_parts:
+            prompt_parts.append(f"You are {' '.join(employment_parts)}.")
+        
+        # Income
+        if user_data.get('income_range'):
+            prompt_parts.append(f"Your income range is {user_data['income_range']}.")
+        
+        # Household
+        household_parts = []
+        if user_data.get('marital_status'):
+            household_parts.append(f"you are {user_data['marital_status'].lower()}")
+        if user_data.get('household_size'):
+            household_parts.append(f"living in a household of {user_data['household_size']} people")
+        if user_data.get('has_children') is not None:
+            household_parts.append(f"{'have' if user_data['has_children'] else 'do not have'} children")
+        if household_parts:
+            prompt_parts.append(f"In your household, {' and '.join(household_parts)}.")
+        
+        # Shopping habits
+        if user_data.get('shopping_habits'):
+            prompt_parts.append(f"Your shopping habits: {user_data['shopping_habits']}")
+        
+        # Brands used
+        if user_data.get('brands_used'):
+            prompt_parts.append(f"Brands you use: {user_data['brands_used']}")
+        
+        # Hobbies
+        if user_data.get('hobbies'):
+            prompt_parts.append(f"Your hobbies include: {user_data['hobbies']}")
+        
+        # Internet usage
+        if user_data.get('internet_usage'):
+            prompt_parts.append(f"Your internet usage is {user_data['internet_usage']}.")
+        
+        # Device usage
+        device_parts = []
+        if user_data.get('device_type'):
+            device_parts.append(f"primarily use a {user_data['device_type']}")
+        if user_data.get('owns_laptop') is not None:
+            device_parts.append(f"{'own' if user_data['owns_laptop'] else 'do not own'} a laptop")
+        if user_data.get('owns_tv') is not None:
+            device_parts.append(f"{'own' if user_data['owns_tv'] else 'do not own'} a TV")
+        if device_parts:
+            prompt_parts.append(f"You {' and '.join(device_parts)}.")
+        
+        if user_data.get('internet_provider'):
+            prompt_parts.append(f"Your internet provider is {user_data['internet_provider']}.")
+        
+        # Add instructions for answering questions
+        prompt_parts.append("")
+        prompt_parts.append("When answering survey questions, always respond as this persona.")
+        prompt_parts.append("Base your answers on your demographics, lifestyle, and preferences.")
+        prompt_parts.append("Be consistent with your profile when answering questions.")
+        prompt_parts.append("Answer naturally as a real person would, with appropriate detail.")
+        
+        # Add contact info note (but don't include in prompt)
+        if user_data.get('email') or user_data.get('phone'):
+            prompt_parts.append("")
+            prompt_parts.append("Note: Your contact information is stored separately and will be used for survey verification when needed.")
+        
+        return "\n".join(prompt_parts)
+
+    def _format_demographic_summary(self, user_data: Dict[str, Any]) -> str:
+        """Create a readable summary of available demographic information."""
+        summary = []
+        
+        demographic_fields = [
+            ('age', 'Age'),
+            ('gender', 'Gender'),
+            ('city', 'City'),
+            ('country', 'Country'),
+            ('education_level', 'Education'),
+            ('job_status', 'Job Status'),
+            ('industry', 'Industry'),
+            ('income_range', 'Income Range'),
+            ('marital_status', 'Marital Status'),
+            ('household_size', 'Household Size'),
+            ('has_children', 'Has Children'),
+            ('shopping_habits', 'Shopping Habits'),
+            ('brands_used', 'Brands Used'),
+            ('hobbies', 'Hobbies'),
+            ('internet_usage', 'Internet Usage'),
+            ('device_type', 'Primary Device'),
+            ('owns_laptop', 'Owns Laptop'),
+            ('owns_tv', 'Owns TV'),
+            ('internet_provider', 'Internet Provider')
+        ]
+        
+        for field, label in demographic_fields:
+            value = user_data.get(field)
+            if value is not None and value != '':
+                if field in ['has_children', 'owns_laptop', 'owns_tv']:
+                    value = 'Yes' if value else 'No'
+                summary.append(f"  • {label}: {value}")
+        
+        if summary:
+            return "Available demographic information:\n" + "\n".join(summary)
+        else:
+            return "No demographic information available yet."
+
     def render(self):
         """Main render method."""
-        st.title("📝 User Prompts")
+        st.title("📝 User Persona Prompts")
 
         st.info("""
         **Each user has one prompt** that defines their persona for answering survey questions.
-        This prompt tells the AI how to answer questions as this specific user.
+        The prompt is automatically generated using all available demographic information.
+        You can edit the generated prompt to customize it further.
         """)
 
         # Load data
-        with st.spinner("Loading data..."):
-            accounts_df = self.load_accounts()
+        with st.spinner("Loading user data..."):
+            accounts_df = self.load_accounts_with_demographics()
             prompts_df = self.load_prompts_data()
 
         # Show stats
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric("Total Users", len(accounts_df))
         with col2:
@@ -154,6 +314,9 @@ class PromptsPage:
         with col3:
             total_answers = prompts_df['answer_count'].sum() if not prompts_df.empty else 0
             st.metric("Total Answers Generated", int(total_answers))
+        with col4:
+            users_with_demographics = accounts_df.dropna(subset=['age', 'gender', 'city'], how='all').shape[0]
+            st.metric("Users with Demographics", users_with_demographics)
 
         st.markdown("---")
 
@@ -175,7 +338,14 @@ class PromptsPage:
 
                     for _, user in users_needing_prompts.iterrows():
                         with st.container():
-                            st.markdown(f"**👤 {user['username']}** (Country: {user.get('country', 'Unknown')})")
+                            st.markdown(f"**👤 {user['username']}**")
+                            
+                            # Show demographic summary
+                            with st.expander("📊 View Demographic Info", expanded=False):
+                                st.markdown(self._format_demographic_summary(user.to_dict()))
+
+                            # Generate prompt preview
+                            generated_prompt = self._generate_prompt_from_demographics(user.to_dict())
 
                             # Create prompt form for this user
                             with st.form(key=f"create_prompt_{user['account_id']}"):
@@ -187,10 +357,20 @@ class PromptsPage:
 
                                 prompt_content = st.text_area(
                                     "User Persona Prompt",
-                                    height=200,
-                                    placeholder=f"Example: You are {user['username']}, a {user.get('country', '')} resident who...",
+                                    value=generated_prompt,
+                                    height=300,
                                     key=f"content_{user['account_id']}"
                                 )
+
+                                # Show demographic usage stats
+                                demo_count = sum(1 for field in ['age', 'gender', 'city', 'country', 'education_level', 
+                                                                'job_status', 'industry', 'income_range', 'marital_status',
+                                                                'household_size', 'has_children', 'shopping_habits',
+                                                                'brands_used', 'hobbies', 'internet_usage', 'device_type',
+                                                                'owns_laptop', 'owns_tv', 'internet_provider'] 
+                                                if user.get(field) not in [None, ''])
+                                
+                                st.caption(f"✨ Using {demo_count} demographic fields in this prompt")
 
                                 col_submit, _ = st.columns([1, 1])
                                 with col_submit:
@@ -214,7 +394,7 @@ class PromptsPage:
                                             )
 
                                             if prompt_id:
-                                                self.add_log(f"✅ Created prompt for {user['username']}")
+                                                self.add_log(f"✅ Created prompt for {user['username']} using {demo_count} demographic fields")
                                                 st.success("Prompt created!")
                                                 st.cache_data.clear()
                                                 time.sleep(1)
@@ -236,9 +416,11 @@ class PromptsPage:
                 st.info("No prompts created yet")
             else:
                 for _, prompt in prompts_df.iterrows():
+                    # Get full user data for this account
+                    user_data = accounts_df[accounts_df['account_id'] == prompt['account_id']].iloc[0] if not accounts_df.empty else {}
+                    
                     with st.expander(
-                        f"👤 **{prompt['username']}** - {prompt.get('country', 'Unknown')} "
-                        f"({prompt.get('answer_count', 0)} answers)",
+                        f"👤 **{prompt['username']}** - {prompt.get('answer_count', 0)} answers",
                         expanded=(st.session_state.editing_prompt_id == prompt['prompt_id'])
                     ):
                         col1, col2 = st.columns([3, 1])
@@ -256,7 +438,7 @@ class PromptsPage:
                                     new_content = st.text_area(
                                         "Prompt Content",
                                         value=prompt['content'],
-                                        height=200,
+                                        height=300,
                                         key=f"edit_content_{prompt['prompt_id']}"
                                     )
 
@@ -265,6 +447,20 @@ class PromptsPage:
                                         value=prompt['is_active'],
                                         key=f"edit_active_{prompt['prompt_id']}"
                                     )
+
+                                    # Show regenerate button
+                                    if st.form_submit_button("🔄 Regenerate from Demographics", use_container_width=True):
+                                        if not user_data.empty:
+                                            regenerated = self._generate_prompt_from_demographics(user_data.to_dict())
+                                            st.session_state.generated_prompt = regenerated
+                                            st.rerun()
+                                    
+                                    if st.session_state.get('generated_prompt'):
+                                        st.info("Preview of regenerated prompt:")
+                                        st.text_area("Regenerated Content", value=st.session_state.generated_prompt, height=200, disabled=True)
+                                        if st.form_submit_button("📝 Use Regenerated", use_container_width=True):
+                                            new_content = st.session_state.generated_prompt
+                                            st.session_state.generated_prompt = None
 
                                     col_save, col_cancel = st.columns(2)
 
@@ -281,6 +477,7 @@ class PromptsPage:
                                                 self.add_log(f"✅ Updated prompt for {prompt['username']}")
                                                 st.success("Prompt updated!")
                                                 st.session_state.editing_prompt_id = None
+                                                st.session_state.generated_prompt = None
                                                 st.cache_data.clear()
                                                 time.sleep(1)
                                                 st.rerun()
@@ -290,6 +487,7 @@ class PromptsPage:
                                     with col_cancel:
                                         if st.form_submit_button("Cancel", use_container_width=True):
                                             st.session_state.editing_prompt_id = None
+                                            st.session_state.generated_prompt = None
                                             st.rerun()
                             else:
                                 # View mode
@@ -297,6 +495,11 @@ class PromptsPage:
                                 st.markdown(f"**Type:** `{prompt['prompt_type']}`")
                                 st.markdown(f"**Created:** {prompt['created_time'].strftime('%Y-%m-%d %H:%M')}")
                                 st.markdown(f"**Status:** {'✅ Active' if prompt['is_active'] else '❌ Inactive'}")
+
+                                # Show demographic summary if available
+                                if not user_data.empty:
+                                    with st.expander("📊 View Source Demographics", expanded=False):
+                                        st.markdown(self._format_demographic_summary(user_data.to_dict()))
 
                                 with st.container():
                                     st.markdown("**Prompt Content:**")
@@ -309,7 +512,7 @@ class PromptsPage:
                                 st.session_state.editing_prompt_id = prompt['prompt_id']
                                 st.rerun()
 
-                            # Preview button to see how this prompt would answer
+                            # Preview button
                             if st.button("🔍 Preview", key=f"preview_{prompt['prompt_id']}", use_container_width=True):
                                 with st.popover("Answer Preview"):
                                     st.markdown("**Sample Question:** What is your favorite feature of this survey site?")

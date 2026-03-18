@@ -92,6 +92,9 @@ class AccountsPage:
         # Ensure database tables/columns exist
         self._ensure_survey_columns()
         self._ensure_survey_sites_table()
+        self._ensure_demographic_columns()
+        self._ensure_account_urls_table()
+        self._ensure_question_columns()
 
     # --------------------------------------------------------------------------
     # Database schema migration helpers
@@ -134,23 +137,178 @@ class AccountsPage:
         except Exception as e:
             logger.error(f"Failed to ensure survey columns: {e}")
 
+    def _ensure_demographic_columns(self):
+        """Ensure demographic columns exist in accounts table (all optional)."""
+        try:
+            demographic_columns = [
+                ("age", "INTEGER"),
+                ("date_of_birth", "DATE"),
+                ("gender", "VARCHAR(50)"),
+                ("city", "VARCHAR(100)"),
+                ("education_level", "VARCHAR(100)"),
+                ("email", "VARCHAR(255)"),
+                ("phone", "VARCHAR(50)"),
+                ("job_status", "VARCHAR(100)"),
+                ("industry", "VARCHAR(100)"),
+                ("income_range", "VARCHAR(50)"),
+                ("marital_status", "VARCHAR(50)"),
+                ("household_size", "INTEGER"),
+                ("has_children", "BOOLEAN"),
+                ("shopping_habits", "TEXT"),
+                ("brands_used", "TEXT"),
+                ("hobbies", "TEXT"),
+                ("internet_usage", "VARCHAR(100)"),
+                ("device_type", "VARCHAR(100)"),
+                ("owns_laptop", "BOOLEAN"),
+                ("owns_tv", "BOOLEAN"),
+                ("internet_provider", "VARCHAR(100)"),
+                ("demographic_data", "JSONB")
+            ]
+
+            for col_name, col_type in demographic_columns:
+                check_query = f"""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name = 'accounts' AND column_name = '{col_name}'
+                """
+                result = self.db_manager.execute_query(check_query, fetch=True)
+                if not result:
+                    alter_query = f"ALTER TABLE accounts ADD COLUMN {col_name} {col_type}"
+                    self.db_manager.execute_query(alter_query)
+                    logger.info(f"✅ Added {col_name} column to accounts table")
+        except Exception as e:
+            logger.error(f"Failed to ensure demographic columns: {e}")
+
     def _ensure_survey_sites_table(self):
-        """Create survey_sites table if it doesn't exist."""
+        """Create survey_sites table with name as primary identifier."""
+        try:
+            # First check if old table exists and migrate
+            check_old = """
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = 'survey_sites' AND column_name = 'country'
+            """
+            result = self.db_manager.execute_query(check_old, fetch=True)
+            
+            if result:
+                # Old table exists - we need to add name column if it doesn't exist
+                check_name = """
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name = 'survey_sites' AND column_name = 'site_name'
+                """
+                name_exists = self.db_manager.execute_query(check_name, fetch=True)
+                if not name_exists:
+                    alter_query = "ALTER TABLE survey_sites ADD COLUMN site_name VARCHAR(255)"
+                    self.db_manager.execute_query(alter_query)
+                    logger.info("✅ Added site_name column to survey_sites table")
+                    
+                # Also add is_active if missing
+                check_active = """
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name = 'survey_sites' AND column_name = 'is_active'
+                """
+                active_exists = self.db_manager.execute_query(check_active, fetch=True)
+                if not active_exists:
+                    alter_query = "ALTER TABLE survey_sites ADD COLUMN is_active BOOLEAN DEFAULT TRUE"
+                    self.db_manager.execute_query(alter_query)
+                    logger.info("✅ Added is_active column to survey_sites table")
+            else:
+                # Create new table
+                create_table_query = """
+                CREATE TABLE IF NOT EXISTS survey_sites (
+                    site_id SERIAL PRIMARY KEY,
+                    site_name VARCHAR(255) UNIQUE NOT NULL,
+                    description TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    is_active BOOLEAN DEFAULT TRUE
+                )
+                """
+                self.db_manager.execute_query(create_table_query)
+                logger.info("✅ Ensured survey_sites table exists with site_name")
+        except Exception as e:
+            logger.error(f"Failed to create survey_sites table: {e}")
+
+    def _ensure_account_urls_table(self):
+        """Create account_urls table to store per-account URLs for survey sites."""
         try:
             create_table_query = """
-            CREATE TABLE IF NOT EXISTS survey_sites (
-                site_id SERIAL PRIMARY KEY,
-                country VARCHAR(100) UNIQUE NOT NULL,
+            CREATE TABLE IF NOT EXISTS account_urls (
+                url_id SERIAL PRIMARY KEY,
+                account_id INTEGER NOT NULL REFERENCES accounts(account_id) ON DELETE CASCADE,
+                site_id INTEGER NOT NULL REFERENCES survey_sites(site_id) ON DELETE CASCADE,
                 url TEXT NOT NULL,
-                description TEXT,
+                is_default BOOLEAN DEFAULT FALSE,
+                is_used BOOLEAN DEFAULT FALSE,
+                used_at TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                notes TEXT,
+                UNIQUE(account_id, site_id, url)
             )
             """
             self.db_manager.execute_query(create_table_query)
-            logger.info("✅ Ensured survey_sites table exists")
+            logger.info("✅ Ensured account_urls table exists")
+            
+            # Create indexes
+            self.db_manager.execute_query("""
+                CREATE INDEX IF NOT EXISTS idx_account_urls_account_site 
+                ON account_urls(account_id, site_id)
+            """)
+            self.db_manager.execute_query("""
+                CREATE INDEX IF NOT EXISTS idx_account_urls_used 
+                ON account_urls(is_used) WHERE is_used = FALSE
+            """)
         except Exception as e:
-            logger.error(f"Failed to create survey_sites table: {e}")
+            logger.error(f"Failed to create account_urls table: {e}")
+
+    def _ensure_question_columns(self):
+        """Ensure questions table has click_element and usage tracking columns."""
+        try:
+            # Check if click_element column exists
+            check_click = """
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = 'questions' AND column_name = 'click_element'
+            """
+            result = self.db_manager.execute_query(check_click, fetch=True)
+            if not result:
+                alter_query = "ALTER TABLE questions ADD COLUMN click_element TEXT"
+                self.db_manager.execute_query(alter_query)
+                logger.info("✅ Added click_element column to questions table")
+            
+            # Check if used_in_workflow column exists
+            check_used = """
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = 'questions' AND column_name = 'used_in_workflow'
+            """
+            result = self.db_manager.execute_query(check_used, fetch=True)
+            if not result:
+                alter_query = "ALTER TABLE questions ADD COLUMN used_in_workflow BOOLEAN DEFAULT FALSE"
+                self.db_manager.execute_query(alter_query)
+                logger.info("✅ Added used_in_workflow column to questions table")
+            
+            # Check if used_at column exists
+            check_used_at = """
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = 'questions' AND column_name = 'used_at'
+            """
+            result = self.db_manager.execute_query(check_used_at, fetch=True)
+            if not result:
+                alter_query = "ALTER TABLE questions ADD COLUMN used_at TIMESTAMP"
+                self.db_manager.execute_query(alter_query)
+                logger.info("✅ Added used_at column to questions table")
+                
+            # Check if metadata column exists
+            check_metadata = """
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = 'questions' AND column_name = 'metadata'
+            """
+            result = self.db_manager.execute_query(check_metadata, fetch=True)
+            if not result:
+                alter_query = "ALTER TABLE questions ADD COLUMN metadata JSONB"
+                self.db_manager.execute_query(alter_query)
+                logger.info("✅ Added metadata column to questions table")
+                
+        except Exception as e:
+            logger.error(f"Failed to ensure question columns: {e}")
 
     # --------------------------------------------------------------------------
     # Helper methods
@@ -203,28 +361,212 @@ class AccountsPage:
         st.session_state.account_creation_logs = []
 
     # --------------------------------------------------------------------------
-    # Account creation (surveys version)
+    # Account URL management methods
     # --------------------------------------------------------------------------
-    def _create_account_in_postgres_minimal(self, username, country=None):
-        """Create minimal account record to get account_id. Stores country."""
+    def _get_account_urls(self, account_id: int, site_id: Optional[int] = None, show_used: bool = False) -> List[Dict[str, Any]]:
+        """Get all URLs for an account, optionally filtered by site."""
+        try:
+            query = """
+                SELECT 
+                    au.url_id,
+                    au.account_id,
+                    au.site_id,
+                    ss.site_name,
+                    au.url,
+                    au.is_default,
+                    au.is_used,
+                    au.used_at,
+                    au.created_at,
+                    au.notes
+                FROM account_urls au
+                JOIN survey_sites ss ON au.site_id = ss.site_id
+                WHERE au.account_id = %s
+            """
+            params = [account_id]
+            
+            if site_id:
+                query += " AND au.site_id = %s"
+                params.append(site_id)
+            
+            if not show_used:
+                query += " AND (au.is_used = FALSE OR au.is_used IS NULL)"
+            
+            query += " ORDER BY ss.site_name, au.is_default DESC, au.created_at DESC"
+            
+            result = self.db_manager.execute_query(query, params, fetch=True)
+            return [dict(row) for row in result] if result else []
+        except Exception as e:
+            self.add_log(f"Error getting account URLs: {e}", "ERROR")
+            return []
+
+    def _add_account_url(self, account_id: int, site_id: int, url: str, is_default: bool = False, notes: str = "") -> Dict[str, Any]:
+        """Add a URL for an account."""
+        try:
+            # If setting as default, unset any existing default for this account/site
+            if is_default:
+                unset_query = """
+                UPDATE account_urls
+                SET is_default = FALSE
+                WHERE account_id = %s AND site_id = %s AND is_default = TRUE
+                """
+                self.db_manager.execute_query(unset_query, (account_id, site_id))
+            
+            insert_query = """
+            INSERT INTO account_urls (account_id, site_id, url, is_default, notes)
+            VALUES (%s, %s, %s, %s, %s)
+            RETURNING url_id
+            """
+            result = self.db_manager.execute_query(insert_query, (account_id, site_id, url, is_default, notes), fetch=True)
+            
+            if result:
+                url_id = result[0][0] if isinstance(result[0], tuple) else result[0]['url_id']
+                self.add_log(f"✅ Added URL for account {account_id}")
+                return {'success': True, 'url_id': url_id}
+            return {'success': False, 'error': 'Failed to add URL'}
+        except Exception as e:
+            error_msg = f"Failed to add URL: {str(e)}"
+            self.add_log(error_msg, "ERROR")
+            return {'success': False, 'error': error_msg}
+
+    def _update_account_url(self, url_id: int, url: str, is_default: bool, notes: str) -> Dict[str, Any]:
+        """Update an account URL."""
+        try:
+            # Get account_id and site_id for this URL
+            get_query = "SELECT account_id, site_id FROM account_urls WHERE url_id = %s"
+            result = self.db_manager.execute_query(get_query, (url_id,), fetch=True)
+            if not result:
+                return {'success': False, 'error': 'URL not found'}
+            
+            account_id = result[0][0] if isinstance(result[0], tuple) else result[0]['account_id']
+            site_id = result[0][1] if isinstance(result[0], tuple) else result[0]['site_id']
+            
+            # If setting as default, unset any existing default for this account/site
+            if is_default:
+                unset_query = """
+                UPDATE account_urls
+                SET is_default = FALSE
+                WHERE account_id = %s AND site_id = %s AND is_default = TRUE AND url_id != %s
+                """
+                self.db_manager.execute_query(unset_query, (account_id, site_id, url_id))
+            
+            update_query = """
+            UPDATE account_urls
+            SET url = %s, is_default = %s, notes = %s, updated_at = CURRENT_TIMESTAMP
+            WHERE url_id = %s
+            """
+            self.db_manager.execute_query(update_query, (url, is_default, notes, url_id))
+            self.add_log(f"✅ Updated URL ID: {url_id}")
+            return {'success': True}
+        except Exception as e:
+            error_msg = f"Failed to update URL: {str(e)}"
+            self.add_log(error_msg, "ERROR")
+            return {'success': False, 'error': error_msg}
+
+    def _delete_account_url(self, url_id: int) -> Dict[str, Any]:
+        """Delete an account URL."""
+        try:
+            delete_query = "DELETE FROM account_urls WHERE url_id = %s"
+            self.db_manager.execute_query(delete_query, (url_id,))
+            self.add_log(f"✅ Deleted URL ID: {url_id}")
+            return {'success': True}
+        except Exception as e:
+            error_msg = f"Failed to delete URL: {str(e)}"
+            self.add_log(error_msg, "ERROR")
+            return {'success': False, 'error': error_msg}
+
+    def _mark_url_used(self, url_id: int) -> Dict[str, Any]:
+        """Mark a URL as used."""
+        try:
+            update_query = """
+            UPDATE account_urls
+            SET is_used = TRUE, used_at = CURRENT_TIMESTAMP
+            WHERE url_id = %s
+            """
+            self.db_manager.execute_query(update_query, (url_id,))
+            self.add_log(f"✅ Marked URL ID {url_id} as used")
+            return {'success': True}
+        except Exception as e:
+            error_msg = f"Failed to mark URL as used: {str(e)}"
+            self.add_log(error_msg, "ERROR")
+            return {'success': False, 'error': error_msg}
+
+    def _mark_url_unused(self, url_id: int) -> Dict[str, Any]:
+        """Mark a URL as unused (reset)."""
+        try:
+            update_query = """
+            UPDATE account_urls
+            SET is_used = FALSE, used_at = NULL
+            WHERE url_id = %s
+            """
+            self.db_manager.execute_query(update_query, (url_id,))
+            self.add_log(f"✅ Marked URL ID {url_id} as unused")
+            return {'success': True}
+        except Exception as e:
+            error_msg = f"Failed to mark URL as unused: {str(e)}"
+            self.add_log(error_msg, "ERROR")
+            return {'success': False, 'error': error_msg}
+
+    def _get_default_url_for_account(self, account_id: int, site_id: int) -> Optional[str]:
+        """Get the default URL for an account and site."""
+        try:
+            query = """
+            SELECT url FROM account_urls
+            WHERE account_id = %s AND site_id = %s AND is_default = TRUE
+            LIMIT 1
+            """
+            result = self.db_manager.execute_query(query, (account_id, site_id), fetch=True)
+            if result:
+                return result[0][0] if isinstance(result[0], tuple) else result[0]['url']
+            
+            # If no default, get the most recent unused URL
+            query = """
+            SELECT url FROM account_urls
+            WHERE account_id = %s AND site_id = %s AND (is_used = FALSE OR is_used IS NULL)
+            ORDER BY created_at DESC
+            LIMIT 1
+            """
+            result = self.db_manager.execute_query(query, (account_id, site_id), fetch=True)
+            if result:
+                return result[0][0] if isinstance(result[0], tuple) else result[0]['url']
+            
+            return None
+        except Exception as e:
+            self.add_log(f"Error getting default URL: {e}", "ERROR")
+            return None
+
+    # --------------------------------------------------------------------------
+    # Account creation with optional demographic fields
+    # --------------------------------------------------------------------------
+    def _create_account_in_postgres_minimal(self, username, country=None, demographic_data=None):
+        """Create account record with optional demographic fields."""
         try:
             current_time = datetime.now()
-
-            insert_query = """
-            INSERT INTO accounts (
-                username, country, created_time, updated_time, total_surveys_processed
-            )
-            VALUES (%s, %s, %s, %s, %s)
+            
+            # Build dynamic insert based on provided demographic data
+            columns = ["username", "country", "created_time", "updated_time", "total_surveys_processed"]
+            values = [username, country, current_time, current_time, 0]
+            placeholders = ["%s", "%s", "%s", "%s", "%s"]
+            
+            if demographic_data:
+                for key, value in demographic_data.items():
+                    if value is not None and key not in columns:
+                        columns.append(key)
+                        values.append(value)
+                        placeholders.append("%s")
+            
+            insert_query = f"""
+            INSERT INTO accounts ({', '.join(columns)})
+            VALUES ({', '.join(placeholders)})
             RETURNING account_id
             """
-            values = (username, country, current_time, current_time, 0)
+            
             result = self.db_manager.execute_query(insert_query, values, fetch=True)
 
             if not result:
                 raise Exception("Account creation failed")
 
             account_id = result[0][0] if isinstance(result[0], tuple) else result[0]['account_id']
-            self.add_log(f"✅ Minimal account created - ID: {account_id}, Country: {country}")
+            self.add_log(f"✅ Account created - ID: {account_id}, Country: {country}")
             return {'account_id': account_id}
         except Exception as e:
             raise Exception(f"Failed to create account: {str(e)}")
@@ -257,8 +599,8 @@ class AccountsPage:
             self.add_log(error_msg, "ERROR")
             raise Exception(error_msg)
 
-    def _handle_account_creation(self, username, country=None, cookies_json=None):
-        """Handle account creation with optional cookie storage."""
+    def _handle_account_creation(self, username, country=None, cookies_json=None, demographic_data=None):
+        """Handle account creation with optional demographic data and cookie storage."""
         if st.session_state.get('creation_in_progress'):
             self.add_log("Creation already in progress, skipping...", "WARNING")
             return
@@ -277,9 +619,9 @@ class AccountsPage:
                     st.write("🖥️ Creating LOCAL Chrome account...")
                     self.add_log("Creating LOCAL Chrome account")
 
-                    # Step 1: minimal account record
+                    # Step 1: create account record with demographic data
                     st.write("🔄 Creating account record...")
-                    account_result = self._create_account_in_postgres_minimal(username, country)
+                    account_result = self._create_account_in_postgres_minimal(username, country, demographic_data)
                     account_id = account_result['account_id']
                     self.add_log(f"✓ Account ID: {account_id}")
 
@@ -325,6 +667,8 @@ class AccountsPage:
                     )
                     if cookies_stored:
                         success_message += f"Cookies: {cookie_count} stored\n"
+                    if demographic_data and any(demographic_data.values()):
+                        success_message += f"Demographic info: {sum(1 for v in demographic_data.values() if v)} fields provided\n"
 
                     self.add_log("=== Account creation completed ===")
                     status.update(label="✓ Account created successfully!", state="complete")
@@ -371,7 +715,7 @@ class AccountsPage:
             deletion_results = {}
 
             # Delete from child tables
-            tables = ['account_cookies', 'extraction_state', 'answers', 'questions', 'prompts', 'prompt_backups']
+            tables = ['account_cookies', 'extraction_state', 'answers', 'questions', 'prompts', 'prompt_backups', 'account_urls', 'workflows']
             for table in tables:
                 try:
                     self.db_manager.execute_query(f"DELETE FROM {table} WHERE account_id = %s", (account_id,))
@@ -513,18 +857,18 @@ class AccountsPage:
     def load_survey_sites_data(_self) -> pd.DataFrame:
         """Load all survey sites from the database."""
         try:
-            query = "SELECT site_id, country, url, description, created_at, updated_at FROM survey_sites ORDER BY country"
+            query = "SELECT site_id, site_name, description, created_at, updated_at, is_active FROM survey_sites ORDER BY site_name"
             data = _self.db_manager.execute_query(query, fetch=True)
             if not data:
                 return pd.DataFrame()
 
             df = pd.DataFrame([dict(row) if hasattr(row, 'keys') else {
                 'site_id': row[0],
-                'country': row[1],
-                'url': row[2],
-                'description': row[3],
-                'created_at': row[4],
-                'updated_at': row[5]
+                'site_name': row[1],
+                'description': row[2],
+                'created_at': row[3],
+                'updated_at': row[4],
+                'is_active': row[5]
             } for row in data])
 
             # Convert datetime columns
@@ -538,38 +882,38 @@ class AccountsPage:
             st.error(f"Error loading survey sites: {str(e)}")
             return pd.DataFrame()
 
-    def _add_or_update_survey_site(self, country: str, url: str, description: str = "", site_id: Optional[int] = None) -> Dict[str, Any]:
-        """Insert or update a survey site."""
+    def _add_or_update_survey_site(self, site_name: str, description: str = "", site_id: Optional[int] = None) -> Dict[str, Any]:
+        """Insert or update a survey site by name."""
         try:
             if site_id:  # update
                 query = """
                 UPDATE survey_sites
-                SET url = %s, description = %s, updated_at = CURRENT_TIMESTAMP
+                SET site_name = %s, description = %s, updated_at = CURRENT_TIMESTAMP
                 WHERE site_id = %s
                 RETURNING site_id
                 """
-                result = self.db_manager.execute_query(query, (url, description, site_id), fetch=True)
+                result = self.db_manager.execute_query(query, (site_name, description, site_id), fetch=True)
                 if result:
-                    self.add_log(f"✅ Updated survey site for {country} (ID: {site_id})")
+                    self.add_log(f"✅ Updated survey site '{site_name}' (ID: {site_id})")
                     return {'success': True, 'site_id': site_id, 'action': 'updated'}
                 else:
                     return {'success': False, 'error': 'Site not found'}
             else:  # insert
-                # Check if country already exists
-                check = "SELECT site_id FROM survey_sites WHERE country = %s"
-                existing = self.db_manager.execute_query(check, (country,), fetch=True)
+                # Check if name already exists
+                check = "SELECT site_id FROM survey_sites WHERE site_name = %s"
+                existing = self.db_manager.execute_query(check, (site_name,), fetch=True)
                 if existing:
-                    return {'success': False, 'error': f'A site for country "{country}" already exists. Use update instead.'}
+                    return {'success': False, 'error': f'A site named "{site_name}" already exists. Use update instead.'}
 
                 insert = """
-                INSERT INTO survey_sites (country, url, description)
-                VALUES (%s, %s, %s)
+                INSERT INTO survey_sites (site_name, description)
+                VALUES (%s, %s)
                 RETURNING site_id
                 """
-                result = self.db_manager.execute_query(insert, (country, url, description), fetch=True)
+                result = self.db_manager.execute_query(insert, (site_name, description), fetch=True)
                 if result:
                     new_id = result[0][0] if isinstance(result[0], tuple) else result[0]['site_id']
-                    self.add_log(f"✅ Added new survey site for {country} (ID: {new_id})")
+                    self.add_log(f"✅ Added new survey site '{site_name}' (ID: {new_id})")
                     return {'success': True, 'site_id': new_id, 'action': 'inserted'}
                 else:
                     return {'success': False, 'error': 'Insert failed'}
@@ -581,6 +925,14 @@ class AccountsPage:
     def _delete_survey_site(self, site_id: int) -> Dict[str, Any]:
         """Delete a survey site."""
         try:
+            # Check if any account URLs reference this site
+            check_query = "SELECT COUNT(*) FROM account_urls WHERE site_id = %s"
+            result = self.db_manager.execute_query(check_query, (site_id,), fetch=True)
+            count = result[0][0] if result else 0
+            
+            if count > 0:
+                return {'success': False, 'error': f'Cannot delete site: {count} account URLs are using it'}
+            
             query = "DELETE FROM survey_sites WHERE site_id = %s"
             self.db_manager.execute_query(query, (site_id,))
             self.add_log(f"✅ Deleted survey site ID: {site_id}")
@@ -590,17 +942,24 @@ class AccountsPage:
             self.add_log(error_msg, "ERROR")
             return {'success': False, 'error': error_msg}
 
-    def _get_survey_url_for_account(self, account_id: int, country: str) -> str:
-        """Retrieve the survey URL for the given country. Returns a default if not found."""
+    def _get_survey_url_for_account(self, account_id: int, site_name: str) -> str:
+        """Retrieve a URL for the account from the given site name."""
         try:
-            query = "SELECT url FROM survey_sites WHERE country = %s"
-            result = self.db_manager.execute_query(query, (country,), fetch=True)
-            if result:
-                url = result[0][0] if isinstance(result[0], tuple) else result[0]['url']
-                self.add_log(f"Found survey URL for {country}: {url}")
+            # First get site_id from site_name
+            site_query = "SELECT site_id FROM survey_sites WHERE site_name = %s"
+            site_result = self.db_manager.execute_query(site_query, (site_name,), fetch=True)
+            if not site_result:
+                return "https://example-survey.com"  # fallback
+            
+            site_id = site_result[0][0] if isinstance(site_result[0], tuple) else site_result[0]['site_id']
+            
+            # Then get URL for this account
+            url = self._get_default_url_for_account(account_id, site_id)
+            if url:
+                self.add_log(f"Found URL for account {account_id} on site {site_name}: {url}")
                 return url
             else:
-                self.add_log(f"No survey site configured for country '{country}'. Using default.", "WARNING")
+                self.add_log(f"No URL configured for account {account_id} on site '{site_name}'. Using default.", "WARNING")
                 return "https://example-survey.com"  # fallback
         except Exception as e:
             self.add_log(f"Error fetching survey URL: {e}", "ERROR")
@@ -626,7 +985,17 @@ class AccountsPage:
                 a.total_surveys_processed,
                 COALESCE(a.has_cookies, FALSE) as has_cookies,
                 a.cookies_last_updated,
-                a.is_active
+                a.is_active,
+                a.age,
+                a.gender,
+                a.city,
+                a.education_level,
+                a.job_status,
+                a.industry,
+                a.income_range,
+                a.marital_status,
+                a.household_size,
+                a.has_children
             FROM accounts a
             ORDER BY a.created_time DESC
             LIMIT 1000
@@ -649,7 +1018,17 @@ class AccountsPage:
                 'total_surveys_processed': row[8] if row[8] is not None else 0,
                 'has_cookies': bool(row[9]),
                 'cookies_last_updated': row[10],
-                'is_active': bool(row[11]) if len(row) > 11 else True
+                'is_active': bool(row[11]) if len(row) > 11 else True,
+                'age': row[12] if len(row) > 12 else None,
+                'gender': row[13] if len(row) > 13 else None,
+                'city': row[14] if len(row) > 14 else None,
+                'education_level': row[15] if len(row) > 15 else None,
+                'job_status': row[16] if len(row) > 16 else None,
+                'industry': row[17] if len(row) > 17 else None,
+                'income_range': row[18] if len(row) > 18 else None,
+                'marital_status': row[19] if len(row) > 19 else None,
+                'household_size': row[20] if len(row) > 20 else None,
+                'has_children': row[21] if len(row) > 21 else None
             } for row in accounts_data])
 
             # Convert datetime columns
@@ -758,7 +1137,7 @@ class AccountsPage:
         )
 
     def _render_account_details_view(self, df):
-        """Render detailed account view with country and surveys."""
+        """Render detailed account view with country, surveys, and demographic info."""
         for _, row in df.iterrows():
             with st.expander(f"🏷️ {row['username']} (ID: {row['account_id']})", expanded=False):
                 col1, col2, col3, col4 = st.columns(4)
@@ -776,8 +1155,39 @@ class AccountsPage:
                 with col2:
                     st.write("**Survey Stats**")
                     st.write(f"Total Surveys: {row['total_surveys_processed']}")
+                    
+                    # Show URL count
+                    url_count = self._get_account_urls(row['account_id'], show_used=True)
+                    st.write(f"Configured URLs: {len(url_count)}")
+                    
+                    st.write("**Basic Info**")
+                    if row.get('age'):
+                        st.write(f"Age: {row['age']}")
+                    if row.get('gender'):
+                        st.write(f"Gender: {row['gender']}")
+                    if row.get('city'):
+                        st.write(f"City: {row['city']}")
+                    if row.get('education_level'):
+                        st.write(f"Education: {row['education_level']}")
 
                 with col3:
+                    st.write("**Employment**")
+                    if row.get('job_status'):
+                        st.write(f"Status: {row['job_status']}")
+                    if row.get('industry'):
+                        st.write(f"Industry: {row['industry']}")
+                    if row.get('income_range'):
+                        st.write(f"Income: {row['income_range']}")
+                    
+                    st.write("**Household**")
+                    if row.get('marital_status'):
+                        st.write(f"Marital: {row['marital_status']}")
+                    if row.get('household_size'):
+                        st.write(f"Household Size: {row['household_size']}")
+                    if row.get('has_children') is not None:
+                        st.write(f"Has Children: {'Yes' if row['has_children'] else 'No'}")
+
+                with col4:
                     st.write("**Cookie Status**")
                     st.write(f"Has Cookies: {'✓' if row.get('has_cookies') else '✗'}")
                     if row.get('cookies_last_updated'):
@@ -792,16 +1202,15 @@ class AccountsPage:
                         else:
                             st.error(f"❌ Cookies invalid: {validity.get('reason', 'Unknown')}")
 
-                with col4:
                     st.write("**Actions**")
                     if st.button("▶️ Start Session", key=f"start_session_{row['account_id']}", use_container_width=True, type="primary"):
-                        # Get survey URL for this account's country
-                        survey_url = self._get_survey_url_for_account(row['account_id'], row['country'])
+                        # Get default URL for this account
+                        survey_url = self._get_survey_url_for_account(row['account_id'], row.get('country', 'United States'))
                         result = self._start_local_chrome_session(
                             row['profile_id'],
                             row['account_id'],
                             row['username'],
-                            survey_url  # pass the URL
+                            survey_url
                         )
                         if result.get('success'):
                             st.success("✓ Session started!")
@@ -875,7 +1284,7 @@ class AccountsPage:
     # Add Account Modal
     # --------------------------------------------------------------------------
     def render_add_account_modal(self):
-        """Render add account form with country field and optional cookie upload."""
+        """Render add account form with country field, optional demographic info, and cookie upload."""
         if st.session_state.get('show_add_account', False):
             with st.expander("➕ Add New Account", expanded=True):
                 self.render_creation_logs()
@@ -888,9 +1297,10 @@ class AccountsPage:
                         username = st.session_state.get('username_to_create', '')
                         country = st.session_state.get('country_to_create')
                         cookies_json = st.session_state.get('cookies_to_upload')
+                        demographic_data = st.session_state.get('demographic_data', {})
                         if username:
                             self.add_log(f"Triggering account creation for: {username}")
-                            self._handle_account_creation(username, country, cookies_json)
+                            self._handle_account_creation(username, country, cookies_json, demographic_data)
                     return
 
                 with st.form("add_account_form"):
@@ -900,15 +1310,15 @@ class AccountsPage:
 
                     with col1:
                         username = st.text_input(
-                            "Username",
+                            "Username *",
                             placeholder="Enter username",
-                            help="Username for this account"
+                            help="Username for this account (required)"
                         )
 
                     with col2:
-                        # Country selection
+                        # Country selection (required for survey targeting)
                         country = st.selectbox(
-                            "Country",
+                            "Country *",
                             options=[
                                 "United States", "Canada", "United Kingdom", "Australia",
                                 "Germany", "France", "Japan", "Brazil", "India",
@@ -918,6 +1328,96 @@ class AccountsPage:
                             ],
                             help="Select the country associated with this account (for survey targeting)"
                         )
+
+                    st.markdown("---")
+                    st.markdown("### 📋 Optional Demographic Information")
+                    st.caption("This information helps match you with relevant surveys. All fields are optional.")
+
+                    # 1. Basic Personal Info
+                    with st.expander("1️⃣ Basic Personal Info", expanded=False):
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            age = st.number_input("Age", min_value=18, max_value=120, value=None, step=1)
+                            gender = st.selectbox("Gender", ["", "Male", "Female", "Non-binary", "Prefer not to say"])
+                        with col2:
+                            date_of_birth = st.date_input("Date of Birth", value=None)
+                            city = st.text_input("City", placeholder="e.g., Nairobi")
+                        
+                        education_level = st.selectbox(
+                            "Education Level",
+                            ["", "High School", "Some College", "Associate Degree", 
+                             "Bachelor's Degree", "Master's Degree", "Doctorate", "Trade School", "Other"]
+                        )
+
+                    # 2. Contact & Account Info
+                    with st.expander("2️⃣ Contact & Account Info", expanded=False):
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            email = st.text_input("Email Address", placeholder="user@example.com")
+                        with col2:
+                            phone = st.text_input("Phone Number", placeholder="+1 234 567 8900")
+
+                    # 3. Employment & Income
+                    with st.expander("3️⃣ Employment & Income", expanded=False):
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            job_status = st.selectbox(
+                                "Job Status",
+                                ["", "Student", "Employed Full-time", "Employed Part-time", 
+                                 "Self-employed", "Unemployed", "Retired", "Homemaker"]
+                            )
+                            industry = st.text_input("Industry", placeholder="e.g., Technology, Healthcare, Education")
+                        with col2:
+                            income_range = st.selectbox(
+                                "Income Range",
+                                ["", "Under $25,000", "$25,000 - $50,000", "$50,000 - $75,000",
+                                 "$75,000 - $100,000", "$100,000 - $150,000", "Over $150,000", "Prefer not to say"]
+                            )
+
+                    # 4. Household Information
+                    with st.expander("4️⃣ Household Information", expanded=False):
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            marital_status = st.selectbox(
+                                "Marital Status",
+                                ["", "Single", "Married", "Divorced", "Widowed", "Domestic Partnership"]
+                            )
+                            household_size = st.number_input("Household Size", min_value=1, max_value=20, value=None, step=1)
+                        with col2:
+                            has_children = st.selectbox("Have Children?", ["", "Yes", "No"])
+
+                    # 5. Lifestyle & Habits
+                    with st.expander("5️⃣ Lifestyle & Habits", expanded=False):
+                        shopping_habits = st.text_area(
+                            "Shopping Habits",
+                            placeholder="e.g., Online shopping, in-store, frequency..."
+                        )
+                        brands_used = st.text_area(
+                            "Brands You Use",
+                            placeholder="e.g., Nike, Apple, Samsung, local brands..."
+                        )
+                        hobbies = st.text_area(
+                            "Hobbies & Interests",
+                            placeholder="e.g., Gaming, Sports, Reading, Cooking..."
+                        )
+                        internet_usage = st.selectbox(
+                            "Internet Usage",
+                            ["", "Light (1-2 hours/day)", "Moderate (3-5 hours/day)", 
+                             "Heavy (6+ hours/day)", "Constant"]
+                        )
+
+                    # 6. Device & Tech Usage
+                    with st.expander("6️⃣ Device & Tech Usage", expanded=False):
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            device_type = st.selectbox(
+                                "Primary Device",
+                                ["", "Smartphone", "Tablet", "Laptop", "Desktop Computer", "Multiple Devices"]
+                            )
+                            owns_laptop = st.selectbox("Owns Laptop?", ["", "Yes", "No"])
+                        with col2:
+                            owns_tv = st.selectbox("Owns TV?", ["", "Yes", "No"])
+                            internet_provider = st.text_input("Internet Provider", placeholder="e.g., Comcast, Spectrum")
 
                     st.markdown("---")
                     st.write("**🍪 Cookie Management (Optional)**")
@@ -962,10 +1462,39 @@ class AccountsPage:
                         if not username.strip():
                             st.warning("Please enter a username")
                         else:
+                            # Collect demographic data (all optional)
+                            demographic_data = {
+                                'age': age if age else None,
+                                'date_of_birth': date_of_birth if date_of_birth else None,
+                                'gender': gender if gender else None,
+                                'city': city if city else None,
+                                'education_level': education_level if education_level else None,
+                                'email': email if email else None,
+                                'phone': phone if phone else None,
+                                'job_status': job_status if job_status else None,
+                                'industry': industry if industry else None,
+                                'income_range': income_range if income_range else None,
+                                'marital_status': marital_status if marital_status else None,
+                                'household_size': household_size if household_size else None,
+                                'has_children': has_children == "Yes" if has_children else None,
+                                'shopping_habits': shopping_habits if shopping_habits else None,
+                                'brands_used': brands_used if brands_used else None,
+                                'hobbies': hobbies if hobbies else None,
+                                'internet_usage': internet_usage if internet_usage else None,
+                                'device_type': device_type if device_type else None,
+                                'owns_laptop': owns_laptop == "Yes" if owns_laptop else None,
+                                'owns_tv': owns_tv == "Yes" if owns_tv else None,
+                                'internet_provider': internet_provider if internet_provider else None
+                            }
+                            
+                            # Remove None values
+                            demographic_data = {k: v for k, v in demographic_data.items() if v is not None}
+                            
                             self.add_log(f"Form submitted - preparing creation for: {username.strip()}")
                             st.session_state.username_to_create = username.strip()
                             st.session_state.country_to_create = country
                             st.session_state.cookies_to_upload = cookies_json if cookies_json.strip() else None
+                            st.session_state.demographic_data = demographic_data
                             st.session_state.creating_account = True
                             st.session_state.account_creation_message = None
                             st.session_state.account_creation_error = False
@@ -1275,13 +1804,16 @@ class AccountsPage:
                     )
 
     # --------------------------------------------------------------------------
-    # Local Chrome session management
+    # Local Chrome session management with custom URL selection
     # --------------------------------------------------------------------------
-    def _start_local_chrome_session(self, profile_id, account_id, account_username, survey_url="https://example-survey.com"):
-        """Start local Chrome session with 3 tabs: Automa, EditThisCookie, and survey site."""
+    def _start_local_chrome_session(self, profile_id, account_id, account_username, start_url=None):
+        """Start local Chrome session with 3 tabs: Automa, EditThisCookie, and custom start URL."""
         try:
             self.add_log(f"Starting LOCAL Chrome session for: {account_username}")
-            self.add_log(f"Survey URL: {survey_url}")
+            if start_url:
+                self.add_log(f"Start URL: {start_url}")
+            else:
+                self.add_log(f"No start URL provided, using blank page")
 
             if hasattr(account_id, 'item'):
                 account_id = int(account_id)
@@ -1295,12 +1827,12 @@ class AccountsPage:
             # Ensure account cookie script exists
             self._ensure_account_cookie_script(account_id, account_username)
 
-            # Start Chrome
+            # Start Chrome with custom start URL
             result = self.chrome_manager.run_persistent_chrome(
                 session_id=session_id,
                 profile_path=profile_path,
                 username=account_username,
-                survey_url=survey_url,
+                start_url=start_url if start_url else "about:blank",
                 show_terminal=True
             )
 
@@ -1310,7 +1842,7 @@ class AccountsPage:
             self.add_log("✓ Chrome process started with 3 tabs")
             self.add_log(f"  Tab 1: Automa Extension")
             self.add_log(f"  Tab 2: EditThisCookie Extension")
-            self.add_log(f"  Tab 3: Survey Site: {survey_url}")
+            self.add_log(f"  Tab 3: {'Custom URL: ' + start_url if start_url else 'Blank Page'}")
             self.add_log(f"✓ Chrome visible at: {result.get('vnc_url')}")
 
             # Store in MongoDB
@@ -1326,6 +1858,7 @@ class AccountsPage:
                         "account_username": account_username,
                         "debug_port": result.get("debug_port"),
                         "startup_urls": result.get("startup_urls", []),
+                        "start_url": start_url,
                         "created_at": datetime.now(),
                         "is_active": True,
                         "session_status": "active",
@@ -1354,7 +1887,8 @@ class AccountsPage:
                 "profile_path": profile_path,
                 "is_persistent": True,
                 "chrome_visible": True,
-                "startup_urls": result.get("startup_urls", [])
+                "startup_urls": result.get("startup_urls", []),
+                "start_url": start_url
             }
 
             self.add_log("✓ Session stored in local_chrome_sessions")
@@ -1363,9 +1897,10 @@ class AccountsPage:
                 "success": True,
                 "session_id": session_id,
                 "vnc_url": result.get("vnc_url"),
-                "message": f"Chrome started with 3 tabs: Automa, EditThisCookie, Survey Site",
+                "message": f"Chrome started with 3 tabs: Automa, EditThisCookie, and {'custom URL' if start_url else 'blank page'}",
                 "profile_path": profile_path,
-                "startup_urls": result.get("startup_urls", [])
+                "startup_urls": result.get("startup_urls", []),
+                "start_url": start_url
             }
         except Exception as e:
             error_msg = f"Failed to start local session: {str(e)}"
@@ -1747,9 +2282,9 @@ fi
             st.plotly_chart(fig2, use_container_width=True)
 
     def _render_local_chrome_tab(self, accounts_df):
-        """Render Local Chrome session management."""
+        """Render Local Chrome session management with URL selection."""
         st.subheader("🖥️ Local Chrome Session Management")
-        st.info("✓ Free • ✓ Persistent profiles • ✓ Account-based cookies • ✓ 3 startup tabs")
+        st.info("✓ Free • ✓ Persistent profiles • ✓ Account-based cookies • ✓ Custom start URLs")
 
         if accounts_df.empty:
             st.warning("No accounts available. Create an account first.")
@@ -1783,6 +2318,8 @@ fi
                                 st.write(f"**Session:** `{session_id[:12]}...`")
                                 if session_info.get('profile_path'):
                                     st.caption(f"📁 {session_info['profile_path']}")
+                                if session_info.get('start_url'):
+                                    st.caption(f"🌐 URL: {session_info['start_url'][:50]}...")
                             with s2:
                                 started_at = session_info.get('started_at')
                                 if started_at:
@@ -1819,12 +2356,56 @@ fi
 
             if selected[1] is not None:
                 row = local_accounts.iloc[selected[1]]
+                account_id = row['account_id']
+                
                 st.info(f"**👤 Account: {row['username']}**")
-                st.write("**Chrome will open with 3 tabs:**")
-                st.caption("1. 🧩 Automa Extension")
-                st.caption("2. 🍪 EditThisCookie Extension")
-                st.caption("3. 🌐 Survey Site")
-
+                
+                # Load survey sites and account URLs
+                survey_sites_df = self.load_survey_sites_data()
+                
+                # URL selection
+                url_options = ["about:blank (Blank Page)"]
+                url_mapping = {"about:blank (Blank Page)": "about:blank"}
+                
+                # Add saved URLs for this account
+                account_urls = self._get_account_urls(account_id, show_used=False)
+                
+                # Group URLs by site
+                urls_by_site = {}
+                for url_info in account_urls:
+                    site_name = url_info.get('site_name', 'Other')
+                    if site_name not in urls_by_site:
+                        urls_by_site[site_name] = []
+                    urls_by_site[site_name].append(url_info)
+                
+                # Add site URLs to options
+                for site_name, urls in urls_by_site.items():
+                    for url_info in urls:
+                        default_marker = "⭐ " if url_info.get('is_default') else ""
+                        label = f"{default_marker}{site_name}: {url_info['url'][:50]}..."
+                        url_mapping[label] = url_info['url']
+                        url_options.append(label)
+                
+                # Allow custom URL entry
+                url_options.append("Custom URL...")
+                
+                selected_url_option = st.selectbox(
+                    "Select Start URL:",
+                    options=url_options,
+                    key="start_url_select"
+                )
+                
+                start_url = None
+                if selected_url_option == "Custom URL...":
+                    start_url = st.text_input(
+                        "Enter Custom URL:",
+                        placeholder="https://example.com",
+                        key="custom_url_input"
+                    )
+                elif selected_url_option != "Choose account...":
+                    start_url = url_mapping.get(selected_url_option)
+                
+                # Show profile status
                 profile_path = self.chrome_manager.get_profile_path(row['username'])
                 default_dir = os.path.join(profile_path, 'Default')
                 if os.path.exists(default_dir):
@@ -1832,23 +2413,20 @@ fi
                 else:
                     st.info("📁 New profile will be created")
 
-                cookie_info = self._get_account_cookies(row['account_id'])
+                cookie_info = self._get_account_cookies(account_id)
                 if cookie_info['has_cookies']:
                     st.success(f"✓ {cookie_info['cookie_count']} cookies stored")
                 else:
                     st.warning("⚠️ No cookies stored")
 
-                # Get survey URL for this account's country
-                survey_url = self._get_survey_url_for_account(row['account_id'], row['country'])
-
                 if st.button("▶️ Start Chrome Session", type="primary", use_container_width=True,
-                             key=f"start_local_{row['account_id']}"):
+                             key=f"start_local_{account_id}"):
                     with st.spinner("Starting Chrome with 3 tabs..."):
                         result = self._start_local_chrome_session(
                             row['profile_id'],
-                            row['account_id'],
+                            account_id,
                             row['username'],
-                            survey_url
+                            start_url
                         )
                         if result.get('success'):
                             st.success("✓ Chrome started!")
@@ -1858,51 +2436,209 @@ fi
                             st.error(f"Failed: {result.get('error')}")
 
     def _render_survey_sites_tab(self, survey_sites_df):
-        """Render survey sites management tab."""
+        """Render survey sites management tab with site names and account URLs."""
         st.subheader("🌐 Survey Sites Management")
 
         st.info("""
-        **Survey Sites** are websites by country where surveys are found.
-        Each account's country determines which survey site they'll use.
+        **Survey Sites** are websites where surveys are found. 
+        Each site has a name (e.g., "Top Surveys", "Quick Rewards") and accounts can have multiple URLs for each site.
+        URLs are tracked for usage to prevent reusing the same URL for extraction.
         """)
 
-        # Add new survey site form
+        # Add new survey site form (by name)
         with st.expander("➕ Add New Survey Site", expanded=False):
             with st.form("add_survey_site_form"):
-                col1, col2 = st.columns(2)
+                col1, col2 = st.columns([2, 1])
                 with col1:
-                    country = st.text_input("Country *", placeholder="e.g., United States")
+                    site_name = st.text_input("Site Name *", placeholder="e.g., Top Surveys, Quick Rewards")
                 with col2:
-                    url = st.text_input("Survey URL *", placeholder="https://surveys.example.com")
-
+                    pass
+                
                 description = st.text_area("Description", placeholder="Optional description of this survey site")
 
                 if st.form_submit_button("✅ Add Survey Site", type="primary"):
-                    if not country.strip() or not url.strip():
-                        st.error("Country and URL are required!")
+                    if not site_name.strip():
+                        st.error("Site name is required!")
                     else:
-                        result = self._add_or_update_survey_site(country.strip(), url.strip(), description.strip())
+                        result = self._add_or_update_survey_site(site_name.strip(), description.strip())
                         if result['success']:
-                            st.success(f"✅ Added survey site for {country}")
+                            st.success(f"✅ Added survey site '{site_name}'")
                             st.cache_data.clear()
                             time.sleep(1)
                             st.rerun()
                         else:
                             st.error(f"❌ Failed: {result.get('error')}")
 
+        # Account and Site selector for URL management
+        if not survey_sites_df.empty:
+            st.markdown("---")
+            st.subheader("🔗 Manage Account URLs")
+            
+            # Load accounts
+            accounts_df = self.load_accounts_data()
+            if not accounts_df.empty:
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    account_options = {f"{row['username']} (ID: {row['account_id']})": row['account_id'] 
+                                      for _, row in accounts_df.iterrows()}
+                    selected_account = st.selectbox(
+                        "Select Account:",
+                        options=list(account_options.keys()),
+                        key="url_account_select"
+                    )
+                    account_id = account_options[selected_account]
+                
+                with col2:
+                    site_options = {f"{row['site_name']}": row['site_id'] 
+                                   for _, row in survey_sites_df.iterrows()}
+                    selected_site = st.selectbox(
+                        "Select Survey Site:",
+                        options=list(site_options.keys()),
+                        key="url_site_select"
+                    )
+                    site_id = site_options[selected_site]
+                
+                # Show existing URLs for this account/site
+                account_urls = self._get_account_urls(account_id, site_id, show_used=True)
+                
+                # Separate used and unused URLs
+                unused_urls = [u for u in account_urls if not u.get('is_used', False)]
+                used_urls = [u for u in account_urls if u.get('is_used', False)]
+                
+                # Display unused URLs first
+                if unused_urls:
+                    st.markdown(f"**✅ Available URLs ({len(unused_urls)}):**")
+                    for url_info in unused_urls:
+                        with st.container():
+                            col1, col2, col3, col4, col5 = st.columns([3, 1, 1, 1, 1])
+                            
+                            with col1:
+                                default_marker = "⭐ " if url_info.get('is_default') else ""
+                                st.write(f"{default_marker}{url_info['url']}")
+                                if url_info.get('notes'):
+                                    st.caption(url_info['notes'])
+                            
+                            with col2:
+                                if st.button("✏️ Edit", key=f"edit_url_{url_info['url_id']}", use_container_width=True):
+                                    st.session_state[f'editing_url_{url_info["url_id"]}'] = True
+                            
+                            with col3:
+                                if not url_info.get('is_default'):
+                                    if st.button("⭐ Set Default", key=f"default_url_{url_info['url_id']}", use_container_width=True):
+                                        self._update_account_url(url_info['url_id'], url_info['url'], True, url_info.get('notes', ''))
+                                        st.rerun()
+                            
+                            with col4:
+                                if st.button("✅ Mark Used", key=f"mark_used_{url_info['url_id']}", use_container_width=True):
+                                    self._mark_url_used(url_info['url_id'])
+                                    st.rerun()
+                            
+                            with col5:
+                                if st.button("🗑️ Delete", key=f"delete_url_{url_info['url_id']}", use_container_width=True):
+                                    st.session_state[f'confirm_delete_url_{url_info["url_id"]}'] = True
+                            
+                            # Edit form
+                            if st.session_state.get(f'editing_url_{url_info["url_id"]}', False):
+                                st.divider()
+                                with st.form(key=f"edit_url_form_{url_info['url_id']}"):
+                                    new_url = st.text_input("URL", value=url_info['url'])
+                                    is_default = st.checkbox("Set as Default", value=url_info.get('is_default', False))
+                                    notes = st.text_area("Notes", value=url_info.get('notes', ''))
+                                    
+                                    col_save, col_cancel = st.columns(2)
+                                    with col_save:
+                                        if st.form_submit_button("💾 Save", use_container_width=True):
+                                            result = self._update_account_url(url_info['url_id'], new_url, is_default, notes)
+                                            if result['success']:
+                                                del st.session_state[f'editing_url_{url_info["url_id"]}']
+                                                st.rerun()
+                                            else:
+                                                st.error(result.get('error'))
+                                    with col_cancel:
+                                        if st.form_submit_button("Cancel", use_container_width=True):
+                                            del st.session_state[f'editing_url_{url_info["url_id"]}']
+                                            st.rerun()
+                            
+                            # Delete confirmation
+                            if st.session_state.get(f'confirm_delete_url_{url_info["url_id"]}', False):
+                                st.warning(f"Delete this URL?")
+                                col_yes, col_no = st.columns(2)
+                                with col_yes:
+                                    if st.button("✅ Yes", key=f"confirm_yes_url_{url_info['url_id']}"):
+                                        result = self._delete_account_url(url_info['url_id'])
+                                        if result['success']:
+                                            del st.session_state[f'confirm_delete_url_{url_info["url_id"]}']
+                                            st.rerun()
+                                with col_no:
+                                    if st.button("❌ No", key=f"confirm_no_url_{url_info['url_id']}"):
+                                        del st.session_state[f'confirm_delete_url_{url_info["url_id"]}']
+                                        st.rerun()
+                            
+                            st.divider()
+                
+                # Display used URLs
+                if used_urls:
+                    with st.expander(f"📋 Used URLs ({len(used_urls)})", expanded=False):
+                        for url_info in used_urls:
+                            col1, col2, col3 = st.columns([3, 1, 1])
+                            with col1:
+                                st.write(f"~~{url_info['url']}~~")
+                                if url_info.get('used_at'):
+                                    st.caption(f"Used: {url_info['used_at'].strftime('%Y-%m-%d %H:%M')}")
+                            with col2:
+                                if st.button("↩️ Reset", key=f"reset_url_{url_info['url_id']}", use_container_width=True):
+                                    self._mark_url_unused(url_info['url_id'])
+                                    st.rerun()
+                            with col3:
+                                if st.button("🗑️ Delete", key=f"delete_used_{url_info['url_id']}", use_container_width=True):
+                                    st.session_state[f'confirm_delete_url_{url_info["url_id"]}'] = True
+                            
+                            if st.session_state.get(f'confirm_delete_url_{url_info["url_id"]}', False):
+                                col_yes, col_no = st.columns(2)
+                                with col_yes:
+                                    if st.button("✅ Yes", key=f"confirm_yes_used_{url_info['url_id']}"):
+                                        result = self._delete_account_url(url_info['url_id'])
+                                        if result['success']:
+                                            del st.session_state[f'confirm_delete_url_{url_info["url_id"]}']
+                                            st.rerun()
+                                with col_no:
+                                    if st.button("❌ No", key=f"confirm_no_used_{url_info['url_id']}"):
+                                        del st.session_state[f'confirm_delete_url_{url_info["url_id"]}']
+                                        st.rerun()
+                
+                # Add new URL form
+                with st.expander("➕ Add New URL", expanded=not bool(account_urls)):
+                    with st.form("add_account_url_form"):
+                        new_url = st.text_input("URL *", placeholder="https://example.com/survey-page")
+                        is_default = st.checkbox("Set as Default URL for this site")
+                        notes = st.text_area("Notes (optional)", placeholder="Any notes about this URL")
+                        
+                        if st.form_submit_button("✅ Add URL", type="primary"):
+                            if not new_url.strip():
+                                st.error("URL is required!")
+                            else:
+                                result = self._add_account_url(account_id, site_id, new_url.strip(), is_default, notes)
+                                if result['success']:
+                                    st.success("✅ URL added successfully!")
+                                    st.cache_data.clear()
+                                    st.rerun()
+                                else:
+                                    st.error(f"❌ Failed: {result.get('error')}")
+
         # Display existing survey sites
         if survey_sites_df.empty:
             st.info("No survey sites added yet. Add one above.")
         else:
+            st.markdown("---")
             st.subheader(f"Existing Survey Sites ({len(survey_sites_df)})")
 
             for _, row in survey_sites_df.iterrows():
-                with st.expander(f"🌐 {row['country']} - {row['url']}", expanded=False):
+                with st.expander(f"🌐 {row['site_name']}", expanded=False):
                     col1, col2, col3 = st.columns([3, 1, 1])
 
                     with col1:
-                        st.write(f"**Country:** {row['country']}")
-                        st.write(f"**URL:** {row['url']}")
+                        st.write(f"**Site Name:** {row['site_name']}")
                         if row.get('description'):
                             st.write(f"**Description:** {row['description']}")
                         st.caption(f"Added: {row['created_at'].strftime('%Y-%m-%d %H:%M') if row.get('created_at') else 'Unknown'}")
@@ -1920,16 +2656,14 @@ fi
                     if st.session_state.get(f'editing_site_{row["site_id"]}', False):
                         st.divider()
                         with st.form(key=f"edit_site_form_{row['site_id']}"):
-                            new_country = st.text_input("Country", value=row['country'])
-                            new_url = st.text_input("URL", value=row['url'])
+                            new_name = st.text_input("Site Name", value=row['site_name'])
                             new_description = st.text_area("Description", value=row.get('description', ''))
 
                             col_save, col_cancel = st.columns(2)
                             with col_save:
                                 if st.form_submit_button("💾 Save Changes", use_container_width=True):
                                     result = self._add_or_update_survey_site(
-                                        new_country.strip(),
-                                        new_url.strip(),
+                                        new_name.strip(),
                                         new_description.strip(),
                                         site_id=row['site_id']
                                     )
@@ -1947,7 +2681,7 @@ fi
 
                     # Delete confirmation
                     if st.session_state.get(f'confirm_delete_site_{row["site_id"]}', False):
-                        st.warning(f"Delete survey site for {row['country']}?")
+                        st.warning(f"Delete survey site '{row['site_name']}'? This will also delete all associated account URLs.")
                         col_yes, col_no = st.columns(2)
                         with col_yes:
                             if st.button("✅ Yes, Delete", key=f"confirm_yes_{row['site_id']}"):

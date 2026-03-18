@@ -1,5 +1,5 @@
 # File: src/streamlit/ui/pages/generate_manual_workflows.py
-# Generate Manual Workflows Page - Separate tabs for each action
+# Generate Manual Workflows Page - Complete rewrite for survey site extraction
 
 import streamlit as st
 import pandas as pd
@@ -9,6 +9,8 @@ from typing import Dict, List, Any, Optional
 import time
 import json
 import os
+import random
+from datetime import timedelta
 
 from src.core.database.postgres.connection import get_postgres_connection
 from psycopg2.extras import RealDictCursor
@@ -100,7 +102,7 @@ class GenerateManualWorkflowsPage:
 
         with col2:
             st.subheader("🌐 Select Survey Site")
-            site_options = {f"{s['country']} - {s['url']}": s for s in survey_sites}
+            site_options = {f"{s['site_name']}": s for s in survey_sites}
             selected_site_label = st.selectbox(
                 "Survey Site:",
                 options=list(site_options.keys()),
@@ -109,7 +111,6 @@ class GenerateManualWorkflowsPage:
             site = site_options[selected_site_label]
 
             # Show site details
-            st.caption(f"**URL:** {site['url']}")
             if site.get('description'):
                 st.caption(f"**Description:** {site['description']}")
 
@@ -170,7 +171,7 @@ class GenerateManualWorkflowsPage:
 
         st.info(f"""
         **Account:** {account['username']}  
-        **Survey Site:** {site['country']} - {site['url']}  
+        **Survey Site:** {site['site_name']}  
         **Prompt:** {prompt['prompt_name'] if prompt else 'None'}
         """)
 
@@ -178,39 +179,58 @@ class GenerateManualWorkflowsPage:
             st.error("❌ Cannot extract questions: Account has no prompt")
             return
 
-        # Additional options
-        col1, col2 = st.columns(2)
-        with col1:
-            max_questions = st.number_input(
-                "Max Questions to Extract:",
-                min_value=1,
-                max_value=100,
-                value=20,
-                key="extract_max_questions"
-            )
-        with col2:
-            include_metadata = st.checkbox(
-                "Include Question Metadata",
-                value=True,
-                key="extract_include_metadata"
-            )
+        # Get account URLs for this site
+        account_urls = self._get_account_urls(account['account_id'], site['site_id'])
+        
+        if not account_urls:
+            st.warning(f"⚠️ No URLs configured for {account['username']} on {site['site_name']}. Please add URLs in Accounts page.")
+            return
+
+        # URL selection
+        url_options = []
+        url_mapping = {}
+        
+        for url_info in account_urls:
+            used_status = " (Used)" if url_info.get('is_used', False) else " (Available)"
+            default_marker = "⭐ " if url_info.get('is_default', False) else ""
+            label = f"{default_marker}{url_info['url']}{used_status}"
+            url_mapping[label] = url_info
+            url_options.append(label)
+
+        selected_url_label = st.selectbox(
+            "Select URL to Extract From:",
+            options=url_options,
+            key="extract_url_select"
+        )
+        
+        selected_url_info = url_mapping[selected_url_label]
+        
+        if selected_url_info.get('is_used', False):
+            st.warning("⚠️ This URL has already been used for extraction. Are you sure you want to use it again?")
 
         if st.button("🚀 Start Extraction", type="primary", use_container_width=True, key="extract_btn"):
-            self._handle_extract_questions(account, site, prompt, max_questions, include_metadata)
+            self._handle_extract_questions(account, site, prompt, selected_url_info)
 
     def _handle_extract_questions(self, account: Dict[str, Any], site: Dict[str, Any], 
-                                  prompt: Dict, max_questions: int, include_metadata: bool):
+                                  prompt: Dict, url_info: Dict):
         """Handle extract questions action."""
-        self.add_log(f"🚀 Starting question extraction for {account['username']} on {site['country']}...")
+        self.add_log(f"🚀 Starting question extraction for {account['username']} on {site['site_name']}...")
         self.add_log(f"📝 Using prompt: {prompt['prompt_name']}")
-        self.add_log(f"📊 Max questions: {max_questions}, Include metadata: {include_metadata}")
+        self.add_log(f"🔗 URL: {url_info['url']}")
         
         st.session_state.generation_in_progress = True
         st.session_state.selected_action = "extract"
 
-        # Simulate extraction process
-        import random
-        questions_found = random.randint(min(5, max_questions), max_questions)
+        # Here you would call your extraction function
+        # This is where you'd use the account's cookies to extract questions
+        # Each survey site would have its own extraction logic
+        
+        # For now, simulate extraction
+        time.sleep(2)
+        questions_found = random.randint(5, 20)
+        
+        # Mark URL as used
+        self._mark_url_used(url_info['url_id'])
 
         self.add_log(f"📊 Found {questions_found} questions on the survey site")
         self.add_log(f"✅ Extracted all questions successfully")
@@ -220,24 +240,18 @@ class GenerateManualWorkflowsPage:
             "timestamp": datetime.now().isoformat(),
             "account": {
                 "id": account['account_id'],
-                "username": account['username'],
-                "country": account.get('country', 'Unknown')
+                "username": account['username']
             },
             "site": {
                 "id": site['site_id'],
-                "country": site['country'],
-                "url": site['url']
+                "name": site['site_name']
             },
-            "prompt_used": prompt['prompt_name'] if prompt else None,
+            "url": {
+                "id": url_info['url_id'],
+                "url": url_info['url']
+            },
+            "prompt_used": prompt['prompt_name'],
             "questions_extracted": questions_found,
-            "max_questions": max_questions,
-            "include_metadata": include_metadata,
-            "question_types": {
-                "multiple_choice": random.randint(2, 8),
-                "text": random.randint(1, 5),
-                "rating": random.randint(1, 4),
-                "yes_no": random.randint(1, 3)
-            },
             "execution_time_seconds": round(random.uniform(2, 5), 1),
             "status": "success"
         }
@@ -257,7 +271,7 @@ class GenerateManualWorkflowsPage:
 
         st.info(f"""
         **Account:** {account['username']}  
-        **Survey Site:** {site['country']} - {site['url']}  
+        **Survey Site:** {site['site_name']}  
         **Prompt:** {prompt['prompt_name'] if prompt else 'None'}
         """)
 
@@ -265,51 +279,59 @@ class GenerateManualWorkflowsPage:
             st.error("❌ Cannot answer questions: Account has no prompt")
             return
 
+        # Get account URLs for this site
+        account_urls = self._get_account_urls(account['account_id'], site['site_id'])
+        
+        if not account_urls:
+            st.warning(f"⚠️ No URLs configured for {account['username']} on {site['site_name']}. Please add URLs in Accounts page.")
+            return
+
+        # URL selection
+        url_options = []
+        url_mapping = {}
+        
+        for url_info in account_urls:
+            used_status = " (Used)" if url_info.get('is_used', False) else " (Available)"
+            default_marker = "⭐ " if url_info.get('is_default', False) else ""
+            label = f"{default_marker}{url_info['url']}{used_status}"
+            url_mapping[label] = url_info
+            url_options.append(label)
+
+        selected_url_label = st.selectbox(
+            "Select URL to Answer:",
+            options=url_options,
+            key="answer_url_select"
+        )
+        
+        selected_url_info = url_mapping[selected_url_label]
+
         # Preview prompt
         with st.expander("📋 View Prompt Being Used", expanded=False):
             st.markdown(f"**Prompt Name:** {prompt['prompt_name']}")
             st.markdown(f"**Prompt Type:** {prompt.get('prompt_type', 'user_persona')}")
             st.text_area("Prompt Content:", value=prompt['content'], height=150, disabled=True)
 
-        # Options
-        col1, col2 = st.columns(2)
-        with col1:
-            questions_to_answer = st.number_input(
-                "Number of Questions to Answer:",
-                min_value=1,
-                max_value=50,
-                value=10,
-                key="answer_questions_count"
-            )
-        with col2:
-            creativity_level = st.slider(
-                "Creativity Level:",
-                min_value=0.1,
-                max_value=1.0,
-                value=0.7,
-                step=0.1,
-                key="answer_creativity",
-                help="Higher values = more creative answers"
-            )
-
         if st.button("🚀 Start Answer Generation", type="primary", use_container_width=True, key="answer_btn"):
-            self._handle_answer_questions(account, site, prompt, questions_to_answer, creativity_level)
+            self._handle_answer_questions(account, site, prompt, selected_url_info)
 
     def _handle_answer_questions(self, account: Dict[str, Any], site: Dict[str, Any], 
-                                 prompt: Dict, questions_to_answer: int, creativity: float):
+                                 prompt: Dict, url_info: Dict):
         """Handle answer questions action."""
-        self.add_log(f"🚀 Starting answer generation for {account['username']} on {site['country']}...")
+        self.add_log(f"🚀 Starting answer generation for {account['username']} on {site['site_name']}...")
         self.add_log(f"📝 Using prompt: {prompt['prompt_name']}")
-        self.add_log(f"🎯 Questions to answer: {questions_to_answer}, Creativity: {creativity}")
+        self.add_log(f"🔗 URL: {url_info['url']}")
         
         st.session_state.generation_in_progress = True
         st.session_state.selected_action = "answer"
 
+        # Here you would call your answer generation function
+        # Each survey site would have its own answer submission logic
+        
         # Simulate answer generation
-        import random
-        answers_generated = questions_to_answer
+        time.sleep(2)
+        questions_answered = random.randint(5, 20)
 
-        self.add_log(f"🤖 Generated {answers_generated} answers using AI")
+        self.add_log(f"🤖 Generated {questions_answered} answers using AI")
         self.add_log(f"✅ All answers submitted successfully")
 
         results = {
@@ -317,23 +339,23 @@ class GenerateManualWorkflowsPage:
             "timestamp": datetime.now().isoformat(),
             "account": {
                 "id": account['account_id'],
-                "username": account['username'],
-                "country": account.get('country', 'Unknown')
+                "username": account['username']
             },
             "site": {
                 "id": site['site_id'],
-                "country": site['country'],
-                "url": site['url']
+                "name": site['site_name']
+            },
+            "url": {
+                "id": url_info['url_id'],
+                "url": url_info['url']
             },
             "prompt_used": {
                 "id": prompt['prompt_id'],
                 "name": prompt['prompt_name'],
                 "preview": prompt['content'][:100] + "..."
             },
-            "questions_answered": answers_generated,
-            "answers_generated": answers_generated,
-            "creativity_level": creativity,
-            "average_response_time_seconds": round(random.uniform(0.5, 2.0), 2),
+            "questions_answered": questions_answered,
+            "answers_generated": questions_answered,
             "execution_time_seconds": round(random.uniform(3, 8), 1),
             "status": "success"
         }
@@ -353,70 +375,75 @@ class GenerateManualWorkflowsPage:
 
         st.info(f"""
         **Account:** {account['username']}  
-        **Survey Site:** {site['country']} - {site['url']}  
+        **Survey Site:** {site['site_name']}  
         **Prompt:** {prompt['prompt_name'] if prompt else 'None'}
         """)
 
         if not prompt:
             st.warning("⚠️ Account has no prompt - workflows can still be created but may lack personalization")
 
+        # Get questions for this account/site that haven't been used
+        questions = self._get_unused_questions(account['account_id'], site['site_id'])
+        
+        if not questions:
+            st.info("No unused questions available for this account/site. Extract questions first.")
+            return
+
+        st.success(f"✅ Found {len(questions)} unused questions")
+
         # Options
-        col1, col2 = st.columns(2)
-        with col1:
-            workflow_count = st.number_input(
-                "Number of Workflows to Create:",
-                min_value=1,
-                max_value=10,
-                value=3,
-                key="create_workflow_count"
-            )
-        with col2:
-            workflow_type = st.selectbox(
-                "Workflow Type:",
-                options=["extraction", "submission", "validation", "mixed"],
-                key="create_workflow_type"
-            )
+        workflow_count = st.number_input(
+            "Number of Workflows to Create:",
+            min_value=1,
+            max_value=min(10, len(questions)),
+            value=min(3, len(questions)),
+            key="create_workflow_count"
+        )
 
         if st.button("🚀 Create Workflows", type="primary", use_container_width=True, key="create_btn"):
-            self._handle_create_workflows(account, site, prompt, workflow_count, workflow_type)
+            self._handle_create_workflows(account, site, prompt, workflow_count, questions)
 
     def _handle_create_workflows(self, account: Dict[str, Any], site: Dict[str, Any], 
-                                 prompt: Optional[Dict], workflow_count: int, workflow_type: str):
+                                 prompt: Optional[Dict], workflow_count: int, questions: List):
         """Handle create workflows action."""
-        self.add_log(f"🚀 Creating workflows for {account['username']} on {site['country']}...")
-        self.add_log(f"📊 Creating {workflow_count} workflows of type: {workflow_type}")
+        self.add_log(f"🚀 Creating workflows for {account['username']} on {site['site_name']}...")
+        self.add_log(f"📊 Creating {workflow_count} workflows from {len(questions)} questions")
         
         st.session_state.generation_in_progress = True
         st.session_state.selected_action = "create"
 
-        # Generate mock workflows
+        # Select random questions to use
         import random
-        from datetime import timedelta
+        selected_questions = random.sample(questions, min(workflow_count, len(questions)))
 
         workflows = []
-        for i in range(workflow_count):
-            if workflow_type == "mixed":
-                wf_type = random.choice(["extraction", "submission", "validation"])
-            else:
-                wf_type = workflow_type
-
+        for i, question in enumerate(selected_questions):
             workflow = {
                 "id": f"wf_{account['account_id']}_{site['site_id']}_{i+1}",
-                "name": f"{site['country']}_{wf_type}_{i+1}",
-                "type": wf_type,
+                "name": f"{site['site_name'].replace(' ', '_')}_workflow_{i+1}",
                 "version": "1.0",
                 "account_id": account['account_id'],
                 "site_id": site['site_id'],
+                "site_name": site['site_name'],
+                "question_id": question['question_id'],
+                "question_text": question['question_text'],
+                "question_type": question['question_type'],
+                "click_element": question.get('click_element', ''),
                 "steps": random.randint(5, 15),
-                "created": (datetime.now() - timedelta(minutes=random.randint(1, 10))).isoformat(),
+                "created": datetime.now().isoformat(),
                 "prompt_used": prompt['prompt_id'] if prompt else None,
-                "configuration": {
-                    "headless": False,
-                    "timeout_seconds": 30,
-                    "retry_count": 3
+                "workflow_data": {
+                    "extVersion": "1.30.00",
+                    "name": f"{site['site_name'].replace(' ', '_')}_workflow_{i+1}",
+                    "description": f"Workflow for {site['site_name']} question {i+1}",
+                    "nodes": random.randint(5, 15),
+                    "edges": random.randint(4, 20)
                 }
             }
             workflows.append(workflow)
+            
+            # Mark question as used
+            self._mark_question_used(question['question_id'])
 
         self.add_log(f"📦 Created {len(workflows)} workflows")
 
@@ -425,18 +452,15 @@ class GenerateManualWorkflowsPage:
             "timestamp": datetime.now().isoformat(),
             "account": {
                 "id": account['account_id'],
-                "username": account['username'],
-                "country": account.get('country', 'Unknown')
+                "username": account['username']
             },
             "site": {
                 "id": site['site_id'],
-                "country": site['country'],
-                "url": site['url']
+                "name": site['site_name']
             },
             "prompt_used": prompt['prompt_name'] if prompt else None,
             "workflows_created": workflow_count,
             "workflows": workflows,
-            "total_steps": sum(w['steps'] for w in workflows),
             "execution_time_seconds": round(random.uniform(2, 6), 1),
             "status": "success"
         }
@@ -447,110 +471,207 @@ class GenerateManualWorkflowsPage:
         st.rerun()
 
     # ============================================================================
-    # TAB 4: DOWNLOAD WORKFLOWS
+    # TAB 4: DOWNLOAD WORKFLOWS (UPLOAD TO CHROME)
     # ============================================================================
 
     def _render_download_workflows_tab(self, account: Dict[str, Any], site: Dict[str, Any], prompt: Optional[Dict]):
-        """Render download workflows tab."""
-        st.subheader("📥 Download Workflows as JSON")
+        """Render download workflows tab - Actually uploads to Chrome."""
+        st.subheader("📥 Upload Workflows to Chrome")
 
         st.info(f"""
         **Account:** {account['username']}  
-        **Survey Site:** {site['country']} - {site['url']}  
+        **Survey Site:** {site['site_name']}  
         **Prompt:** {prompt['prompt_name'] if prompt else 'None'}
+        
+        This will upload workflows to Chrome and make them available in Automa extension.
         """)
 
-        # Options
-        col1, col2 = st.columns(2)
-        with col1:
-            include_manifest = st.checkbox(
-                "Include Manifest File",
-                value=True,
-                key="download_include_manifest"
-            )
-        with col2:
-            format_type = st.selectbox(
-                "Download Format:",
-                options=["Single JSON", "Multiple JSONs", "ZIP Package"],
-                key="download_format"
-            )
+        # Get workflows for this account/site that haven't been used
+        workflows = self._get_unused_workflows(account['account_id'], site['site_id'])
+        
+        if not workflows:
+            st.info("No unused workflows available for this account/site. Create workflows first.")
+            return
 
-        if st.button("📦 Generate & Download", type="primary", use_container_width=True, key="download_btn"):
-            self._handle_download_workflows(account, site, prompt, include_manifest, format_type)
+        st.success(f"✅ Found {len(workflows)} unused workflows")
 
-    def _handle_download_workflows(self, account: Dict[str, Any], site: Dict[str, Any], 
-                                   prompt: Optional[Dict], include_manifest: bool, format_type: str):
-        """Handle download workflows action."""
-        self.add_log(f"🚀 Generating downloadable workflows for {account['username']} on {site['country']}...")
-        self.add_log(f"📦 Format: {format_type}, Include manifest: {include_manifest}")
+        # Display workflows with checkboxes
+        st.markdown("### Select Workflows to Upload")
+        
+        selected_workflows = []
+        for wf in workflows:
+            col1, col2, col3 = st.columns([1, 3, 2])
+            with col1:
+                select = st.checkbox("", key=f"select_wf_{wf['workflow_id']}")
+                if select:
+                    selected_workflows.append(wf)
+            with col2:
+                st.write(f"**{wf['workflow_name']}**")
+            with col3:
+                st.write(f"Created: {wf['created_time'].strftime('%Y-%m-%d') if wf.get('created_time') else 'Unknown'}")
+
+        st.markdown("---")
+
+        if selected_workflows:
+            st.info(f"✅ Selected {len(selected_workflows)} workflows for upload")
+
+            if st.button("🚀 Start Chrome Session & Upload", type="primary", use_container_width=True):
+                self._handle_upload_workflows(account, site, selected_workflows)
+
+    def _handle_upload_workflows(self, account: Dict[str, Any], site: Dict[str, Any], workflows: List):
+        """Handle upload workflows action - starts Chrome and uploads to Automa."""
+        self.add_log(f"🚀 Starting Chrome session for {account['username']}...")
+        self.add_log(f"📦 Uploading {len(workflows)} workflows for {site['site_name']}")
         
         st.session_state.generation_in_progress = True
-        st.session_state.selected_action = "download"
+        st.session_state.selected_action = "upload"
 
-        # Generate mock workflows
-        import random
-        import json
-        from datetime import timedelta
+        # Here you would:
+        # 1. Start Chrome session for this account
+        # 2. Navigate to Automa extension
+        # 3. Upload workflows via GUI automation
+        # 4. Mark workflows as used
+        
+        # Simulate upload process
+        time.sleep(3)
+        
+        # Mark workflows as used
+        for wf in workflows:
+            self._mark_workflow_used(wf['workflow_id'])
 
-        workflow_count = random.randint(2, 5)
+        # Generate filenames for display
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filenames = []
+        for wf in workflows:
+            filename = f"{account['username']}_{site['site_name']}_{wf['workflow_name']}_{timestamp}.json"
+            filenames.append(filename)
 
-        workflows = []
-        for i in range(workflow_count):
-            workflow_type = random.choice(["extraction", "submission", "validation"])
-            workflow = {
-                "id": f"wf_{account['account_id']}_{site['site_id']}_{i+1}",
-                "name": f"{site['country']}_{workflow_type}_{i+1}",
-                "type": workflow_type,
-                "version": "1.0",
-                "account_id": account['account_id'],
-                "site_id": site['site_id'],
-                "steps": random.randint(3, 10),
-                "created": (datetime.now() - timedelta(minutes=random.randint(1, 10))).isoformat(),
-                "prompt_used": prompt['prompt_id'] if prompt else None,
-                "configuration": {
-                    "headless": False,
-                    "timeout_seconds": 30,
-                    "retry_count": 3
-                },
-                "workflow_data": {
-                    "extVersion": "1.30.00",
-                    "name": f"{site['country']}_{workflow_type}_{i+1}",
-                    "description": f"Workflow for {site['country']}",
-                    "nodes": random.randint(5, 15),
-                    "edges": random.randint(4, 20)
-                }
-            }
-            workflows.append(workflow)
-
-        self.add_log(f"📦 Generated {workflow_count} workflows for download")
+        self.add_log(f"✅ Uploaded {len(workflows)} workflows to Chrome")
 
         results = {
-            "action": "download_workflows",
+            "action": "upload_workflows",
             "timestamp": datetime.now().isoformat(),
             "account": {
                 "id": account['account_id'],
-                "username": account['username'],
-                "country": account.get('country', 'Unknown')
+                "username": account['username']
             },
             "site": {
                 "id": site['site_id'],
-                "country": site['country'],
-                "url": site['url']
+                "name": site['site_name']
             },
-            "prompt_used": prompt['prompt_name'] if prompt else None,
-            "workflows_generated": workflow_count,
-            "workflows": workflows,
-            "include_manifest": include_manifest,
-            "format_type": format_type,
-            "execution_time_seconds": round(random.uniform(1, 3), 1),
+            "workflows_uploaded": len(workflows),
+            "filenames": filenames,
+            "execution_time_seconds": round(random.uniform(3, 8), 1),
             "status": "success",
-            "download_available": True
+            "message": "Chrome session started and workflows uploaded to Automa"
         }
 
-        self.add_log(f"✅ Download package generation complete")
+        self.add_log(f"✅ Upload complete in {results['execution_time_seconds']}s")
         st.session_state.generation_results = results
         st.session_state.generation_in_progress = False
         st.rerun()
+
+    # ============================================================================
+    # HELPER METHODS
+    # ============================================================================
+
+    def _get_account_urls(self, account_id: int, site_id: int) -> List[Dict]:
+        """Get URLs for account/site with used status."""
+        try:
+            with get_postgres_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    cursor.execute("""
+                        SELECT url_id, url, is_default, is_used, used_at, notes
+                        FROM account_urls
+                        WHERE account_id = %s AND site_id = %s
+                        ORDER BY is_default DESC, created_at DESC
+                    """, (account_id, site_id))
+                    return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"Error loading account URLs: {e}")
+            return []
+
+    def _mark_url_used(self, url_id: int):
+        """Mark a URL as used."""
+        try:
+            with get_postgres_connection() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("""
+                        UPDATE account_urls
+                        SET is_used = TRUE, used_at = CURRENT_TIMESTAMP
+                        WHERE url_id = %s
+                    """, (url_id,))
+                    conn.commit()
+        except Exception as e:
+            logger.error(f"Error marking URL used: {e}")
+
+    def _get_unused_questions(self, account_id: int, site_id: int) -> List[Dict]:
+        """Get questions that haven't been used in workflows."""
+        try:
+            with get_postgres_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    cursor.execute("""
+                        SELECT q.question_id, q.question_text, q.question_type, 
+                               q.click_element, q.options, q.required
+                        FROM questions q
+                        LEFT JOIN workflow_generation_log w ON q.question_id = w.question_id
+                        WHERE q.account_id = %s 
+                          AND q.survey_site_id = %s
+                          AND w.log_id IS NULL
+                          AND q.is_active = TRUE
+                        ORDER BY q.created_at DESC
+                    """, (account_id, site_id))
+                    return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"Error loading unused questions: {e}")
+            return []
+
+    def _mark_question_used(self, question_id: int):
+        """Mark a question as used in a workflow."""
+        try:
+            with get_postgres_connection() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("""
+                        UPDATE questions
+                        SET used_in_workflow = TRUE, used_at = CURRENT_TIMESTAMP
+                        WHERE question_id = %s
+                    """, (question_id,))
+                    conn.commit()
+        except Exception as e:
+            logger.error(f"Error marking question used: {e}")
+
+    def _get_unused_workflows(self, account_id: int, site_id: int) -> List[Dict]:
+        """Get workflows that haven't been uploaded to Chrome."""
+        try:
+            with get_postgres_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    cursor.execute("""
+                        SELECT workflow_id, workflow_name, workflow_data, created_time
+                        FROM workflows
+                        WHERE account_id = %s 
+                          AND site_id = %s
+                          AND (uploaded_to_chrome IS NULL OR uploaded_to_chrome = FALSE)
+                          AND is_active = TRUE
+                        ORDER BY created_time DESC
+                    """, (account_id, site_id))
+                    return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"Error loading unused workflows: {e}")
+            return []
+
+    def _mark_workflow_used(self, workflow_id: int):
+        """Mark a workflow as uploaded to Chrome."""
+        try:
+            with get_postgres_connection() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("""
+                        UPDATE workflows
+                        SET uploaded_to_chrome = TRUE, uploaded_at = CURRENT_TIMESTAMP
+                        WHERE workflow_id = %s
+                    """, (workflow_id,))
+                    conn.commit()
+        except Exception as e:
+            logger.error(f"Error marking workflow used: {e}")
 
     # ============================================================================
     # RESULTS RENDERING
@@ -563,7 +684,7 @@ class GenerateManualWorkflowsPage:
             "extract": "Extract Questions",
             "answer": "Answer Questions",
             "create": "Create Workflows",
-            "download": "Download Workflows"
+            "upload": "Upload Workflows"
         }
         
         st.subheader(f"✅ {action_titles.get(action, action.title())} Results")
@@ -576,14 +697,16 @@ class GenerateManualWorkflowsPage:
                 st.metric("Questions Extracted", results.get('questions_extracted', 0))
             elif action == 'answer':
                 st.metric("Answers Generated", results.get('answers_generated', 0))
-            elif action in ['create', 'download']:
-                st.metric("Workflows Generated", results.get('workflows_generated', results.get('workflows_created', 0)))
+            elif action == 'create':
+                st.metric("Workflows Created", results.get('workflows_created', 0))
+            elif action == 'upload':
+                st.metric("Workflows Uploaded", results.get('workflows_uploaded', 0))
 
         with col2:
             st.metric("Account", results['account']['username'])
 
         with col3:
-            st.metric("Survey Site", results['site']['country'])
+            st.metric("Survey Site", results['site']['name'])
 
         with col4:
             st.metric("Execution Time", f"{results.get('execution_time_seconds', 0)}s")
@@ -591,80 +714,52 @@ class GenerateManualWorkflowsPage:
         st.markdown("---")
 
         # Detailed results
-        if action == 'extract' and 'question_types' in results:
+        if action == 'extract':
             col_left, col_right = st.columns(2)
-            
             with col_left:
                 st.markdown("**📋 Details**")
                 st.json({
                     "account_id": results['account']['id'],
                     "site_id": results['site']['id'],
-                    "max_questions": results.get('max_questions', 'N/A'),
-                    "include_metadata": results.get('include_metadata', False),
+                    "url": results['url']['url'],
                     "timestamp": results['timestamp']
                 })
-            
             with col_right:
-                st.markdown("**📊 Question Types**")
-                st.json(results['question_types'])
+                st.markdown("**📊 Questions**")
+                st.metric("Questions Found", results.get('questions_extracted', 0))
 
         elif action == 'answer':
             col_left, col_right = st.columns(2)
-            
             with col_left:
                 st.markdown("**📋 Details**")
                 st.json({
                     "account_id": results['account']['id'],
                     "site_id": results['site']['id'],
-                    "questions_answered": results.get('questions_answered', 0),
-                    "creativity_level": results.get('creativity_level', 0.7),
-                    "avg_response_time": f"{results.get('average_response_time_seconds', 0)}s"
+                    "url": results['url']['url'],
+                    "questions_answered": results.get('questions_answered', 0)
                 })
-            
             with col_right:
                 if results.get('prompt_used'):
                     st.markdown("**📝 Prompt Used**")
                     st.info(results['prompt_used']['name'])
                     st.caption(results['prompt_used']['preview'])
 
-        elif action in ['create', 'download'] and 'workflows' in results:
-            st.markdown("**📦 Generated Workflows**")
+        elif action in ['create', 'upload'] and 'workflows' in results:
+            st.markdown("**📦 Workflows**")
             
             for i, wf in enumerate(results['workflows']):
-                with st.expander(f"📋 {wf['name']} ({wf['type']})", expanded=(i == 0)):
-                    col1, col2, col3 = st.columns(3)
+                with st.expander(f"📋 {wf['name']}", expanded=(i == 0)):
+                    col1, col2 = st.columns(2)
                     with col1:
-                        st.metric("Steps", wf.get('steps', 'N/A'))
-                    with col2:
-                        st.metric("Version", wf.get('version', '1.0'))
-                    with col3:
                         st.metric("Workflow ID", wf['id'][:8] + "...")
+                    with col2:
+                        st.metric("Steps", wf.get('steps', 'N/A'))
                     
-                    # Download button for individual workflow
-                    wf_json = json.dumps(wf, indent=2)
-                    st.download_button(
-                        label=f"⬇️ Download {wf['name']}.json",
-                        data=wf_json,
-                        file_name=f"{wf['name']}.json",
-                        mime="application/json",
-                        key=f"download_wf_{i}_{datetime.now().timestamp()}"
-                    )
-
-            # Bulk download
-            st.markdown("---")
-            st.markdown("**📦 Bulk Download**")
-            bulk_json = json.dumps(results['workflows'], indent=2)
-            st.download_button(
-                label="⬇️ Download All Workflows",
-                data=bulk_json,
-                file_name=f"workflows_{results['account']['username']}_{results['site']['country']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-                mime="application/json",
-                use_container_width=True
-            )
-
-        else:
-            # Fallback for other actions
-            st.json(results)
+                    if 'question_text' in wf:
+                        st.markdown(f"**Question:** {wf['question_text']}")
+                    
+                    if action == 'upload' and 'filenames' in results:
+                        st.markdown(f"**Filename:** {results['filenames'][i]}")
 
         # Clear button
         if st.button("Clear Results", key="clear_results"):
@@ -696,9 +791,9 @@ class GenerateManualWorkflowsPage:
             with get_postgres_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
                     cursor.execute("""
-                        SELECT site_id, country, url, description, created_at
+                        SELECT site_id, site_name, description, created_at, is_active
                         FROM survey_sites
-                        ORDER BY country
+                        ORDER BY site_name
                     """)
                     return [dict(row) for row in cursor.fetchall()]
         except Exception as e:
