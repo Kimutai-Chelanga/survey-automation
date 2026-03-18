@@ -99,7 +99,6 @@ class DashboardPage(BasePage):
         try:
             with get_postgres_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                    # FIX: use q.extracted_at (not q.created_at — that column doesn't exist)
                     cursor.execute("""
                         SELECT 
                             q.question_id,
@@ -128,7 +127,7 @@ class DashboardPage(BasePage):
             return pd.DataFrame()
 
     def _load_answers_data(self) -> pd.DataFrame:
-        """Load answers data."""
+        """Load answers data - FIXED: removed workflow_name column."""
         try:
             with get_postgres_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
@@ -143,15 +142,16 @@ class DashboardPage(BasePage):
                             a.submitted_at,
                             a.submission_batch_id,
                             a.workflow_id,
-                            a.workflow_name,
                             q.question_text,
                             q.question_type,
                             ss.country as survey_site_country,
-                            acc.username as account_username
+                            acc.username as account_username,
+                            w.workflow_name
                         FROM answers a
                         LEFT JOIN questions q ON a.question_id = q.question_id
                         LEFT JOIN survey_sites ss ON q.survey_site_id = ss.site_id
                         LEFT JOIN accounts acc ON a.account_id = acc.account_id
+                        LEFT JOIN workflows w ON a.workflow_id = w.workflow_id
                         ORDER BY a.submitted_at DESC
                         LIMIT 1000
                     """)
@@ -215,9 +215,10 @@ class DashboardPage(BasePage):
             st.metric("Countries", countries)
 
         st.markdown("**Top Accounts by Answers**")
-        top_accounts = accounts_df.nlargest(5, 'answer_count')[['username', 'answer_count', 'country']]
-        if not top_accounts.empty:
-            st.dataframe(top_accounts, use_container_width=True, hide_index=True)
+        if 'answer_count' in accounts_df.columns:
+            top_accounts = accounts_df.nlargest(5, 'answer_count')[['username', 'answer_count', 'country']]
+            if not top_accounts.empty:
+                st.dataframe(top_accounts, use_container_width=True, hide_index=True)
 
     def _render_questions_overview(self, questions_df: pd.DataFrame):
         """Render questions overview section."""
@@ -234,10 +235,11 @@ class DashboardPage(BasePage):
                 st.markdown(f"- **{q_type}:** {count}")
 
         st.markdown("**Most Answered Questions**")
-        top_questions = questions_df.nlargest(5, 'answer_count')[['question_text', 'answer_count', 'survey_site_country']]
-        if not top_questions.empty:
-            for _, row in top_questions.iterrows():
-                st.markdown(f"- {row['question_text'][:50]}... ({row['answer_count']} answers)")
+        if 'answer_count' in questions_df.columns:
+            top_questions = questions_df.nlargest(5, 'answer_count')[['question_text', 'answer_count', 'survey_site_country']]
+            if not top_questions.empty:
+                for _, row in top_questions.iterrows():
+                    st.markdown(f"- {row['question_text'][:50]}... ({row['answer_count']} answers)")
 
     def _render_answers_overview(self, answers_df: pd.DataFrame):
         """Render answers overview section."""
@@ -265,9 +267,10 @@ class DashboardPage(BasePage):
         recent = answers_df.head(5)
         for _, row in recent.iterrows():
             answer_preview = str(row.get('answer_text') or '')[:100]
+            workflow_info = f" (Workflow: {row.get('workflow_name')})" if row.get('workflow_name') else ""
             st.caption(
                 f"**{row.get('account_username', 'Unknown')}** on "
-                f"{row.get('survey_site_country', 'Unknown')}: {answer_preview}..."
+                f"{row.get('survey_site_country', 'Unknown')}: {answer_preview}...{workflow_info}"
             )
 
     def _render_recent_activity(self, answers_df: pd.DataFrame):
@@ -297,6 +300,15 @@ class DashboardPage(BasePage):
                 for batch in batches:
                     st.code(str(batch)[:30] + "...", language=None)
 
+        # Show workflow usage
+        if 'workflow_name' in answers_df.columns:
+            workflow_counts = answers_df['workflow_name'].value_counts().head(3)
+            if not workflow_counts.empty:
+                st.markdown("**Top Workflows**")
+                for wf_name, count in workflow_counts.items():
+                    if wf_name:  # Skip None values
+                        st.caption(f"- {wf_name}: {count} answers")
+
     def _render_questions_by_type_chart(self, questions_df: pd.DataFrame):
         """Render questions by type chart."""
         st.subheader("📊 Questions by Type")
@@ -324,6 +336,7 @@ class DashboardPage(BasePage):
             st.info("No timeline data")
             return
 
+        # Convert to datetime and group by date
         answers_df['date'] = pd.to_datetime(answers_df['submitted_at']).dt.date
         timeline = answers_df.groupby('date').size().reset_index()
         timeline.columns = ['Date', 'Count']
