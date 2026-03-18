@@ -79,13 +79,26 @@ class DashboardPage(BasePage):
                             a.created_time,
                             a.is_active,
                             a.total_surveys_processed,
+                            a.age,
+                            a.gender,
+                            a.city,
+                            a.education_level,
+                            a.job_status,
+                            a.industry,
+                            a.income_range,
+                            a.marital_status,
+                            a.household_size,
+                            a.has_children,
                             COUNT(DISTINCT q.question_id) as question_count,
                             COUNT(DISTINCT ans.answer_id) as answer_count
                         FROM accounts a
                         LEFT JOIN questions q ON a.account_id = q.account_id
                         LEFT JOIN answers ans ON a.account_id = ans.account_id
                         GROUP BY a.account_id, a.username, a.country, a.created_time,
-                                 a.is_active, a.total_surveys_processed
+                                 a.is_active, a.total_surveys_processed,
+                                 a.age, a.gender, a.city, a.education_level,
+                                 a.job_status, a.industry, a.income_range,
+                                 a.marital_status, a.household_size, a.has_children
                         ORDER BY a.created_time DESC
                     """)
                     return pd.DataFrame([dict(row) for row in cursor.fetchall()])
@@ -95,7 +108,7 @@ class DashboardPage(BasePage):
             return pd.DataFrame()
 
     def _load_questions_data(self) -> pd.DataFrame:
-        """Load questions data."""
+        """Load questions data - FIXED: removed reference to ss.country."""
         try:
             with get_postgres_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
@@ -106,18 +119,24 @@ class DashboardPage(BasePage):
                             q.account_id,
                             q.question_text,
                             q.question_type,
+                            q.question_category,
+                            q.click_element,
+                            q.input_element,
+                            q.submit_element,
                             q.extracted_at,
                             q.is_active,
+                            q.used_in_workflow,
                             q.extraction_batch_id,
-                            ss.country as survey_site_country,
-                            ss.url as survey_site_url,
+                            ss.site_name as survey_site_name,
+                            ss.description as survey_site_description,
                             COUNT(ans.answer_id) as answer_count
                         FROM questions q
                         LEFT JOIN survey_sites ss ON q.survey_site_id = ss.site_id
                         LEFT JOIN answers ans ON q.question_id = ans.question_id
                         GROUP BY q.question_id, q.survey_site_id, q.account_id, q.question_text, 
-                                 q.question_type, q.extracted_at, q.is_active,
-                                 q.extraction_batch_id, ss.country, ss.url
+                                 q.question_type, q.question_category, q.click_element,
+                                 q.input_element, q.submit_element, q.extracted_at, q.is_active,
+                                 q.used_in_workflow, q.extraction_batch_id, ss.site_name, ss.description
                         ORDER BY q.extracted_at DESC
                     """)
                     return pd.DataFrame([dict(row) for row in cursor.fetchall()])
@@ -127,7 +146,7 @@ class DashboardPage(BasePage):
             return pd.DataFrame()
 
     def _load_answers_data(self) -> pd.DataFrame:
-        """Load answers data - FIXED: removed workflow_name column."""
+        """Load answers data - FIXED: removed reference to ss.country."""
         try:
             with get_postgres_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
@@ -144,7 +163,8 @@ class DashboardPage(BasePage):
                             a.workflow_id,
                             q.question_text,
                             q.question_type,
-                            ss.country as survey_site_country,
+                            q.question_category,
+                            ss.site_name as survey_site_name,
                             acc.username as account_username,
                             w.workflow_name
                         FROM answers a
@@ -172,7 +192,6 @@ class DashboardPage(BasePage):
             )
 
         with col2:
-            # Active = has is_active=True in new schema
             if not accounts_df.empty and 'is_active' in accounts_df.columns:
                 active_accounts = int(accounts_df['is_active'].sum())
             else:
@@ -214,6 +233,12 @@ class DashboardPage(BasePage):
         with col2:
             st.metric("Countries", countries)
 
+        # Show demographic stats
+        if 'age' in accounts_df.columns:
+            avg_age = accounts_df['age'].mean()
+            if pd.notna(avg_age):
+                st.metric("Average Age", f"{avg_age:.0f}")
+
         st.markdown("**Top Accounts by Answers**")
         if 'answer_count' in accounts_df.columns:
             top_accounts = accounts_df.nlargest(5, 'answer_count')[['username', 'answer_count', 'country']]
@@ -234,9 +259,16 @@ class DashboardPage(BasePage):
             for q_type, count in type_counts.items():
                 st.markdown(f"- **{q_type}:** {count}")
 
+        if 'question_category' in questions_df.columns:
+            category_counts = questions_df['question_category'].value_counts().head(5)
+            st.markdown("**Top Categories**")
+            for cat, count in category_counts.items():
+                if pd.notna(cat):
+                    st.markdown(f"- **{cat}:** {count}")
+
         st.markdown("**Most Answered Questions**")
         if 'answer_count' in questions_df.columns:
-            top_questions = questions_df.nlargest(5, 'answer_count')[['question_text', 'answer_count', 'survey_site_country']]
+            top_questions = questions_df.nlargest(5, 'answer_count')[['question_text', 'answer_count', 'survey_site_name']]
             if not top_questions.empty:
                 for _, row in top_questions.iterrows():
                     st.markdown(f"- {row['question_text'][:50]}... ({row['answer_count']} answers)")
@@ -267,10 +299,10 @@ class DashboardPage(BasePage):
         recent = answers_df.head(5)
         for _, row in recent.iterrows():
             answer_preview = str(row.get('answer_text') or '')[:100]
-            workflow_info = f" (Workflow: {row.get('workflow_name')})" if row.get('workflow_name') else ""
+            site_name = row.get('survey_site_name', 'Unknown')
             st.caption(
                 f"**{row.get('account_username', 'Unknown')}** on "
-                f"{row.get('survey_site_country', 'Unknown')}: {answer_preview}...{workflow_info}"
+                f"{site_name}: {answer_preview}..."
             )
 
     def _render_recent_activity(self, answers_df: pd.DataFrame):
