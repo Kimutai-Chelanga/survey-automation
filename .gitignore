@@ -313,7 +313,7 @@ docker-compose.override.yml
 logs/
 airflow/logs/
 backups/
-*.sql
+
 *.dump
 
 # ============================================================================
