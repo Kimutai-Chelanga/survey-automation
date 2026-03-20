@@ -94,8 +94,8 @@ class GenerateManualWorkflowsPage:
 
                 from pathlib import Path
                 base    = Path(__file__).parent
-                ext_dir = base / "extraction" / "extractors"
-                cre_dir = base / "extraction" / "workflow_creators"
+                ext_dir = base / "extractors"
+                cre_dir = base / "workflow_creators"
 
                 st.write("**Expected extractor dir:**", str(ext_dir))
                 st.write("Exists:", ext_dir.exists())
@@ -111,16 +111,15 @@ class GenerateManualWorkflowsPage:
                     "Required layout:\n"
                     "```\n"
                     "generate_manual_workflows/\n"
-                    "  extraction/\n"
-                    "    __init__.py\n"
+                    "  base/\n"
                     "    base_extractor.py\n"
                     "    base_workflow_creator.py\n"
-                    "    extractors/\n"
-                    "      __init__.py\n"
-                    "      topsurveys_extractor.py   ← site_name = 'Top Surveys'\n"
-                    "    workflow_creators/\n"
-                    "      __init__.py\n"
-                    "      topsurveys_creator.py     ← site_name = 'Top Surveys'\n"
+                    "  extractors/\n"
+                    "    __init__.py\n"
+                    "    topsurveys_extractor.py   ← site_name = 'Top Surveys'\n"
+                    "  workflow_creators/\n"
+                    "    __init__.py\n"
+                    "    topsurveys_workflow.py    ← site_name = 'Top Surveys'\n"
                     "```\n"
                     "The DB survey_sites.site_name must **exactly** match "
                     "the site_name returned by get_site_info()."
@@ -212,7 +211,6 @@ class GenerateManualWorkflowsPage:
         if st.session_state.generation_results:
             st.markdown("---")
             self._render_results(st.session_state.generation_results)
-
     # ======================================================================
     # TAB 1 — EXTRACT
     # ======================================================================
@@ -243,7 +241,7 @@ class GenerateManualWorkflowsPage:
             st.warning("⚠️ No URLs configured for this account/site (Accounts → Survey Sites).")
             return
 
-        url_map  = {}
+        url_map = {}
         for u in urls:
             star = "⭐ " if u.get("is_default") else ""
             used = " [used]" if u.get("is_used") else ""
@@ -254,14 +252,12 @@ class GenerateManualWorkflowsPage:
         if sel_url.get("is_used"):
             st.warning("⚠️ URL already used — you can still proceed.")
 
-        c1, c2 = st.columns(2)
-        with c1: max_q = st.number_input("Max questions", 1, 100, 50, key="ext_maxq")
-        with c2: use_chrome = st.checkbox("Use running Chrome session", bool(debug_port), key="ext_chrome")
+        use_chrome = st.checkbox("Use running Chrome session", bool(debug_port), key="ext_chrome")
 
         if st.button("🚀 Extract", type="primary", use_container_width=True, key="ext_btn"):
-            self._do_extract(acct, site, prompt, sel_url, max_q, use_chrome)
+            self._do_extract(acct, site, prompt, sel_url, use_chrome)
 
-    def _do_extract(self, acct, site, prompt, url_info, max_q, use_chrome):
+    def _do_extract(self, acct, site, prompt, url_info, use_chrome):
         self.log(f"Extraction start: {acct['username']} / {site['site_name']}")
         st.session_state.generation_in_progress = True
 
@@ -279,7 +275,7 @@ class GenerateManualWorkflowsPage:
                 account_id=acct["account_id"], site_id=site["site_id"],
                 url=url_info["url"], profile_path=profile_path,
                 site_name=site["site_name"],
-                debug_port=debug_port, max_questions=max_q,
+                debug_port=debug_port,
             )
 
             if result.get("success"):
@@ -300,7 +296,7 @@ class GenerateManualWorkflowsPage:
                 self.log(f"Failed: {result.get('error')}", "ERROR")
                 st.session_state.generation_results = {
                     "action": "extract_questions", "status": "failed",
-                    "error": result.get("error","Unknown"),
+                    "error": result.get("error", "Unknown"),
                     "account": {"id": acct["account_id"], "username": acct["username"]},
                     "site":    {"id": site["site_id"],    "name": site["site_name"]},
                     "timestamp": datetime.now().isoformat(),
