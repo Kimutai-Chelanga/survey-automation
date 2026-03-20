@@ -1,9 +1,0 @@
-# For testing in GitHub Codespaces
-all:
-  children:
-    codespaces:
-      hosts:
-        localhost:
-          ansible_connection: local
-          ansible_python_interpreter: /usr/bin/python3
-          environment_type: codespaces

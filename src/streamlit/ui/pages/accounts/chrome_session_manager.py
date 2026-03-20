@@ -271,184 +271,94 @@ class ChromeSessionManager:
         show_terminal: bool = True,
     ) -> Dict[str, Any]:
         """
-        Start Chrome with 3 tabs + terminal + account cookie script.
-
-        Opens:
-          1. Automa extension (Chrome Web Store)
-          2. EditThisCookie extension (Chrome Web Store)
-          3. Survey site (provided by survey_url)
+        Start Chrome with a single tab pointing to survey_url.
+        Xvfb/VNC/fluxbox are already running from start.sh — do NOT restart them.
         """
-        # Enforce single session: stop any existing session first
+        # Stop any existing sessions first
         for sid in list(self.active_processes.keys()):
             self.stop_session(sid)
 
+        # Kill any lingering Chrome processes
         self._kill_all_chrome_everywhere()
 
-        # Clean all singleton locks BEFORE starting Chrome
+        # Clean singleton locks for this profile
         self._cleanup_singleton_locks(profile_path)
 
-        time.sleep(3)
+        time.sleep(2)
 
-        # Startup URLs
-        startup_url_1 = "https://chromewebstore.google.com/detail/automa/infppggnoaenmfagbfknfkancpbljcca"
-        startup_url_2 = "https://chromewebstore.google.com/detail/editthiscookie/fngmhnnpilhplaeedifhccceomclgfbg"
-        startup_url_3 = survey_url
-
-        # Account cookie script path
         safe_username = "".join(c for c in username if c.isalnum() or c in "-_")
         account_cookie_script = f"/app/cookie_scripts/copy_cookies_{safe_username}.sh"
 
-        # Optional terminal window
-        terminal_config = ""
-        if show_terminal:
-            terminal_config = f"""
-# Open interactive terminal window for account management
-xterm -title "Account: {username}" \\
-    -geometry 80x25+10+10 \\
-    -fa 'Monospace' -fs 10 \\
-    -e bash -c "
-        echo '=========================================='
-        echo 'Chrome Session Terminal'
-        echo 'Account: {username}'
-        echo 'Profile: {profile_path}'
-        echo '=========================================='
-        echo ''
-        echo 'Chrome started with 3 tabs:'
-        echo '  1. Automa Extension'
-        echo '  2. EditThisCookie Extension'
-        echo '  3. Survey Site: {survey_url}'
-        echo ''
-        echo 'Account Cookie Script:'
-        echo '  {account_cookie_script}'
-        echo ''
-        echo 'Quick Commands:'
-        echo '  cd /app/cookie_scripts'
-        echo '  ls -la'
-        echo '  ./{os.path.basename(account_cookie_script)}'
-        echo ''
-        echo 'Press Ctrl+C to close this terminal'
-        echo '=========================================='
-        cd /app/cookie_scripts
-        bash
-    " &
-"""
-
         bash_script = f"""#!/bin/bash
-set -e
 
-CHROME_PROFILE_DIR="{profile_path}"
-SESSION_ID="{session_id}"
-ACCOUNT_USERNAME="{username}"
-ACCOUNT_COOKIE_SCRIPT="{account_cookie_script}"
-SURVEY_URL="{survey_url}"
+    CHROME_PROFILE_DIR="{profile_path}"
+    SURVEY_URL="{survey_url}"
 
-cleanup() {{
-    pkill -TERM -f "chrome.*$CHROME_PROFILE_DIR" || true
-    sleep 5
-    pkill -KILL -f chrome || true
-    pkill -f "xterm.*$ACCOUNT_USERNAME" || true
-    pkill -f "Xvfb|fluxbox|x11vnc|websockify" || true
+    # Use the already-running display from start.sh
+    export DISPLAY=:99
 
-    # Clean up lock files on exit
+    echo "=== Chrome Session Starting ==="
+    echo "Profile : $CHROME_PROFILE_DIR"
+    echo "URL     : $SURVEY_URL"
+    echo "Display : $DISPLAY"
+    echo "==============================="
+
+    # Remove stale lock files
     for lockfile in SingletonLock SingletonCookie SingletonSocket lockfile; do
         for target in "$CHROME_PROFILE_DIR/$lockfile" "$CHROME_PROFILE_DIR/Default/$lockfile"; do
             [ -e "$target" ] || [ -L "$target" ] && rm -f "$target" 2>/dev/null || true
         done
     done
 
-    exit 0
-}}
-
-trap cleanup SIGINT SIGTERM EXIT
-
-# Ensure profile directory structure exists
-mkdir -p "$CHROME_PROFILE_DIR/Default"
-
-# Remove stale session / lock files
-for lockfile in SingletonLock SingletonCookie SingletonSocket lockfile; do
-    for target in "$CHROME_PROFILE_DIR/$lockfile" "$CHROME_PROFILE_DIR/Default/$lockfile"; do
-        [ -e "$target" ] || [ -L "$target" ] && rm -f "$target" 2>/dev/null || true
+    # Remove session restore files
+    for session_file in "Last Session" "Last Tabs" "Current Session" "Current Tabs"; do
+        target="$CHROME_PROFILE_DIR/Default/$session_file"
+        [ -e "$target" ] && rm -f "$target" 2>/dev/null || true
     done
-done
 
-for session_file in "Last Session" "Last Tabs" "Current Session" "Current Tabs"; do
-    target="$CHROME_PROFILE_DIR/Default/$session_file"
-    [ -e "$target" ] && rm -f "$target" 2>/dev/null || true
-done
+    # Ensure profile directory exists
+    mkdir -p "$CHROME_PROFILE_DIR/Default"
 
-# Write Preferences to force 3-tab startup
-cat > "$CHROME_PROFILE_DIR/Default/Preferences" << 'PREFEOF'
-{{
-  "session": {{
-    "restore_on_startup": 5,
-    "startup_urls": [
-      "{startup_url_1}",
-      "{startup_url_2}",
-      "{SURVEY_URL}"
-    ]
-  }},
-  "profile": {{
-    "exit_type": "Normal"
-  }},
-  "browser": {{
-    "show_home_button": true
-  }}
-}}
-PREFEOF
+    # Kill any existing Chrome using this profile
+    pkill -f "chrome.*$CHROME_PROFILE_DIR" 2>/dev/null || true
+    sleep 2
 
-# Start X server
-Xvfb :99 -screen 0 1280x720x24 -ac &
-sleep 3
-export DISPLAY=:99
+    # Start Chrome
+    google-chrome-stable \\
+    --no-sandbox \\
+    --disable-setuid-sandbox \\
+    --user-data-dir="$CHROME_PROFILE_DIR" \\
+    --remote-debugging-port=9222 \\
+    --remote-debugging-address=0.0.0.0 \\
+    --remote-allow-origins=* \\
+    --no-first-run \\
+    --disable-session-crashed-bubble \\
+    --disable-restore-session-state \\
+    --disable-sync \\
+    --disable-default-apps \\
+    --disable-notifications \\
+    --disable-infobars \\
+    --disable-breakpad \\
+    --disable-dev-shm-usage \\
+    --lang=en-KE,en-US,en \\
+    --window-size=1280,720 \\
+    --window-position=0,0 \\
+    "$SURVEY_URL" &
 
-# Start window manager
-fluxbox &
-sleep 2
+    CHROME_PID=$!
+    echo "Chrome PID : $CHROME_PID"
+    echo "VNC        : http://localhost:6080/vnc.html"
+    echo "Password   : secret"
 
-# Start VNC
-x11vnc -display :99 -forever -shared -passwd secret -bg
-websockify --web /usr/share/novnc 6080 localhost:5900 &
+    wait $CHROME_PID
 
-{terminal_config}
-
-# Start Chrome with all 3 URLs on command line
-google-chrome-stable \\
-  --no-sandbox \\
-  --disable-setuid-sandbox \\
-  --user-data-dir="$CHROME_PROFILE_DIR" \\
-  --remote-debugging-port=9222 \\
-  --remote-debugging-address=0.0.0.0 \\
-  --remote-allow-origins=* \\
-  --no-first-run \\
-  --disable-session-crashed-bubble \\
-  --disable-restore-session-state \\
-  --disable-sync \\
-  --disable-default-apps \\
-  --disable-notifications \\
-  --disable-infobars \\
-  --disable-breakpad \\
-  --window-size=1280,720 \\
-  --window-position=0,0 \\
-  --new-window \\
-  "{startup_url_1}" \\
-  "{startup_url_2}" \\
-  "{SURVEY_URL}" &
-
-CHROME_PID=$!
-echo "Chrome started with PID $CHROME_PID"
-echo "  Tab 1: Automa Extension"
-echo "  Tab 2: EditThisCookie Extension"
-echo "  Tab 3: Survey Site: $SURVEY_URL"
-
-wait $CHROME_PID
-
-# Cleanup on natural exit
-for lockfile in SingletonLock SingletonCookie SingletonSocket lockfile; do
-    for target in "$CHROME_PROFILE_DIR/$lockfile" "$CHROME_PROFILE_DIR/Default/$lockfile"; do
-        [ -e "$target" ] || [ -L "$target" ] && rm -f "$target" 2>/dev/null || true
+    # Cleanup lock files on exit
+    for lockfile in SingletonLock SingletonCookie SingletonSocket lockfile; do
+        for target in "$CHROME_PROFILE_DIR/$lockfile" "$CHROME_PROFILE_DIR/Default/$lockfile"; do
+            [ -e "$target" ] || [ -L "$target" ] && rm -f "$target" 2>/dev/null || true
+        done
     done
-done
-"""
+    """
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=".sh", mode="w") as f:
             f.write(bash_script)
@@ -472,16 +382,17 @@ done
             "started_at": datetime.now(),
             "has_terminal": show_terminal,
             "debug_port": 9222,
-            "startup_urls": [startup_url_1, startup_url_2, survey_url],
+            "startup_urls": [survey_url],
         }
 
-        # Give Chrome a moment to start
+        # Give Chrome time to start
         time.sleep(5)
 
-        logger.info(f"Chrome session started: {session_id}")
-        logger.info(f"  Tabs: Automa, EditThisCookie, Survey Site ({survey_url})")
-        logger.info(f"  VNC:  http://localhost:6080/vnc.html")
-        logger.info(f"  Debug: localhost:9222")
+        logger.info(f"Chrome session started : {session_id}")
+        logger.info(f"  URL     : {survey_url}")
+        logger.info(f"  Profile : {profile_path}")
+        logger.info(f"  VNC     : http://localhost:6080/vnc.html")
+        logger.info(f"  Debug   : localhost:9222")
 
         return {
             "success": True,
@@ -491,13 +402,9 @@ done
             "profile_path": profile_path,
             "account_cookie_script": account_cookie_script,
             "has_terminal": show_terminal,
-            "startup_urls": [startup_url_1, startup_url_2, survey_url],
-            "message": (
-                f"Chrome started with 3 tabs: Automa, EditThisCookie, Survey Site"
-                + (" and interactive terminal" if show_terminal else "")
-            ),
+            "startup_urls": [survey_url],
+            "message": f"Chrome started — URL: {survey_url} — VNC: http://localhost:6080/vnc.html (password: secret)",
         }
-
     def stop_session(self, session_id: str) -> Dict[str, Any]:
         """
         Stop a Chrome session and ensure ALL windows/tabs are closed and

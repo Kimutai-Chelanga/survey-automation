@@ -10,8 +10,7 @@ class Sidebar:
         "Questions",
         "Answers",
         "Prompts",
-        "Manual Executor",
-        "Generate Manual Workflows",   # ✅ This replaces Reverse DAGs
+        "Generate Manual Workflows",
     ]
 
     def render(self) -> str:

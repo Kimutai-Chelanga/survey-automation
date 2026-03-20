@@ -1,3 +1,6 @@
+# ============================================================
+# requirements.txt
+# ============================================================
 # Core framework
 streamlit>=1.28.0
 
@@ -15,6 +18,9 @@ hyperbrowser
 selenium>=4.15.2
 beautifulsoup4>=4.12.2
 requests>=2.31.0
+
+# Playwright (browser automation via CDP)
+playwright>=1.44.0
 
 # Data processing
 pandas>=2.0.0

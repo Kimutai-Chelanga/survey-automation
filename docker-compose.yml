@@ -1,11 +1,15 @@
+# ============================================================
+# docker-compose.yml
+# ============================================================
 version: '3.8'
 
+# ------------------------------------------------------------------
+# Named volumes
+# ------------------------------------------------------------------
 volumes:
   postgres_data:
     driver: local
   mongodb_data:
-    driver: local
-  airflow_logs:
     driver: local
   chrome_profiles:
     driver: local
@@ -17,18 +21,23 @@ volumes:
     driver: local
   root_downloads:
     driver: local
-  backups:  # Volume for database backups
+  workflows_export:
     driver: local
-  workflows_export:  # Volume for workflow exports
-    driver: local
-  prompt_backups:  # NEW: Volume for prompt file backups
+  prompt_backups:
     driver: local
 
 networks:
   app_network:
     driver: bridge
 
+# ------------------------------------------------------------------
+# Services
+# ------------------------------------------------------------------
 services:
+
+  # ----------------------------------------------------------------
+  # MongoDB
+  # ----------------------------------------------------------------
   mongodb:
     image: mongo:7.0
     container_name: mongodb
@@ -52,6 +61,9 @@ services:
       - app_network
     restart: unless-stopped
 
+  # ----------------------------------------------------------------
+  # PostgreSQL
+  # ----------------------------------------------------------------
   postgres:
     image: postgres:15
     container_name: postgres_db
@@ -75,7 +87,9 @@ services:
       - app_network
     restart: unless-stopped
 
-  # Streamlit app with VNC access for browser interaction
+  # ----------------------------------------------------------------
+  # Streamlit app  (VNC + Chrome + Playwright)
+  # ----------------------------------------------------------------
   app:
     build:
       context: .
@@ -87,10 +101,10 @@ services:
       mongodb:
         condition: service_healthy
     ports:
-      - "8501:8501"
-      - "6080:6080"
-      - "5900:5900"
-      - "9222-9322:9222-9322"
+      - "8501:8501"      # Streamlit UI
+      - "6080:6080"      # noVNC browser UI
+      - "5900:5900"      # Raw VNC
+      - "9222-9322:9222-9322"  # Chrome CDP debug ports
     volumes:
       - .:/app
       - ./.env:/app/.env
@@ -99,43 +113,64 @@ services:
       - recordings:/app/recordings:rw
       - recordings:/workspace/recordings:rw
       - downloads:/workspace/downloads:rw
-      - downloads:/opt/airflow/workspace/downloads:rw
       - ./editthiscookie:/app/editthiscookie:ro
       - cookie_scripts:/app/cookie_scripts:rw
       - root_downloads:/root/Downloads:rw
       - ./host_downloads:/root/Downloads_host:rw
       - workflows_export:/app/workflows_export:rw
-      - prompt_backups:/app/prompt_backups:rw  # NEW: Prompt backups volume
+      - prompt_backups:/app/prompt_backups:rw
     environment:
+      # Auth
       APP_USERNAME: ${APP_USERNAME:-admin}
       APP_PASSWORD_HASH: ${APP_PASSWORD_HASH}
       SESSION_TIMEOUT: ${SESSION_TIMEOUT:-480}
+
+      # Streamlit
       STREAMLIT_SERVER_ENABLE_CORS: "false"
       STREAMLIT_SERVER_ENABLE_XSRF_PROTECTION: "false"
       STREAMLIT_SERVER_HEADLESS: "true"
+
+      # Python
       PYTHONPATH: /app
+      PYTHONWARNINGS: ignore::UserWarning
+      PYTHONUNBUFFERED: 1
+
+      # Databases
       DATABASE_URL: postgresql://airflow:airflow@postgres:5432/messages
       MONGODB_URI: mongodb://admin:admin123@mongodb:27017/messages_db?authSource=admin
+
+      # Chrome
       CHROME_PROFILE_DIR: /workspace/chrome_profiles
       CHROME_PROFILES_BASE_DIR: /workspace/chrome_profiles
       CHROME_USER_DATA_DIR: /workspace/chrome_profiles
       CHROME_DOWNLOAD_DIR: /workspace/downloads
       CHROME_EXECUTABLE: /usr/bin/google-chrome-stable
       CHROME_DEBUG_PORT_START: 9222
+
+      # Playwright — point to system Chrome so no second browser is downloaded
+      PLAYWRIGHT_BROWSERS_PATH: /usr/bin
+
+      # Workspace paths
       RECORDINGS_DIR: /workspace/recordings
       DOWNLOADS_DIR: /workspace/downloads
       WORKSPACE_DIR: /workspace
-      PROMPT_BACKUPS_DIR: /app/prompt_backups  # NEW: Prompt backups directory
+      WORKFLOWS_EXPORT_DIR: /app/workflows_export
+      PROMPT_BACKUPS_DIR: /app/prompt_backups
+
+      # Display / VNC
       DISPLAY: ":99"
       VNC_PASSWORD: secret
       VNC_PORT: 5900
       NOVNC_PORT: 6080
+
+      # Timezone
       TZ: ${DAG_TIMEZONE:-Africa/Nairobi}
+
+      # API keys
       HYPERBROWSER_API_KEY: ${HYPERBROWSER_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      PYTHONWARNINGS: ignore::UserWarning
-      PYTHONUNBUFFERED: 1
+
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8501/_stcore/health"]
       interval: 30s
@@ -150,251 +185,3 @@ services:
       - SYS_ADMIN
     security_opt:
       - seccomp=unconfined
-
-  # Airflow Database Initialization
-  airflow-init:
-    build:
-      context: .
-      dockerfile: Dockerfile.airflow
-    container_name: airflow_init
-    depends_on:
-      postgres:
-        condition: service_healthy
-      mongodb:
-        condition: service_healthy
-    environment:
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__CORE__PARALLELISM: 8
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/messages
-      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY}
-      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
-      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-      AIRFLOW__CORE__DEFAULT_TIMEZONE: ${DAG_TIMEZONE:-Africa/Nairobi}
-      AIRFLOW_UID: ${AIRFLOW_UID}
-      AIRFLOW_GID: ${AIRFLOW_GID}
-      DATABASE_URL: postgresql://airflow:airflow@postgres:5432/messages
-      MONGODB_URI: mongodb://admin:admin123@mongodb:27017/messages_db?authSource=admin
-      CHROME_PROFILE_DIR: /workspace/chrome_profiles
-      CHROME_USER_DATA_DIR: /workspace/chrome_profiles
-      CHROME_DOWNLOAD_DIR: /workspace/downloads
-      CHROME_EXECUTABLE: /usr/bin/google-chrome-stable
-      RECORDINGS_DIR: /workspace/recordings
-      DOWNLOADS_DIR: /opt/airflow/workspace/downloads
-      WORKSPACE_DIR: /workspace
-      PROMPT_BACKUPS_DIR: /opt/airflow/prompt_backups  # NEW: Prompt backups directory
-      TZ: ${DAG_TIMEZONE:-Africa/Nairobi}
-    volumes:
-      - ./airflow/dags:/opt/airflow/dags
-      - ./src:/opt/airflow/src
-      - airflow_logs:/opt/airflow/logs
-      - chrome_profiles:/workspace/chrome_profiles:rw
-      - recordings:/workspace/recordings:rw
-      - downloads:/opt/airflow/workspace/downloads:rw
-      - downloads:/workspace/downloads:rw
-      - ./airflow/scripts:/opt/airflow/scripts
-      - backups:/opt/airflow/backups:rw
-      - workflows_export:/opt/airflow/workflows_export:rw
-      - prompt_backups:/opt/airflow/prompt_backups:rw  # NEW: Prompt backups volume
-      - root_downloads:/root/Downloads:ro
-    user: "${AIRFLOW_UID}:${AIRFLOW_GID}"
-    command: >
-      bash -c "
-      echo 'Setting up directories...' &&
-      mkdir -p /opt/airflow/logs /workspace/chrome_profiles /workspace/recordings /opt/airflow/workspace/downloads /workspace/downloads /opt/airflow/backups /opt/airflow/workflows_export /opt/airflow/prompt_backups &&
-      chmod 777 /opt/airflow/logs /workspace/chrome_profiles /workspace/recordings /opt/airflow/workspace/downloads /workspace/downloads /opt/airflow/backups /opt/airflow/workflows_export /opt/airflow/prompt_backups &&
-      echo 'Initializing Airflow database...' &&
-      airflow db migrate &&
-      echo 'Creating admin user...' &&
-      airflow users create --username brian --firstname Brian --lastname Admin --role Admin --email briankimu97@gmail.com --password kimu || echo 'User already exists' &&
-      echo '✓ Airflow initialization completed successfully'
-      "
-    networks:
-      - app_network
-    restart: "no"
-
-  # Airflow Web Interface
-  airflow-webserver:
-    build:
-      context: .
-      dockerfile: Dockerfile.airflow
-    container_name: airflow_webserver
-    depends_on:
-      airflow-init:
-        condition: service_completed_successfully
-      postgres:
-        condition: service_healthy
-      mongodb:
-        condition: service_healthy
-    environment:
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__CORE__PARALLELISM: 8
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/messages
-      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY}
-      AIRFLOW__CORE__DEFAULT_TIMEZONE: ${DAG_TIMEZONE:-Africa/Nairobi}
-      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
-      AIRFLOW_UID: ${AIRFLOW_UID}
-      AIRFLOW_GID: ${AIRFLOW_GID}
-      DATABASE_URL: postgresql://airflow:airflow@postgres:5432/messages
-      MONGODB_URI: mongodb://admin:admin123@mongodb:27017/messages_db?authSource=admin
-      CHROME_PROFILE_DIR: /workspace/chrome_profiles
-      CHROME_USER_DATA_DIR: /workspace/chrome_profiles
-      CHROME_DOWNLOAD_DIR: /workspace/downloads
-      CHROME_EXECUTABLE: /usr/bin/google-chrome-stable
-      RECORDINGS_DIR: /workspace/recordings
-      DOWNLOADS_DIR: /opt/airflow/workspace/downloads
-      WORKSPACE_DIR: /workspace
-      PROMPT_BACKUPS_DIR: /opt/airflow/prompt_backups  # NEW: Prompt backups directory
-      TZ: ${DAG_TIMEZONE:-Africa/Nairobi}
-    volumes:
-      - ./airflow/dags:/opt/airflow/dags
-      - ./src:/opt/airflow/src
-      - airflow_logs:/opt/airflow/logs
-      - chrome_profiles:/workspace/chrome_profiles:rw
-      - recordings:/workspace/recordings:rw
-      - downloads:/opt/airflow/workspace/downloads:rw
-      - downloads:/workspace/downloads:rw
-      - backups:/opt/airflow/backups:ro
-      - workflows_export:/opt/airflow/workflows_export:ro
-      - prompt_backups:/opt/airflow/prompt_backups:ro  # NEW: Prompt backups volume (read-only)
-      - root_downloads:/root/Downloads:ro
-    user: "${AIRFLOW_UID}:${AIRFLOW_GID}"
-    ports:
-      - "8080:8080"
-    command: airflow webserver
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-    networks:
-      - app_network
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-        reservations:
-          memory: 512M
-
-  # Airflow Scheduler (Runs DAGs with backup and workflow export capabilities)
-  airflow-scheduler:
-    build:
-      context: .
-      dockerfile: Dockerfile.airflow
-    container_name: airflow_scheduler
-    depends_on:
-      airflow-init:
-        condition: service_completed_successfully
-      postgres:
-        condition: service_healthy
-      mongodb:
-        condition: service_healthy
-    environment:
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__CORE__PARALLELISM: 4
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/messages
-      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY}
-      AIRFLOW__CORE__DEFAULT_TIMEZONE: ${DAG_TIMEZONE:-Africa/Nairobi}
-      AIRFLOW__SCHEDULER__MAX_TIS_PER_QUERY: 4
-      AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT: 90
-      AIRFLOW__CORE__KILLED_TASK_CLEANUP_TIME: 120
-      AIRFLOW_UID: ${AIRFLOW_UID}
-      AIRFLOW_GID: ${AIRFLOW_GID}
-      DATABASE_URL: postgresql://airflow:airflow@postgres:5432/messages
-      MONGODB_URI: mongodb://admin:admin123@mongodb:27017/messages_db?authSource=admin
-      # Database credentials for backups
-      POSTGRES_USER: airflow
-      POSTGRES_PASSWORD: airflow
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5432
-      POSTGRES_DB: messages
-      PGPASSWORD: airflow
-      # Email configuration
-      EMAIL_HOST: ${EMAIL_HOST:-smtp.gmail.com}
-      EMAIL_PORT: ${EMAIL_PORT:-587}
-      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-true}
-      EMAIL_USERNAME: ${EMAIL_USERNAME}
-      EMAIL_PASSWORD: ${EMAIL_PASSWORD}
-      EMAIL_FROM: ${EMAIL_FROM:-pnata0890@gmail.com}
-      EMAIL_TO: ${EMAIL_TO:-pnata0890@gmail.com}
-      # Backup configuration
-      BACKUP_MAX_SIZE_MB: ${BACKUP_MAX_SIZE_MB:-25}
-      BACKUP_DIR: /opt/airflow/backups
-      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-7}
-      # Workflow export configuration
-      WORKFLOWS_EXPORT_DIR: /opt/airflow/workflows_export
-      # Prompt backups configuration
-      PROMPT_BACKUPS_DIR: /opt/airflow/prompt_backups  # NEW: Prompt backups directory
-      # Chrome and workspace
-      CHROME_PROFILE_DIR: /workspace/chrome_profiles
-      CHROME_USER_DATA_DIR: /workspace/chrome_profiles
-      CHROME_DOWNLOAD_DIR: /workspace/downloads
-      CHROME_EXECUTABLE: /usr/bin/google-chrome-stable
-      RECORDINGS_DIR: /workspace/recordings
-      DOWNLOADS_DIR: /opt/airflow/workspace/downloads
-      WORKSPACE_DIR: /workspace
-      DISPLAY: ":99"
-      # API Keys
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      HYPERBROWSER_API_KEY: ${HYPERBROWSER_API_KEY:-}
-      # DAG Configuration
-      DAG_TIMEZONE: ${DAG_TIMEZONE:-Africa/Nairobi}
-      DAG_SCHEDULE: ${DAG_SCHEDULE:-0 16 * * 0}
-      DAG_START_DATE: ${DAG_START_DATE:-2025-07-01}
-      JS_EXECUTOR_PATH: /opt/airflow/src/scripts/local_execute
-      # Twitter API
-      TWITTER_CONSUMER_KEY: ${TWITTER_CONSUMER_KEY}
-      TWITTER_CONSUMER_SECRET: ${TWITTER_CONSUMER_SECRET}
-      TWITTER_ACCESS_TOKEN_KEY: ${TWITTER_ACCESS_TOKEN_KEY}
-      TWITTER_ACCESS_TOKEN_SECRET: ${TWITTER_ACCESS_TOKEN_SECRET}
-      # Python settings
-      TZ: ${DAG_TIMEZONE:-Africa/Nairobi}
-      PYTHONPATH: /opt/airflow/src
-      PYTHONWARNINGS: ignore::UserWarning
-      PYTHONUNBUFFERED: 1
-    volumes:
-      - ./airflow/dags:/opt/airflow/dags
-      - ./src:/opt/airflow/src
-      - airflow_logs:/opt/airflow/logs
-      - chrome_profiles:/workspace/chrome_profiles:rw
-      - recordings:/workspace/recordings:rw
-      - downloads:/opt/airflow/workspace/downloads:rw
-      - downloads:/workspace/downloads:rw
-      - ./airflow/scripts:/opt/airflow/scripts
-      - backups:/opt/airflow/backups:rw
-      - workflows_export:/opt/airflow/workflows_export:rw
-      - prompt_backups:/opt/airflow/prompt_backups:rw  # NEW: Prompt backups volume
-      - root_downloads:/root/Downloads:rw
-    user: "${AIRFLOW_UID}:${AIRFLOW_GID}"
-    command: airflow scheduler
-    healthcheck:
-      test: ["CMD-SHELL", "airflow jobs check --job-type SchedulerJob --hostname \"$${HOSTNAME}\""]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
-    networks:
-      - app_network
-    restart: unless-stopped
-    shm_size: 2gb
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-          cpus: '2'
-        reservations:
-          memory: 1G
-          cpus: '1'
-    cap_add:
-      - SYS_ADMIN
-    security_opt:
-      - seccomp=unconfined
-    ulimits:
-      nofile:
-        soft: 65536
-        hard: 65536
-      nproc:
-        soft: 4096
-        hard: 4096

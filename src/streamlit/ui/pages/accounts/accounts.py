@@ -600,7 +600,7 @@ class AccountsPage:
             raise Exception(error_msg)
 
     def _handle_account_creation(self, username, country=None, cookies_json=None, demographic_data=None):
-        """Handle account creation with optional demographic data and cookie storage."""
+        """Handle account creation with optional demographic data."""
         if st.session_state.get('creation_in_progress'):
             self.add_log("Creation already in progress, skipping...", "WARNING")
             return
@@ -644,29 +644,12 @@ class AccountsPage:
                     self.db_manager.execute_query(update_query, (profile_id, account_id))
                     self.add_log("✓ Account configured for local Chrome")
 
-                    # Step 4: store cookies if provided
-                    cookies_stored = False
-                    cookie_count = 0
-                    if cookies_json:
-                        st.write("🔄 Storing cookies...")
-                        cookie_result = self._store_account_cookies(account_id, cookies_json, username)
-                        if cookie_result['success']:
-                            cookies_stored = True
-                            cookie_count = cookie_result['cookie_count']
-                            self.add_log(f"✓ Stored {cookie_count} cookies")
-                            st.write(f"✓ Stored {cookie_count} cookies")
-                        else:
-                            self.add_log(f"⚠ Cookie storage failed: {cookie_result['error']}", "WARNING")
-                            st.warning(f"Cookie storage failed: {cookie_result['error']}")
-
                     success_message = (
                         f"✓ Local Chrome account '{username}' created!\n"
                         f"Account ID: {account_id}\n"
                         f"Country: {country}\n"
                         f"Profile: {profile_path}\n"
                     )
-                    if cookies_stored:
-                        success_message += f"Cookies: {cookie_count} stored\n"
                     if demographic_data and any(demographic_data.values()):
                         success_message += f"Demographic info: {sum(1 for v in demographic_data.values() if v)} fields provided\n"
 
@@ -1137,7 +1120,7 @@ class AccountsPage:
         )
 
     def _render_account_details_view(self, df):
-        """Render detailed account view with country, surveys, and demographic info."""
+        """Render detailed account view with cookie upload per account."""
         for _, row in df.iterrows():
             with st.expander(f"🏷️ {row['username']} (ID: {row['account_id']})", expanded=False):
                 col1, col2, col3, col4 = st.columns(4)
@@ -1155,11 +1138,10 @@ class AccountsPage:
                 with col2:
                     st.write("**Survey Stats**")
                     st.write(f"Total Surveys: {row['total_surveys_processed']}")
-                    
-                    # Show URL count
+
                     url_count = self._get_account_urls(row['account_id'], show_used=True)
                     st.write(f"Configured URLs: {len(url_count)}")
-                    
+
                     st.write("**Basic Info**")
                     if row.get('age'):
                         st.write(f"Age: {row['age']}")
@@ -1178,7 +1160,7 @@ class AccountsPage:
                         st.write(f"Industry: {row['industry']}")
                     if row.get('income_range'):
                         st.write(f"Income: {row['income_range']}")
-                    
+
                     st.write("**Household**")
                     if row.get('marital_status'):
                         st.write(f"Marital: {row['marital_status']}")
@@ -1203,9 +1185,11 @@ class AccountsPage:
                             st.error(f"❌ Cookies invalid: {validity.get('reason', 'Unknown')}")
 
                     st.write("**Actions**")
-                    if st.button("▶️ Start Session", key=f"start_session_{row['account_id']}", use_container_width=True, type="primary"):
-                        # Get default URL for this account
-                        survey_url = self._get_survey_url_for_account(row['account_id'], row.get('country', 'United States'))
+                    if st.button("▶️ Start Session", key=f"start_session_{row['account_id']}",
+                                use_container_width=True, type="primary"):
+                        survey_url = self._get_survey_url_for_account(
+                            row['account_id'], row.get('country', 'United States')
+                        )
                         result = self._start_local_chrome_session(
                             row['profile_id'],
                             row['account_id'],
@@ -1219,7 +1203,50 @@ class AccountsPage:
                         else:
                             st.error(f"Failed: {result.get('error')}")
 
-                # View cookies modal if triggered
+                # Cookie upload section
+                st.markdown("---")
+                st.write("**🍪 Upload / Update Cookies**")
+
+                cookie_key = f"cookie_upload_{row['account_id']}"
+                cookies_json_input = st.text_area(
+                    "Paste EditThisCookie JSON",
+                    placeholder='[\n  {\n    "domain": ".x.com",\n    "name": "auth_token",\n    "value": "...",\n    ...\n  }\n]',
+                    height=120,
+                    key=cookie_key,
+                    help="Paste the JSON exported from EditThisCookie extension"
+                )
+
+                col_cookie1, col_cookie2 = st.columns([2, 1])
+                with col_cookie1:
+                    if cookies_json_input:
+                        try:
+                            parsed = json.loads(cookies_json_input)
+                            if isinstance(parsed, list) and len(parsed) > 0:
+                                st.success(f"✓ {len(parsed)} cookies detected")
+                            else:
+                                st.warning("⚠️ Invalid cookie format — expected a JSON array")
+                        except json.JSONDecodeError:
+                            st.error("❌ Invalid JSON")
+
+                with col_cookie2:
+                    if st.button(
+                        "💾 Save Cookies",
+                        key=f"save_cookies_{row['account_id']}",
+                        use_container_width=True,
+                        disabled=not bool(cookies_json_input and cookies_json_input.strip())
+                    ):
+                        result = self._store_account_cookies(
+                            row['account_id'], cookies_json_input, row['username']
+                        )
+                        if result['success']:
+                            st.success(f"✓ {result['cookie_count']} cookies saved!")
+                            st.cache_data.clear()
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error(f"❌ {result['error']}")
+
+                # View cookies modal
                 if st.session_state.get(f'modal_view_{row["account_id"]}'):
                     st.markdown("---")
                     st.subheader(f"🍪 Cookies for {row['username']}")
@@ -1284,7 +1311,7 @@ class AccountsPage:
     # Add Account Modal
     # --------------------------------------------------------------------------
     def render_add_account_modal(self):
-        """Render add account form with country field, optional demographic info, and cookie upload."""
+        """Render add account form with country field and optional demographic info."""
         if st.session_state.get('show_add_account', False):
             with st.expander("➕ Add New Account", expanded=True):
                 self.render_creation_logs()
@@ -1296,11 +1323,10 @@ class AccountsPage:
                         st.session_state.get('username_to_create')):
                         username = st.session_state.get('username_to_create', '')
                         country = st.session_state.get('country_to_create')
-                        cookies_json = st.session_state.get('cookies_to_upload')
                         demographic_data = st.session_state.get('demographic_data', {})
                         if username:
                             self.add_log(f"Triggering account creation for: {username}")
-                            self._handle_account_creation(username, country, cookies_json, demographic_data)
+                            self._handle_account_creation(username, country, None, demographic_data)
                     return
 
                 with st.form("add_account_form"):
@@ -1316,7 +1342,6 @@ class AccountsPage:
                         )
 
                     with col2:
-                        # Country selection (required for survey targeting)
                         country = st.selectbox(
                             "Country *",
                             options=[
@@ -1342,11 +1367,11 @@ class AccountsPage:
                         with col2:
                             date_of_birth = st.date_input("Date of Birth", value=None)
                             city = st.text_input("City", placeholder="e.g., Nairobi")
-                        
+
                         education_level = st.selectbox(
                             "Education Level",
-                            ["", "High School", "Some College", "Associate Degree", 
-                             "Bachelor's Degree", "Master's Degree", "Doctorate", "Trade School", "Other"]
+                            ["", "High School", "Some College", "Associate Degree",
+                            "Bachelor's Degree", "Master's Degree", "Doctorate", "Trade School", "Other"]
                         )
 
                     # 2. Contact & Account Info
@@ -1363,15 +1388,15 @@ class AccountsPage:
                         with col1:
                             job_status = st.selectbox(
                                 "Job Status",
-                                ["", "Student", "Employed Full-time", "Employed Part-time", 
-                                 "Self-employed", "Unemployed", "Retired", "Homemaker"]
+                                ["", "Student", "Employed Full-time", "Employed Part-time",
+                                "Self-employed", "Unemployed", "Retired", "Homemaker"]
                             )
                             industry = st.text_input("Industry", placeholder="e.g., Technology, Healthcare, Education")
                         with col2:
                             income_range = st.selectbox(
                                 "Income Range",
                                 ["", "Under $25,000", "$25,000 - $50,000", "$50,000 - $75,000",
-                                 "$75,000 - $100,000", "$100,000 - $150,000", "Over $150,000", "Prefer not to say"]
+                                "$75,000 - $100,000", "$100,000 - $150,000", "Over $150,000", "Prefer not to say"]
                             )
 
                     # 4. Household Information
@@ -1402,8 +1427,8 @@ class AccountsPage:
                         )
                         internet_usage = st.selectbox(
                             "Internet Usage",
-                            ["", "Light (1-2 hours/day)", "Moderate (3-5 hours/day)", 
-                             "Heavy (6+ hours/day)", "Constant"]
+                            ["", "Light (1-2 hours/day)", "Moderate (3-5 hours/day)",
+                            "Heavy (6+ hours/day)", "Constant"]
                         )
 
                     # 6. Device & Tech Usage
@@ -1418,26 +1443,6 @@ class AccountsPage:
                         with col2:
                             owns_tv = st.selectbox("Owns TV?", ["", "Yes", "No"])
                             internet_provider = st.text_input("Internet Provider", placeholder="e.g., Comcast, Spectrum")
-
-                    st.markdown("---")
-                    st.write("**🍪 Cookie Management (Optional)**")
-
-                    cookies_json = st.text_area(
-                        "Paste EditThisCookie JSON",
-                        placeholder='[\n  {\n    "domain": ".x.com",\n    "name": "auth_token",\n    "value": "...",\n    ...\n  }\n]',
-                        height=150,
-                        help="Paste the JSON exported from EditThisCookie extension"
-                    )
-
-                    if cookies_json:
-                        try:
-                            parsed_cookies = json.loads(cookies_json)
-                            if isinstance(parsed_cookies, list) and len(parsed_cookies) > 0:
-                                st.success(f"✓ {len(parsed_cookies)} cookies detected")
-                            else:
-                                st.warning("⚠️ Invalid cookie format")
-                        except json.JSONDecodeError:
-                            st.error("❌ Invalid JSON format")
 
                     st.caption("Profile will be created at: `/workspace/chrome_profiles/account_{username}`")
 
@@ -1462,7 +1467,6 @@ class AccountsPage:
                         if not username.strip():
                             st.warning("Please enter a username")
                         else:
-                            # Collect demographic data (all optional)
                             demographic_data = {
                                 'age': age if age else None,
                                 'date_of_birth': date_of_birth if date_of_birth else None,
@@ -1486,14 +1490,14 @@ class AccountsPage:
                                 'owns_tv': owns_tv == "Yes" if owns_tv else None,
                                 'internet_provider': internet_provider if internet_provider else None
                             }
-                            
+
                             # Remove None values
                             demographic_data = {k: v for k, v in demographic_data.items() if v is not None}
-                            
+
                             self.add_log(f"Form submitted - preparing creation for: {username.strip()}")
                             st.session_state.username_to_create = username.strip()
                             st.session_state.country_to_create = country
-                            st.session_state.cookies_to_upload = cookies_json if cookies_json.strip() else None
+                            st.session_state.cookies_to_upload = None
                             st.session_state.demographic_data = demographic_data
                             st.session_state.creating_account = True
                             st.session_state.account_creation_message = None
@@ -1832,7 +1836,7 @@ class AccountsPage:
                 session_id=session_id,
                 profile_path=profile_path,
                 username=account_username,
-                start_url=start_url if start_url else "about:blank",
+                survey_url=start_url if start_url else "about:blank",
                 show_terminal=True
             )
 

@@ -5,7 +5,6 @@ from .accounts import AccountsPage
 from .questions_page import QuestionsPage
 from .answers_page import AnswersPage
 from .prompts_page import PromptsPage
-from .manual_executor import ManualExecutor
 from .generate_manual_workflows import GenerateManualWorkflowsPage
 
 
@@ -20,7 +19,6 @@ class PageManager:
             "Questions": QuestionsPage(db_manager),
             "Answers": AnswersPage(db_manager),
             "Prompts": PromptsPage(db_manager),
-            "Manual Executor": ManualExecutor(db_manager),
             "Generate Manual Workflows": GenerateManualWorkflowsPage(db_manager),
         }
 
@@ -30,3 +28,22 @@ class PageManager:
             self.pages[page_name].render()
         else:
             st.error(f"Page '{page_name}' not found!")
+
+
+class Sidebar:
+    """Manages the sidebar navigation - Clean and minimal."""
+
+    PAGES = [
+        "Dashboard",
+        "Accounts",
+        "Questions",
+        "Answers",
+        "Prompts",
+        "Generate Manual Workflows",
+    ]
+
+    def render(self) -> str:
+        """Render sidebar and return selected page."""
+        st.sidebar.title("Navigation")
+        selected_page = st.sidebar.radio("Go to", self.PAGES)
+        return selected_page

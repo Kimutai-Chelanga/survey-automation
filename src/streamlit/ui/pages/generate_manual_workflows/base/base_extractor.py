@@ -1,132 +1,130 @@
 # src/streamlit/ui/pages/generate_manual_workflows/extraction/base_extractor.py
 """
-Base Extractor Class - All survey site extractors must inherit from this
+BaseExtractor — inherit from this for every new survey site.
+
+Key helpers provided:
+  connect_to_chrome_session(debug_port)  → (page, browser, pw)  via Playwright CDP
+  save_questions_to_db(...)
+  log_extraction(...)
 """
 
-import logging
 import json
+import logging
+import time
 from abc import ABC, abstractmethod
-from typing import Dict, List, Any, Optional
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
+
 class BaseExtractor(ABC):
-    """Base class for all survey site extractors"""
-    
+
     def __init__(self, db_manager=None):
         self.db_manager = db_manager
-        self.site_info = {
-            'site_name': 'base',
-            'description': 'Base extractor',
-            'version': '1.0.0',
-            'requires_login': True,
-            'requires_cookies': True
-        }
-        
+
     @abstractmethod
     def get_site_info(self) -> Dict[str, Any]:
-        """Return information about this survey site"""
-        return self.site_info
-    
+        """Return dict with at least: site_name, version, description."""
+        ...
+
     @abstractmethod
-    def extract_questions(self, account_id: int, site_id: int, 
+    def extract_questions(self, account_id: int, site_id: int,
                           url: str, profile_path: str, **kwargs) -> Dict[str, Any]:
         """
-        Extract questions from the survey site
-        
-        Args:
-            account_id: Account ID in database
-            site_id: Site ID in database
-            url: URL to extract from
-            profile_path: Path to Chrome profile for this account
-            **kwargs: Additional parameters
-            
-        Returns:
-            Dict with at least:
-                - success: bool
-                - questions: list of extracted questions
-                - questions_found: int
-                - error: str (if success=False)
+        Must return:
+          { success, questions, questions_found, inserted, batch_id,
+            execution_time_seconds, error (if success=False) }
         """
-        pass
-    
-    def save_questions_to_db(self, account_id: int, site_id: int, 
+        ...
+
+    # ------------------------------------------------------------------
+    # CDP connection
+    # ------------------------------------------------------------------
+
+    def connect_to_chrome_session(self, debug_port: int):
+        """
+        Connect to the already-running Chrome via Playwright CDP.
+        Returns (page, browser, playwright_instance).
+        Caller must call pw.stop() when done — do NOT close the browser.
+        """
+        try:
+            from playwright.sync_api import sync_playwright  # type: ignore
+        except ImportError:
+            raise RuntimeError(
+                "playwright not installed. Run:  pip install playwright && playwright install chromium"
+            )
+
+        pw = sync_playwright().start()
+        try:
+            browser = pw.chromium.connect_over_cdp(f"http://localhost:{debug_port}")
+        except Exception as exc:
+            pw.stop()
+            raise RuntimeError(f"Cannot reach Chrome on port {debug_port}: {exc}")
+
+        ctx  = browser.contexts[0] if browser.contexts else browser.new_context()
+        page = ctx.pages[0]       if ctx.pages        else ctx.new_page()
+        logger.info(f"Connected to Chrome CDP port {debug_port}")
+        return page, browser, pw
+
+    # ------------------------------------------------------------------
+    # DB helpers
+    # ------------------------------------------------------------------
+
+    def save_questions_to_db(self, account_id: int, site_id: int,
                               questions: List[Dict], batch_id: str) -> int:
-        """Save extracted questions to database"""
-        from src.core.database.postgres.connection import get_postgres_connection
-        from psycopg2.extras import RealDictCursor
-        
+        if not self.db_manager or not questions:
+            return 0
+
         inserted = 0
-        try:
-            with get_postgres_connection() as conn:
-                with conn.cursor() as cursor:
-                    for q in questions:
-                        cursor.execute("""
-                            INSERT INTO questions (
-                                survey_site_id, account_id, question_text,
-                                question_type, question_category, options,
-                                click_element, input_element, submit_element,
-                                required, order_index, page_url, element_html,
-                                extracted_at, extraction_batch_id, metadata
-                            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                            ON CONFLICT (survey_site_id, question_text, account_id) 
-                            DO UPDATE SET
-                                last_seen_at = EXCLUDED.extracted_at,
-                                click_element = EXCLUDED.click_element,
-                                input_element = EXCLUDED.input_element,
-                                submit_element = EXCLUDED.submit_element
-                            RETURNING question_id
-                        """, (
-                            site_id, account_id, q.get('question_text'),
-                            q.get('question_type', 'unknown'),
-                            q.get('question_category', 'general'),
-                            json.dumps(q.get('options')) if q.get('options') else None,
-                            q.get('click_element'),
-                            q.get('input_element'),
-                            q.get('submit_element'),
-                            q.get('required', True),
-                            q.get('order_index', 0),
-                            q.get('page_url'),
-                            q.get('element_html'),
-                            datetime.now(),
-                            batch_id,
-                            json.dumps(q.get('metadata', {})) if q.get('metadata') else None
-                        ))
-                        inserted += cursor.rowcount
-                        
-                    conn.commit()
-        except Exception as e:
-            logger.error(f"Error saving questions to DB: {e}")
-            
+        for q in questions:
+            try:
+                dup = self.db_manager.execute_query(
+                    "SELECT question_id FROM questions "
+                    "WHERE account_id=%s AND survey_site_id=%s AND question_text=%s LIMIT 1",
+                    (account_id, site_id, q.get("question_text", "")), fetch=True
+                )
+                if dup:
+                    continue
+
+                self.db_manager.execute_query(
+                    """INSERT INTO questions
+                       (account_id, survey_site_id, question_text, question_type,
+                        question_category, required, order_index, page_url,
+                        click_element, input_element, submit_element,
+                        options, metadata, batch_id,
+                        is_active, used_in_workflow, extracted_at)
+                       VALUES (%s,%s,%s,%s, %s,%s,%s,%s, %s,%s,%s, %s,%s,%s,
+                               TRUE,FALSE,CURRENT_TIMESTAMP)""",
+                    (
+                        account_id, site_id,
+                        q.get("question_text", ""), q.get("question_type", "unknown"),
+                        q.get("question_category"), q.get("required", False),
+                        q.get("order_index", 0), q.get("page_url"),
+                        q.get("click_element"), q.get("input_element"), q.get("submit_element"),
+                        json.dumps(q["options"]) if q.get("options") else None,
+                        json.dumps(q["metadata"]) if q.get("metadata") else None,
+                        batch_id,
+                    )
+                )
+                inserted += 1
+            except Exception as exc:
+                logger.error(f"save_questions_to_db row error: {exc}")
+
+        logger.info(f"Saved {inserted}/{len(questions)} questions  batch={batch_id}")
         return inserted
-    
-    def log_extraction(self, account_id: int, site_id: int, batch_id: str,
-                       questions_found: int, status: str = 'success', 
-                       error_msg: str = None) -> None:
-        """Log extraction to workflow_generation_log"""
-        from src.core.database.postgres.connection import get_postgres_connection
-        
+
+    def log_extraction(self, account_id, site_id, batch_id,
+                       questions_found, status="success", error_message=None):
+        if not self.db_manager:
+            return
         try:
-            with get_postgres_connection() as conn:
-                with conn.cursor() as cursor:
-                    cursor.execute("""
-                        INSERT INTO workflow_generation_log (
-                            workflow_type, workflow_name, account_id, site_id,
-                            generated_time, status, questions_processed,
-                            error_message, metadata
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    """, (
-                        'extraction',
-                        f'extract_{self.site_info["site_name"]}',
-                        account_id,
-                        site_id,
-                        datetime.now(),
-                        status,
-                        questions_found,
-                        error_msg,
-                        json.dumps({'batch_id': batch_id})
-                    ))
-                    conn.commit()
-        except Exception as e:
-            logger.error(f"Error logging extraction: {e}")
+            self.db_manager.execute_query(
+                """INSERT INTO extraction_logs
+                   (account_id,site_id,batch_id,questions_found,status,error_message,extracted_at)
+                   VALUES (%s,%s,%s,%s,%s,%s,CURRENT_TIMESTAMP)
+                   ON CONFLICT DO NOTHING""",
+                (account_id, site_id, batch_id, questions_found, status, error_message)
+            )
+        except Exception:
+            pass   # table may not exist yet
