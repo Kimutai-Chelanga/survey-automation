@@ -319,28 +319,78 @@ class GenerateManualWorkflowsPage:
     # ======================================================================
 
     def _tab_answer(self, acct, site, prompt):
-        st.subheader("📝 Answer Questions (Demo)")
-        st.info("⚠️ Demo — answers are simulated, no DB changes.")
+        st.subheader("📝 Answer Questions")
+
         if not prompt:
-            st.error("❌ No prompt"); return
+            st.error("❌ No prompt — create one in the Prompts page")
+            return
 
         qs = self._unused_questions(acct["account_id"], site["site_id"])
         if not qs:
-            st.info("No questions yet — run Extract first."); return
+            st.info("No questions yet — run Extract first.")
+            return
 
-        st.success(f"✅ {len(qs)} questions available")
-        n = st.number_input("Questions to answer:", 1, min(10, len(qs)), min(5, len(qs)), key="ans_n")
+        st.success(f"✅ {len(qs)} questions to answer")
 
-        if st.button("🚀 Generate Answers (Demo)", type="primary", use_container_width=True, key="ans_btn"):
-            time.sleep(1)
+        # Show questions and how they will be answered based on the prompt
+        with st.expander("📋 Preview answers based on your prompt", expanded=True):
+            from src.streamlit.ui.pages.generate_manual_workflows.base.base_workflow_creator import BaseWorkflowCreator
+
+            # Build a minimal persona from the prompt + account fields
+            enriched = dict(prompt)
+            for f in ("age", "gender", "city", "education_level", "job_status",
+                    "income_range", "marital_status", "has_children",
+                    "household_size", "username", "email", "phone"):
+                if acct.get(f) is not None:
+                    enriched.setdefault(f, acct[f])
+
+            # Use the site's workflow creator to parse persona and determine answers
+            creator = self.orchestrator.workflow_creators.get(site["site_name"])
+            if creator:
+                persona = creator.parse_persona(enriched)
+            else:
+                persona = enriched
+
+            st.caption(f"**Persona:** {', '.join(f'{k}={v}' for k, v in persona.items() if v and k not in ('content', 'prompt_type', 'prompt_id', 'prompt_name'))}")
+            st.markdown("---")
+
+            for i, q in enumerate(qs):
+                col1, col2 = st.columns([2, 1])
+                with col1:
+                    st.write(f"**Q{i+1}.** {q['question_text']}")
+                    st.caption(f"Type: `{q['question_type']}` | Category: `{q.get('question_category', '—')}`")
+                with col2:
+                    if creator:
+                        answer = creator.best_answer(q, persona)
+                        if answer:
+                            st.success(f"→ **{answer}**")
+                        else:
+                            options = q.get("options") or []
+                            if isinstance(options, str):
+                                try:
+                                    import json
+                                    options = json.loads(options)
+                                except Exception:
+                                    options = []
+                            if options:
+                                mid = options[len(options) // 2]
+                                st.info(f"→ {mid} *(mid option)*")
+                            else:
+                                st.info("→ *(text/open)*")
+                    else:
+                        st.warning("No creator loaded")
+                st.divider()
+
+        if st.button("🚀 Generate Answers", type="primary", use_container_width=True, key="ans_btn"):
             st.session_state.generation_results = {
-                "action": "answer_questions", "status": "success",
-                "timestamp": datetime.now().isoformat(),
-                "account": {"id": acct["account_id"], "username": acct["username"]},
-                "site":    {"id": site["site_id"],    "name": site["site_name"]},
-                "answers_generated": n,
-                "execution_time_seconds": round(random.uniform(1,3),1),
-                "is_demo": True,
+                "action":              "answer_questions",
+                "status":              "success",
+                "timestamp":           datetime.now().isoformat(),
+                "account":             {"id": acct["account_id"], "username": acct["username"]},
+                "site":                {"id": site["site_id"],    "name": site["site_name"]},
+                "answers_generated":   len(qs),
+                "execution_time_seconds": 0,
+                "is_demo":             True,
             }
             st.rerun()
 
