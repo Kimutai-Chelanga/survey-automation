@@ -221,12 +221,16 @@ class GenerateManualWorkflowsPage:
             f"**Account:** {acct['username']}  \n"
             f"**Site:** {site['site_name']}  \n"
             f"**Extractor:** v{ei.get('version','?')}  \n"
-            f"**Chrome:** {'🟢 Port ' + str(debug_port) + ' — live extraction' if debug_port else '⚪ No session — simulation'}  \n"
+            f"**Chrome:** {'🟢 Port ' + str(debug_port) + ' — live extraction' if debug_port else '🔴 No Chrome session — cannot extract'}  \n"
             f"**Prompt:** {prompt['prompt_name'] if prompt else '—'}"
         )
 
         if not prompt:
             st.error("❌ Account has no prompt")
+            return
+
+        if not debug_port:
+            st.error("❌ No active Chrome session. Start one from Accounts → Local Chrome first.")
             return
 
         urls = self._get_urls(acct["account_id"], site["site_id"])
@@ -241,7 +245,6 @@ class GenerateManualWorkflowsPage:
             url_map[f"{star}{u['url']}{used}"] = u
         sel_url = url_map[st.selectbox("Dashboard / Listing URL:", list(url_map), key="ext_url")]
 
-        # ── URL scheme warning ──────────────────────────────────────────────
         raw_url = sel_url["url"].strip()
         if raw_url and not raw_url.startswith(("http://", "https://")):
             st.warning(
@@ -251,43 +254,17 @@ class GenerateManualWorkflowsPage:
         if sel_url.get("is_used"):
             st.warning("⚠️ URL already marked used — you can still proceed.")
 
-        use_chrome = st.checkbox("Use running Chrome session", bool(debug_port), key="ext_chrome")
-
         st.markdown("---")
+        st.caption("Finds every available survey on the dashboard and extracts all screener questions from each. DQ/unavailable surveys are skipped automatically.")
 
-        col_single, col_all = st.columns(2)
-
-        with col_single:
-            st.markdown("#### 📄 Single URL extract")
-            st.caption("Extracts questions from this URL only.")
-            if st.button(
-                "🔍 Extract This URL",
-                type="secondary",
-                use_container_width=True,
-                key="ext_btn_single",
-                disabled=st.session_state.get("generation_in_progress", False),
-            ):
-                self._do_extract(acct, site, prompt, sel_url, use_chrome)
-
-        with col_all:
-            st.markdown("#### 🔄 Extract All Surveys")
-            st.caption(
-                "Finds **all surveys** on the dashboard and extracts screener "
-                "questions from each. DQ/failed surveys are skipped automatically."
-            )
-            max_surveys = st.number_input(
-                "Max surveys to process:", 1, 50, 10, key="ext_max_surveys"
-            )
-            if st.button(
-                "🚀 Extract All Surveys",
-                type="primary",
-                use_container_width=True,
-                key="ext_btn_all",
-                disabled=st.session_state.get("generation_in_progress", False),
-            ):
-                self._do_extract_all(
-                    acct, site, prompt, sel_url, use_chrome, int(max_surveys)
-                )
+        if st.button(
+            "🚀 Extract All Surveys",
+            type="primary",
+            use_container_width=True,
+            key="ext_btn_all",
+            disabled=st.session_state.get("generation_in_progress", False),
+        ):
+            self._do_extract_all(acct, site, prompt, sel_url)
     def _do_extract(self, acct, site, prompt, url_info, use_chrome):
         self.log(f"Extraction start: {acct['username']} / {site['site_name']}")
         st.session_state.generation_in_progress = True
@@ -342,8 +319,8 @@ class GenerateManualWorkflowsPage:
             st.session_state.generation_in_progress = False
             st.rerun()
 
-    def _do_extract_all(self, acct, site, prompt, url_info, use_chrome, max_surveys):
-        self.log(f"Extract ALL surveys: {acct['username']} / {site['site_name']} / max={max_surveys}")
+    def _do_extract_all(self, acct, site, prompt, url_info):
+        self.log(f"Extract ALL surveys: {acct['username']} / {site['site_name']}")
         st.session_state.generation_in_progress = True
 
         progress_bar = st.progress(0)
@@ -359,15 +336,15 @@ class GenerateManualWorkflowsPage:
             from src.streamlit.ui.pages.accounts.chrome_session_manager import ChromeSessionManager
             profile_path = ChromeSessionManager(self.db_manager).get_profile_path(acct["username"])
             debug_port   = get_debug_port_for_account(st.session_state, acct["account_id"])
-            if use_chrome and not debug_port:
-                ok         = ensure_chrome_running(profile_path)
-                debug_port = get_debug_port_for_account(st.session_state, acct["account_id"]) if ok else None
 
             result = self.orchestrator.extract_all_questions(
-                account_id=acct["account_id"], site_id=site["site_id"],
-                listing_url=url_info["url"], profile_path=profile_path,
-                site_name=site["site_name"], debug_port=debug_port,
-                max_surveys=max_surveys, progress_callback=on_progress,
+                account_id=acct["account_id"],
+                site_id=site["site_id"],
+                listing_url=url_info["url"],
+                profile_path=profile_path,
+                site_name=site["site_name"],
+                debug_port=debug_port,
+                progress_callback=on_progress,
             )
 
             progress_bar.progress(100)
@@ -376,25 +353,26 @@ class GenerateManualWorkflowsPage:
             if result.get("success"):
                 self._mark_url_used(url_info["url_id"])
                 self.log(
-                    f"Extract all done: {result.get('surveys_successful',0)} surveys, "
+                    f"Extract all done: {result.get('surveys_successful', 0)} surveys, "
                     f"{result['questions_found']} questions, {result['inserted']} inserted"
                 )
                 survey_results = result.get("survey_results", [])
                 if survey_results:
-                    icons  = {"success": "✅", "dq": "❌", "error": "⚠️", "skip": "⏭️"}
-                    lines  = [
-                        f"{icons.get(r['status'],'❓')} **{r.get('survey_name') or r.get('survey_label','?')}** — "
+                    icons = {"success": "✅", "dq": "❌", "error": "⚠️", "skip": "⏭️"}
+                    lines = [
+                        f"{icons.get(r['status'], '❓')} **{r.get('survey_name') or r.get('survey_label', '?')}** — "
                         f"{r['status']} — {r.get('questions', 0)} questions"
                         for r in survey_results
                     ]
                     survey_log.markdown("\n\n".join(lines))
 
                 st.session_state.generation_results = {
-                    "action": "extract_all_surveys", "status": "success",
-                    "timestamp": datetime.now().isoformat(),
-                    "account": {"id": acct["account_id"], "username": acct["username"]},
-                    "site":    {"id": site["site_id"],    "name": site["site_name"]},
-                    "url":     {"url": url_info["url"]},
+                    "action":              "extract_all_surveys",
+                    "status":              "success",
+                    "timestamp":           datetime.now().isoformat(),
+                    "account":             {"id": acct["account_id"], "username": acct["username"]},
+                    "site":                {"id": site["site_id"],    "name": site["site_name"]},
+                    "url":                 {"url": url_info["url"]},
                     "questions_extracted": result["questions_found"],
                     "inserted":            result["inserted"],
                     "surveys_found":       result.get("surveys_found", 0),
@@ -408,10 +386,11 @@ class GenerateManualWorkflowsPage:
             else:
                 self.log(f"Failed: {result.get('error')}", "ERROR")
                 st.session_state.generation_results = {
-                    "action": "extract_all_surveys", "status": "failed",
-                    "error": result.get("error", "Unknown"),
-                    "account": {"id": acct["account_id"], "username": acct["username"]},
-                    "site":    {"id": site["site_id"],    "name": site["site_name"]},
+                    "action":    "extract_all_surveys",
+                    "status":    "failed",
+                    "error":     result.get("error", "Unknown"),
+                    "account":   {"id": acct["account_id"], "username": acct["username"]},
+                    "site":      {"id": site["site_id"],    "name": site["site_name"]},
                     "timestamp": datetime.now().isoformat(),
                 }
         except Exception as exc:
@@ -419,9 +398,11 @@ class GenerateManualWorkflowsPage:
             status_text.empty()
             self.log(str(exc), "ERROR")
             st.session_state.generation_results = {
-                "action": "extract_all_surveys", "status": "failed", "error": str(exc),
-                "account": {"id": acct["account_id"], "username": acct["username"]},
-                "site":    {"id": site["site_id"],    "name": site["site_name"]},
+                "action":    "extract_all_surveys",
+                "status":    "failed",
+                "error":     str(exc),
+                "account":   {"id": acct["account_id"], "username": acct["username"]},
+                "site":      {"id": site["site_id"],    "name": site["site_name"]},
                 "timestamp": datetime.now().isoformat(),
             }
         finally:

@@ -1,104 +1,109 @@
 # src/streamlit/ui/pages/generate_manual_workflows/extractors/topsurveys_extractor.py
 """
-TopSurveys Extractor  v4.0.0
+TopSurveys Extractor  v5.0.0
 ============================
-Changes from v3.0:
-  - Navigates to the survey LISTING page (dashboard)
-  - Finds ALL available survey links/buttons on that page
-  - Clicks each one, extracts its screener questions, saves them with
-    the survey_name, then navigates back to the listing
-  - Failed/DQ surveys are recorded but don't stop the loop
-  - Returns a combined result across all surveys found
+- Always extracts ALL surveys from the dashboard (no simulation, no limits)
+- Requires a running Chrome session (debug_port)
+- Uses TopSurveys-specific DOM targeting (CTA buttons, reward cards)
+- Passes full survey entry object to clicker (not just btn_text)
+- Waits for dynamic React content before scanning
 """
 
-import json
 import logging
-import random
 import time
-import uuid
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
 try:
     from extraction.base_extractor import BaseExtractor  # type: ignore
 except ImportError:
-    class BaseExtractor:
-        def __init__(self, db_manager=None):
-            self.db_manager = db_manager
-        def get_site_info(self): return {}
-        def extract_questions(self, *a, **kw): return {}
-        def connect_to_chrome_session(self, port): raise RuntimeError("no playwright")
-        def normalize_question_type(self, t): return "text"
-        def save_questions_to_db(self, *a, **kw): return 0
-        def log_extraction(self, *a, **kw): pass
+    try:
+        from genmw.base_extractor import BaseExtractor  # type: ignore
+    except ImportError:
+        raise RuntimeError(
+            "BaseExtractor could not be imported. "
+            "Ensure base_extractor.py is preloaded by the orchestrator."
+        )
 
 
 # ---------------------------------------------------------------------------
-# JS: find all survey links/buttons on the dashboard listing page
+# JS: find all survey entries on the TopSurveys dashboard
 # ---------------------------------------------------------------------------
 _FIND_SURVEYS_JS = """
 () => {
-    const surveys = [];
-    const seen    = new Set();
+    const results = [];
+    const seen = new Set();
 
-    // Strategy 1: links that look like individual survey entries
-    // TopSurveys uses cards/rows with a CTA button per survey
-    const linkSelectors = [
-        'a[href*="survey"]',
-        'a[href*="questionnaire"]',
-        'button[data-survey]',
-        '[class*="survey-item"] a',
-        '[class*="survey-card"] a',
-        '[class*="survey-row"]  a',
-        '[class*="survey-list"] a',
-        '[class*="survey-entry"] a',
-        '[class*="surveyCard"]  a',
-        '[class*="surveyItem"]  a',
-        '[class*="surveyRow"]   a',
-        'li a[href]',        // generic list items
-        '.card a[href]',
-        '.item  a[href]',
-    ];
-
-    for (const sel of linkSelectors) {
-        try {
-            document.querySelectorAll(sel).forEach(el => {
-                const href  = el.href || '';
-                const text  = (el.innerText || el.textContent || '').trim();
-                const rect  = el.getBoundingClientRect();
-                if (rect.width < 10 || rect.height < 10) return;  // hidden
-                if (!href || href === window.location.href) return;
-                if (href.startsWith('javascript:'))           return;
-                if (seen.has(href)) return;
-                seen.add(href);
-                surveys.push({ href, text: text.slice(0, 80), selector: sel });
-            });
-        } catch(e) {}
+    function isVisible(el) {
+        const r = el.getBoundingClientRect();
+        return r.width > 80 && r.height > 30;
     }
 
-    // Strategy 2: any visible "Start" / "Take" / "Begin" button
-    // that is NOT already in the list
-    const ctaKeywords = ['start', 'take', 'begin', 'participate', 'go', 'open'];
-    document.querySelectorAll('button, a').forEach(el => {
-        const txt  = (el.innerText || el.textContent || '').trim().toLowerCase();
-        const href = el.href || '';
-        const rect = el.getBoundingClientRect();
-        if (rect.width < 10 || rect.height < 10) return;
+    function getText(el) {
+        return (el.innerText || el.textContent || '').trim();
+    }
+
+    // 1. PRIMARY: visible Start/Take/Begin CTA buttons
+    const ctaKeywords = ['start', 'take', 'begin', 'participate', 'open'];
+    const buttons = Array.from(document.querySelectorAll(
+        "button, [role='button'], div[tabindex], a"
+    )).filter(isVisible);
+
+    buttons.forEach(btn => {
+        const txt = getText(btn).toLowerCase();
         if (!ctaKeywords.some(k => txt.startsWith(k))) return;
-        if (seen.has(href || txt)) return;
-        seen.add(href || txt);
-        surveys.push({
-            href:     href || null,
-            text:     txt.slice(0, 80),
+        const key = txt;
+        if (seen.has(key)) return;
+        seen.add(key);
+        results.push({
+            type:    'cta',
+            text:    getText(btn).slice(0, 80),
+            btnText: getText(btn).trim(),
+            href:    btn.href || null,
             selector: null,
-            isCTA:    true,
-            // Store enough info to re-find the button later
-            btnText:  (el.innerText || '').trim().slice(0, 60),
+            index:   results.length
         });
     });
 
-    return surveys;
+    // 2. SECONDARY: survey cards with reward + time signals
+    Array.from(document.querySelectorAll('div')).filter(isVisible).forEach(el => {
+        const txt = getText(el).toLowerCase();
+        const looksLikeSurvey =
+            (txt.includes('points') || txt.includes('$') || txt.includes('reward')) &&
+            (txt.includes('min') || txt.includes('minutes'));
+        if (!looksLikeSurvey || txt.length < 20) return;
+        const key = txt.slice(0, 100);
+        if (seen.has(key)) return;
+        seen.add(key);
+        results.push({
+            type:    'card',
+            text:    txt.slice(0, 80),
+            btnText: null,
+            href:    null,
+            selector: null,
+            index:   results.length
+        });
+    });
+
+    // 3. TERTIARY: any visible button/link containing "survey"
+    buttons.forEach(btn => {
+        const txt = getText(btn).toLowerCase();
+        if (!txt.includes('survey')) return;
+        const key = 'survey_' + txt;
+        if (seen.has(key)) return;
+        seen.add(key);
+        results.push({
+            type:    'fallback',
+            text:    getText(btn).slice(0, 80),
+            btnText: getText(btn).trim(),
+            href:    btn.href || null,
+            selector: null,
+            index:   results.length
+        });
+    });
+
+    return results;
 }
 """
 
@@ -195,21 +200,21 @@ _EXTRACT_JS = """
         let qType = 'text', options = [];
         if      (radios.length >= 2) { qType = 'multiple_choice'; options = getOptions(radios); }
         else if (checks.length >= 1) { qType = 'checkbox';        options = getOptions(checks); }
-        else if (select)             { qType = 'dropdown';
+        else if (select)             {
+            qType = 'dropdown';
             options = Array.from(select.options).map(o => o.text.trim()).filter(t => t && t !== '--');
         }
         else if (textarea)           { qType = 'textarea'; }
         else if (textInp)            { qType = 'text'; }
 
-        const cId   = c.id   ? '#' + c.id                          : null;
-        const cRole = c.getAttribute('role')
-                    ? `[role="${c.getAttribute('role')}"]`           : null;
+        const cId    = c.id ? '#' + c.id : null;
+        const cRole  = c.getAttribute('role') ? `[role="${c.getAttribute('role')}"]` : null;
         const clickEl = cId || cRole || null;
 
         let inputEl = null;
         const first = c.querySelector("input:not([type='hidden']),textarea,select");
         if (first) {
-            if (first.id)     inputEl = '#' + first.id;
+            if (first.id)       inputEl = '#' + first.id;
             else if (first.name) inputEl = `[name="${first.name}"]`;
         }
 
@@ -238,35 +243,84 @@ _EXTRACT_JS = """
 _DQ_JS = """
 () => {
     const body = (document.body.innerText || '').toLowerCase();
-    return ['not eligible',"don't qualify",'not a match',
-            'screened out','unfortunately','disqualified',
-            'quota full','survey is full'].some(p => body.includes(p));
+    return ['not eligible', "don't qualify", 'not a match',
+            'screened out', 'unfortunately', 'disqualified',
+            'quota full', 'survey is full'].some(p => body.includes(p));
 }
 """
 
 # ---------------------------------------------------------------------------
-# JS: advance to the next page / click Start on a survey card
+# JS: click a survey entry — accepts the full entry object
 # ---------------------------------------------------------------------------
 _CLICK_START_JS = """
-(btnText) => {
-    // Try exact match first, then partial
-    const btns = Array.from(document.querySelectorAll(
-        "button, a, input[type='submit'], [role='button']"
-    )).filter(el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; });
-
-    if (btnText) {
-        const exact = btns.find(el => (el.innerText||el.textContent||'').trim() === btnText);
-        if (exact) { exact.click(); return true; }
-        const partial = btns.find(el => (el.innerText||el.textContent||'').trim().toLowerCase()
-                                         .includes(btnText.toLowerCase()));
-        if (partial) { partial.click(); return true; }
+(entry) => {
+    function isVisible(el) {
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
     }
 
-    // Fallback: any Start/Take/Begin button
-    const keywords = ['start','take survey','begin','participate'];
+    function getText(el) {
+        return (el.innerText || el.textContent || '').trim().toLowerCase();
+    }
+
+    function clickElement(el) {
+        el.scrollIntoView({ block: 'center' });
+        el.click();
+    }
+
+    const keywords = ['start', 'take', 'begin', 'participate', 'open'];
+    const all = Array.from(document.querySelectorAll(
+        "button, [role='button'], div[tabindex], a"
+    )).filter(isVisible);
+
+    // 1. Exact text match
+    if (entry && entry.btnText) {
+        const exact = all.find(el => getText(el) === entry.btnText.toLowerCase());
+        if (exact) { clickElement(exact); return true; }
+    }
+
+    // 2. Starts with CTA keyword
     for (const k of keywords) {
-        const b = btns.find(el => (el.innerText||'').toLowerCase().trim().startsWith(k));
-        if (b) { b.click(); return true; }
+        const el = all.find(e => getText(e).startsWith(k));
+        if (el) { clickElement(el); return true; }
+    }
+
+    // 3. Contains CTA keyword
+    for (const k of keywords) {
+        const el = all.find(e => getText(e).includes(k));
+        if (el) { clickElement(el); return true; }
+    }
+
+    // 4. Last resort: largest visible button
+    if (all.length > 0) {
+        const biggest = all.sort((a, b) => {
+            const ra = a.getBoundingClientRect();
+            const rb = b.getBoundingClientRect();
+            return (rb.width * rb.height) - (ra.width * ra.height);
+        })[0];
+        clickElement(biggest);
+        return true;
+    }
+
+    return false;
+}
+"""
+
+# ---------------------------------------------------------------------------
+# JS: advance to the next page inside a survey
+# ---------------------------------------------------------------------------
+_ADVANCE_PAGE_JS = """
+() => {
+    const labels = ['next', 'continue', 'proceed'];
+    const btns = Array.from(document.querySelectorAll(
+        "button, input[type='submit'], [role='button']"
+    )).filter(el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; });
+
+    for (const l of labels) {
+        const b = btns.find(el =>
+            (el.innerText || el.value || '').toLowerCase().trim().startsWith(l)
+        );
+        if (b) { b.scrollIntoView({ block: 'center' }); b.click(); return true; }
     }
     return false;
 }
@@ -284,17 +338,13 @@ class TopSurveysExtractor(BaseExtractor):
         self._info = {
             "site_name":        "Top Surveys",
             "description":      "Survey panel — extracts all surveys from the dashboard",
-            "version":          "4.0.0",
+            "version":          "5.0.0",
             "requires_login":   True,
             "requires_cookies": True,
         }
 
     def get_site_info(self) -> Dict[str, Any]:
         return self._info
-
-    # ------------------------------------------------------------------
-    # Single-survey extraction (original API — still works)
-    # ------------------------------------------------------------------
 
     def extract_questions(
         self,
@@ -304,87 +354,15 @@ class TopSurveysExtractor(BaseExtractor):
         profile_path: str,
         **kwargs,
     ) -> Dict[str, Any]:
-        """
-        Extract questions from ONE survey URL.
-        If debug_port is supplied and the URL is a dashboard/listing page,
-        delegates to extract_all_from_listing for full multi-survey extraction.
-        """
-        t0         = time.time()
-        debug_port = kwargs.get("debug_port")
-        batch_id   = f"topsurveys_{account_id}_{int(t0)}"
-
-        if debug_port:
-            try:
-                questions, survey_name = self._extract_single(
-                    url, debug_port, kwargs.get("max_questions", 50)
-                )
-            except Exception as exc:
-                logger.warning(f"[TopSurveys] Live extraction failed ({exc}), simulating")
-                questions, survey_name = self._simulate(url, kwargs.get("max_questions", 50))
-        else:
-            questions, survey_name = self._simulate(url, kwargs.get("max_questions", 50))
-
-        for q in questions:
-            q["survey_name"] = survey_name
-
-        inserted = self.save_questions_to_db(
-            account_id, site_id, questions, batch_id, survey_name=survey_name
+        """Always delegates to extract_all_from_listing."""
+        return self.extract_all_from_listing(
+            account_id=account_id,
+            site_id=site_id,
+            listing_url=url,
+            profile_path=profile_path,
+            debug_port=kwargs.get("debug_port"),
+            progress_callback=kwargs.get("progress_callback"),
         )
-        self.log_extraction(account_id, site_id, batch_id, len(questions))
-
-        return {
-            "success":                True,
-            "questions":              questions,
-            "questions_found":        len(questions),
-            "inserted":               inserted,
-            "batch_id":               batch_id,
-            "survey_name":            survey_name,
-            "surveys_processed":      1,
-            "execution_time_seconds": round(time.time() - t0, 2),
-        }
-
-    # ------------------------------------------------------------------
-    # Multi-survey extraction — loops over all surveys on the dashboard
-    # ------------------------------------------------------------------
-    def _extract_single(
-        self, url: str, debug_port: int, max_q: int
-    ) -> Tuple[List[Dict], str]:
-        url = self.normalize_url(url)  # ← normalize here
-        page, browser, pw = self.connect_to_chrome_session(debug_port)
-        questions:   List[Dict] = []
-        survey_name: str        = "Unknown Survey"
-
-        try:
-            page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-            page.wait_for_timeout(2500)
-
-            try:
-                survey_name = page.evaluate(_SURVEY_NAME_JS) or "Unknown Survey"
-            except Exception:
-                pass
-
-            page_num = 0
-            while len(questions) < max_q:
-                page_num += 1
-                if page.evaluate(_DQ_JS):
-                    break
-
-                new_qs = page.evaluate(_EXTRACT_JS)
-                if not isinstance(new_qs, list) or not new_qs:
-                    break
-
-                questions.extend(new_qs)
-                if not self._advance_page(page):
-                    break
-                page.wait_for_timeout(1800)
-
-        finally:
-            try:
-                pw.stop()
-            except Exception:
-                pass
-
-        return questions[:max_q], survey_name
 
     def extract_all_from_listing(
         self,
@@ -393,44 +371,73 @@ class TopSurveysExtractor(BaseExtractor):
         listing_url: str,
         profile_path: str,
         debug_port: Optional[int] = None,
-        max_surveys: int = 20,
-        max_questions_per_survey: int = 30,
+        max_surveys: int = None,
+        max_questions_per_survey: int = None,
         progress_callback=None,
+        **kwargs,
     ) -> Dict[str, Any]:
         t0 = time.time()
-        listing_url = self.normalize_url(listing_url)  # ← normalize here
+        listing_url = self.normalize_url(listing_url)
 
         if not debug_port:
-            return self._simulate_all(
-                account_id, site_id, listing_url, max_surveys, t0
+            raise RuntimeError(
+                "No debug_port provided. A running Chrome session is required."
             )
 
         page, browser, pw = self.connect_to_chrome_session(debug_port)
-        all_questions: List[Dict] = []
+        all_questions:  List[Dict] = []
         survey_results: List[Dict] = []
         total_inserted = 0
-        surveys_found = []
+        surveys_found  = []
 
         try:
-            logger.info(f"[TopSurveys] Navigating to listing: {listing_url}")
+            # ── 1. Load dashboard ────────────────────────────────────────
+            logger.info(f"[TopSurveys] Navigating to: {listing_url}")
             page.goto(listing_url, wait_until="domcontentloaded", timeout=30_000)
-            page.wait_for_timeout(3000)
 
+            # Wait for React to render survey buttons
+            try:
+                page.wait_for_function(
+                    '() => document.querySelectorAll("button, [role=\'button\']").length > 5',
+                    timeout=15_000,
+                )
+            except Exception:
+                logger.warning("[TopSurveys] Timed out waiting for buttons — proceeding anyway")
+
+            page.wait_for_timeout(3000)
+            logger.info(f"[TopSurveys] Landed on: {page.url}")
+
+            # ── 2. Find all surveys ──────────────────────────────────────
             surveys_found = page.evaluate(_FIND_SURVEYS_JS)
-            logger.info(f"[TopSurveys] Found {len(surveys_found)} survey entries on listing page")
+            logger.info(
+                f"[TopSurveys] Found {len(surveys_found)} surveys: "
+                f"{[s.get('text', '')[:40] for s in surveys_found[:5]]}"
+            )
 
             if not surveys_found:
-                logger.warning("[TopSurveys] No surveys found on listing page — trying simulation")
-                return self._simulate_all(account_id, site_id, listing_url, max_surveys, t0)
+                return {
+                    "success":                False,
+                    "error":                  (
+                        "No surveys found on the listing page. "
+                        "Ensure you are logged in and surveys are visible on the dashboard."
+                    ),
+                    "questions_found":        0,
+                    "inserted":               0,
+                    "surveys_found":          0,
+                    "surveys_processed":      0,
+                    "surveys_successful":     0,
+                    "surveys_failed":         0,
+                    "survey_results":         [],
+                    "batch_id":               f"topsurveys_all_{account_id}_{int(t0)}",
+                    "execution_time_seconds": round(time.time() - t0, 2),
+                }
 
-            surveys_to_process = surveys_found[:max_surveys]
-            total = len(surveys_to_process)
+            total = len(surveys_found)
 
-            for idx, survey_entry in enumerate(surveys_to_process):
-                survey_href  = self.normalize_url(survey_entry.get("href") or "")  # ← normalize
+            # ── 3. Process each survey ───────────────────────────────────
+            for idx, survey_entry in enumerate(surveys_found):
+                survey_href  = self.normalize_url(survey_entry.get("href") or "")
                 survey_label = survey_entry.get("text") or f"Survey {idx + 1}"
-                is_cta       = survey_entry.get("isCTA", False)
-                btn_text     = survey_entry.get("btnText", "")
 
                 if progress_callback:
                     progress_callback(
@@ -438,22 +445,30 @@ class TopSurveysExtractor(BaseExtractor):
                         f"Extracting survey {idx+1}/{total}: {survey_label[:50]}"
                     )
 
-                logger.info(f"[TopSurveys] Processing survey {idx+1}/{total}: {survey_label[:60]}")
+                logger.info(f"[TopSurveys] Survey {idx+1}/{total}: {survey_label[:60]}")
 
                 batch_id = f"topsurveys_{account_id}_{int(time.time())}_{idx}"
 
                 try:
-                    current_url = page.url
-                    if listing_url not in current_url and current_url != listing_url:
+                    # Return to listing
+                    if listing_url not in page.url:
                         page.goto(listing_url, wait_until="domcontentloaded", timeout=20_000)
-                        page.wait_for_timeout(2500)
+                        try:
+                            page.wait_for_function(
+                                '() => document.querySelectorAll("button, [role=\'button\']").length > 5',
+                                timeout=10_000,
+                            )
+                        except Exception:
+                            pass
+                        page.wait_for_timeout(2000)
 
+                    # Navigate into the survey
                     if survey_href:
                         page.goto(survey_href, wait_until="domcontentloaded", timeout=20_000)
-                    elif is_cta and btn_text:
-                        clicked = page.evaluate(_CLICK_START_JS, btn_text)
+                    else:
+                        clicked = page.evaluate(_CLICK_START_JS, survey_entry)
                         if not clicked:
-                            logger.warning(f"[TopSurveys] Could not click CTA for '{survey_label}'")
+                            logger.warning(f"[TopSurveys] Could not click into '{survey_label}'")
                             survey_results.append({
                                 "survey_label": survey_label,
                                 "status":       "skip",
@@ -462,29 +477,12 @@ class TopSurveysExtractor(BaseExtractor):
                                 "inserted":     0,
                             })
                             continue
-                    else:
-                        all_surveys_now = page.evaluate(_FIND_SURVEYS_JS)
-                        if idx < len(all_surveys_now):
-                            entry = all_surveys_now[idx]
-                            entry_href = self.normalize_url(entry.get("href") or "")  # ← normalize
-                            if entry_href:
-                                page.goto(entry_href, wait_until="domcontentloaded", timeout=20_000)
-                            else:
-                                logger.warning(f"[TopSurveys] No href for survey {idx+1}, skipping")
-                                survey_results.append({
-                                    "survey_label": survey_label,
-                                    "status":       "skip",
-                                    "reason":       "no navigable href",
-                                    "questions":    0,
-                                    "inserted":     0,
-                                })
-                                continue
 
                     page.wait_for_timeout(2500)
 
-                    is_dq = page.evaluate(_DQ_JS)
-                    if is_dq:
-                        logger.info(f"[TopSurveys] Survey '{survey_label}' DQ/unavailable, skipping")
+                    # Immediate DQ check
+                    if page.evaluate(_DQ_JS):
+                        logger.info(f"[TopSurveys] '{survey_label}' DQ/unavailable")
                         survey_results.append({
                             "survey_label": survey_label,
                             "status":       "dq",
@@ -494,15 +492,19 @@ class TopSurveysExtractor(BaseExtractor):
                         })
                         continue
 
+                    # Get survey name from page
                     try:
                         survey_name = page.evaluate(_SURVEY_NAME_JS) or survey_label
                     except Exception:
                         survey_name = survey_label
 
+                    logger.info(f"[TopSurveys] Survey name resolved: '{survey_name}'")
+
+                    # Extract questions across all pages
                     questions: List[Dict] = []
                     page_num = 0
 
-                    while len(questions) < max_questions_per_survey:
+                    while True:
                         page_num += 1
 
                         if page.evaluate(_DQ_JS):
@@ -511,24 +513,23 @@ class TopSurveysExtractor(BaseExtractor):
 
                         new_qs = page.evaluate(_EXTRACT_JS)
                         if not isinstance(new_qs, list) or not new_qs:
-                            logger.info(f"[TopSurveys] No more questions on page {page_num}")
+                            logger.info(f"[TopSurveys] No questions on page {page_num} — done")
                             break
 
+                        logger.info(f"[TopSurveys] Page {page_num}: {len(new_qs)} questions")
                         questions.extend(new_qs)
 
-                        advanced = self._advance_page(page)
-                        if not advanced:
+                        if not self._advance_page(page):
                             break
                         page.wait_for_timeout(1800)
 
+                    # Stamp survey name
                     for q in questions:
                         q["survey_name"] = survey_name
 
+                    # Save to DB
                     inserted = self.save_questions_to_db(
-                        account_id, site_id,
-                        questions[:max_questions_per_survey],
-                        batch_id,
-                        survey_name=survey_name,
+                        account_id, site_id, questions, batch_id, survey_name=survey_name
                     )
                     self.log_extraction(account_id, site_id, batch_id, len(questions))
 
@@ -552,7 +553,7 @@ class TopSurveysExtractor(BaseExtractor):
                     time.sleep(1.5)
 
                 except Exception as exc:
-                    logger.error(f"[TopSurveys] Error on survey '{survey_label}': {exc}")
+                    logger.error(f"[TopSurveys] Error on '{survey_label}': {exc}", exc_info=True)
                     survey_results.append({
                         "survey_label": survey_label,
                         "status":       "error",
@@ -560,6 +561,7 @@ class TopSurveysExtractor(BaseExtractor):
                         "questions":    0,
                         "inserted":     0,
                     })
+                    # Recover back to listing
                     try:
                         page.goto(listing_url, wait_until="domcontentloaded", timeout=15_000)
                         page.wait_for_timeout(2000)
@@ -590,136 +592,11 @@ class TopSurveysExtractor(BaseExtractor):
         }
 
     def _advance_page(self, page) -> bool:
-        """Click the Next button. Returns True if found and clicked."""
-        js = """
-() => {
-    const labels = ['next','continue','submit','proceed'];
-    const btns = Array.from(document.querySelectorAll(
-        "button,input[type='submit'],[role='button']"
-    )).filter(el => { const r = el.getBoundingClientRect(); return r.width > 0; });
-    for (const l of labels) {
-        const b = btns.find(el => (el.innerText||el.value||'').toLowerCase().trim().startsWith(l));
-        if (b) { b.click(); return true; }
-    }
-    if (btns.length) { btns[btns.length-1].click(); return true; }
-    return false;
-}"""
+        """Click Next/Continue inside a survey. Returns True if found and clicked."""
         try:
-            found = page.evaluate(js)
+            found = page.evaluate(_ADVANCE_PAGE_JS)
             if found:
                 page.wait_for_timeout(1000)
             return bool(found)
         except Exception:
             return False
-
-    # ------------------------------------------------------------------
-    # Simulation fallback (no Chrome needed)
-    # ------------------------------------------------------------------
-
-    def _simulate(
-        self, url: str, max_q: int
-    ) -> Tuple[List[Dict], str]:
-        survey_name = "Sample Consumer Survey"
-        return self._make_simulated_questions(url, survey_name, max_q), survey_name
-
-    def _simulate_all(
-        self,
-        account_id: int,
-        site_id: int,
-        url: str,
-        max_surveys: int,
-        t0: float,
-    ) -> Dict[str, Any]:
-        """Simulate multiple surveys for development / no-Chrome mode."""
-        survey_names = [
-            "Consumer Habits Survey",
-            "Technology Usage Study",
-            "Health & Wellness Poll",
-            "Shopping Preferences Survey",
-            "Media Consumption Study",
-        ][:max_surveys]
-
-        all_questions: List[Dict]  = []
-        survey_results: List[Dict] = []
-        total_inserted             = 0
-
-        for i, name in enumerate(survey_names):
-            batch_id  = f"topsurveys_sim_{account_id}_{int(t0)}_{i}"
-            questions = self._make_simulated_questions(url, name, 10)
-            for q in questions:
-                q["survey_name"] = name
-
-            inserted = self.save_questions_to_db(
-                account_id, site_id, questions, batch_id, survey_name=name
-            )
-            all_questions.extend(questions)
-            total_inserted += inserted
-            survey_results.append({
-                "survey_label": name,
-                "survey_name":  name,
-                "status":       "success",
-                "questions":    len(questions),
-                "inserted":     inserted,
-                "batch_id":     batch_id,
-            })
-
-        return {
-            "success":                True,
-            "questions":              all_questions,
-            "questions_found":        len(all_questions),
-            "inserted":               total_inserted,
-            "surveys_found":          len(survey_names),
-            "surveys_processed":      len(survey_names),
-            "surveys_successful":     len(survey_names),
-            "surveys_failed":         0,
-            "survey_results":         survey_results,
-            "batch_id":               f"topsurveys_sim_{account_id}_{int(t0)}",
-            "execution_time_seconds": round(time.time() - t0, 2),
-        }
-
-    def _make_simulated_questions(
-        self, url: str, survey_name: str, max_q: int
-    ) -> List[Dict]:
-        templates = [
-            {"text": "What is your age?", "type": "multiple_choice",
-             "opts": ["18–24","25–34","35–44","45–54","55–64","65+"]},
-            {"text": "What is your gender?", "type": "multiple_choice",
-             "opts": ["Male","Female","Non-binary","Prefer not to say"]},
-            {"text": "What is your employment status?", "type": "multiple_choice",
-             "opts": ["Employed full-time","Employed part-time","Self-employed",
-                      "Student","Unemployed","Retired"]},
-            {"text": "What is your annual household income?", "type": "multiple_choice",
-             "opts": ["Under $25,000","$25,000–$49,999","$50,000–$74,999",
-                      "$75,000–$99,999","$100,000+"]},
-            {"text": "What is your highest level of education?", "type": "multiple_choice",
-             "opts": ["High school","Some college","Bachelor's degree",
-                      "Master's degree","Doctorate"]},
-            {"text": "How often do you shop online?", "type": "multiple_choice",
-             "opts": ["Daily","Weekly","Monthly","Rarely","Never"]},
-            {"text": "Which devices do you own?", "type": "checkbox",
-             "opts": ["Smartphone","Tablet","Laptop","Smart TV","None"]},
-            {"text": "Do you have children under 18?", "type": "multiple_choice",
-             "opts": ["Yes","No"]},
-            {"text": "How satisfied are you with your internet service?",
-             "type": "rating", "opts": ["1","2","3","4","5"]},
-            {"text": "What is your primary mode of transport?", "type": "multiple_choice",
-             "opts": ["Personal vehicle","Public transit","Rideshare","Bicycle","Walk"]},
-        ]
-        random.shuffle(templates)
-        out = []
-        for i, t in enumerate(templates[:max_q]):
-            out.append({
-                "question_text":     t["text"],
-                "question_type":     t["type"],
-                "question_category": "screener",
-                "required":          True,
-                "order_index":       i,
-                "page_url":          url,
-                "click_element":     f"[data-q-idx='{i}']",
-                "input_element":     f"[data-q-idx='{i}'] input",
-                "submit_element":    "button[type='submit']",
-                "options":           t.get("opts", []),
-                "survey_name":       survey_name,
-                "metadata":          {"source": "topsurveys", "simulated": True},
-            })
-        return out
