@@ -346,237 +346,10 @@ class TopSurveysExtractor(BaseExtractor):
     # ------------------------------------------------------------------
     # Multi-survey extraction — loops over all surveys on the dashboard
     # ------------------------------------------------------------------
-
-    def extract_all_from_listing(
-        self,
-        account_id: int,
-        site_id: int,
-        listing_url: str,
-        profile_path: str,
-        debug_port: Optional[int] = None,
-        max_surveys: int = 20,
-        max_questions_per_survey: int = 30,
-        progress_callback=None,   # callable(current, total, msg)
-    ) -> Dict[str, Any]:
-        """
-        Navigate to listing_url, find all survey links, and extract
-        screener questions from each one.
-
-        Returns a combined result dict with per-survey breakdown.
-        """
-        t0 = time.time()
-
-        if not debug_port:
-            # No Chrome session — simulate multiple surveys
-            return self._simulate_all(
-                account_id, site_id, listing_url, max_surveys, t0
-            )
-
-        page, browser, pw = self.connect_to_chrome_session(debug_port)
-        all_questions: List[Dict] = []
-        survey_results: List[Dict] = []
-        total_inserted = 0
-
-        try:
-            # ── 1. Navigate to dashboard ─────────────────────────────
-            logger.info(f"[TopSurveys] Navigating to listing: {listing_url}")
-            page.goto(listing_url, wait_until="domcontentloaded", timeout=30_000)
-            page.wait_for_timeout(3000)
-
-            # ── 2. Find all survey links ──────────────────────────────
-            surveys_found = page.evaluate(_FIND_SURVEYS_JS)
-            logger.info(f"[TopSurveys] Found {len(surveys_found)} survey entries on listing page")
-
-            if not surveys_found:
-                logger.warning("[TopSurveys] No surveys found on listing page — trying simulation")
-                return self._simulate_all(account_id, site_id, listing_url, max_surveys, t0)
-
-            surveys_to_process = surveys_found[:max_surveys]
-            total = len(surveys_to_process)
-
-            # ── 3. Loop over each survey ──────────────────────────────
-            for idx, survey_entry in enumerate(surveys_to_process):
-                survey_href = survey_entry.get("href")
-                survey_label = survey_entry.get("text") or f"Survey {idx + 1}"
-                is_cta = survey_entry.get("isCTA", False)
-                btn_text = survey_entry.get("btnText", "")
-
-                if progress_callback:
-                    progress_callback(
-                        idx + 1, total,
-                        f"Extracting survey {idx+1}/{total}: {survey_label[:50]}"
-                    )
-
-                logger.info(f"[TopSurveys] Processing survey {idx+1}/{total}: {survey_label[:60]}")
-
-                batch_id = f"topsurveys_{account_id}_{int(time.time())}_{idx}"
-
-                try:
-                    # Navigate back to listing first (unless we're already there)
-                    current_url = page.url
-                    if listing_url not in current_url and current_url != listing_url:
-                        page.goto(listing_url, wait_until="domcontentloaded", timeout=20_000)
-                        page.wait_for_timeout(2500)
-
-                    # Click through to the survey
-                    if survey_href:
-                        page.goto(survey_href, wait_until="domcontentloaded", timeout=20_000)
-                    elif is_cta and btn_text:
-                        clicked = page.evaluate(_CLICK_START_JS, btn_text)
-                        if not clicked:
-                            logger.warning(f"[TopSurveys] Could not click CTA for '{survey_label}'")
-                            survey_results.append({
-                                "survey_label": survey_label,
-                                "status":       "skip",
-                                "reason":       "could not click CTA",
-                                "questions":    0,
-                                "inserted":     0,
-                            })
-                            continue
-                    else:
-                        # Try re-finding the survey by index on the refreshed page
-                        all_surveys_now = page.evaluate(_FIND_SURVEYS_JS)
-                        if idx < len(all_surveys_now):
-                            entry = all_surveys_now[idx]
-                            if entry.get("href"):
-                                page.goto(entry["href"], wait_until="domcontentloaded", timeout=20_000)
-                            else:
-                                logger.warning(f"[TopSurveys] No href for survey {idx+1}, skipping")
-                                survey_results.append({
-                                    "survey_label": survey_label,
-                                    "status":       "skip",
-                                    "reason":       "no navigable href",
-                                    "questions":    0,
-                                    "inserted":     0,
-                                })
-                                continue
-
-                    page.wait_for_timeout(2500)
-
-                    # Check for immediate DQ (survey not available, quota full, etc.)
-                    is_dq = page.evaluate(_DQ_JS)
-                    if is_dq:
-                        logger.info(f"[TopSurveys] Survey '{survey_label}' DQ/unavailable, skipping")
-                        survey_results.append({
-                            "survey_label": survey_label,
-                            "status":       "dq",
-                            "reason":       "DQ/unavailable immediately",
-                            "questions":    0,
-                            "inserted":     0,
-                        })
-                        continue
-
-                    # Get survey name from the page
-                    try:
-                        survey_name = page.evaluate(_SURVEY_NAME_JS) or survey_label
-                    except Exception:
-                        survey_name = survey_label
-
-                    # Extract questions — may span multiple pages
-                    questions: List[Dict] = []
-                    page_num = 0
-
-                    while len(questions) < max_questions_per_survey:
-                        page_num += 1
-
-                        # Re-check DQ on each page
-                        if page.evaluate(_DQ_JS):
-                            logger.info(f"[TopSurveys] DQ on page {page_num} of '{survey_name}'")
-                            break
-
-                        new_qs = page.evaluate(_EXTRACT_JS)
-                        if not isinstance(new_qs, list) or not new_qs:
-                            logger.info(f"[TopSurveys] No more questions on page {page_num}")
-                            break
-
-                        questions.extend(new_qs)
-
-                        # Try to advance to next page
-                        advanced = self._advance_page(page)
-                        if not advanced:
-                            break
-                        page.wait_for_timeout(1800)
-
-                    # Stamp survey_name on all questions
-                    for q in questions:
-                        q["survey_name"] = survey_name
-
-                    # Save to DB
-                    inserted = self.save_questions_to_db(
-                        account_id, site_id,
-                        questions[:max_questions_per_survey],
-                        batch_id,
-                        survey_name=survey_name,
-                    )
-                    self.log_extraction(account_id, site_id, batch_id, len(questions))
-
-                    all_questions.extend(questions)
-                    total_inserted += inserted
-
-                    survey_results.append({
-                        "survey_label": survey_label,
-                        "survey_name":  survey_name,
-                        "status":       "success",
-                        "questions":    len(questions),
-                        "inserted":     inserted,
-                        "batch_id":     batch_id,
-                    })
-
-                    logger.info(
-                        f"[TopSurveys] '{survey_name}': "
-                        f"{len(questions)} questions, {inserted} inserted"
-                    )
-
-                    # Small pause before next survey
-                    time.sleep(1.5)
-
-                except Exception as exc:
-                    logger.error(f"[TopSurveys] Error on survey '{survey_label}': {exc}")
-                    survey_results.append({
-                        "survey_label": survey_label,
-                        "status":       "error",
-                        "reason":       str(exc),
-                        "questions":    0,
-                        "inserted":     0,
-                    })
-                    # Navigate back to listing to recover
-                    try:
-                        page.goto(listing_url, wait_until="domcontentloaded", timeout=15_000)
-                        page.wait_for_timeout(2000)
-                    except Exception:
-                        pass
-
-        finally:
-            try:
-                pw.stop()
-            except Exception:
-                pass
-
-        successful = [r for r in survey_results if r["status"] == "success"]
-        failed     = [r for r in survey_results if r["status"] in ("dq", "error", "skip")]
-
-        return {
-            "success":                True,
-            "questions":              all_questions,
-            "questions_found":        len(all_questions),
-            "inserted":               total_inserted,
-            "surveys_found":          len(surveys_found) if 'surveys_found' in dir() else 0,
-            "surveys_processed":      len(survey_results),
-            "surveys_successful":     len(successful),
-            "surveys_failed":         len(failed),
-            "survey_results":         survey_results,
-            "batch_id":               f"topsurveys_all_{account_id}_{int(t0)}",
-            "execution_time_seconds": round(time.time() - t0, 2),
-        }
-
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-
     def _extract_single(
         self, url: str, debug_port: int, max_q: int
     ) -> Tuple[List[Dict], str]:
-        """Extract questions from a single already-open or navigated-to URL."""
+        url = self.normalize_url(url)  # ← normalize here
         page, browser, pw = self.connect_to_chrome_session(debug_port)
         questions:   List[Dict] = []
         survey_name: str        = "Unknown Survey"
@@ -612,6 +385,209 @@ class TopSurveysExtractor(BaseExtractor):
                 pass
 
         return questions[:max_q], survey_name
+
+    def extract_all_from_listing(
+        self,
+        account_id: int,
+        site_id: int,
+        listing_url: str,
+        profile_path: str,
+        debug_port: Optional[int] = None,
+        max_surveys: int = 20,
+        max_questions_per_survey: int = 30,
+        progress_callback=None,
+    ) -> Dict[str, Any]:
+        t0 = time.time()
+        listing_url = self.normalize_url(listing_url)  # ← normalize here
+
+        if not debug_port:
+            return self._simulate_all(
+                account_id, site_id, listing_url, max_surveys, t0
+            )
+
+        page, browser, pw = self.connect_to_chrome_session(debug_port)
+        all_questions: List[Dict] = []
+        survey_results: List[Dict] = []
+        total_inserted = 0
+        surveys_found = []
+
+        try:
+            logger.info(f"[TopSurveys] Navigating to listing: {listing_url}")
+            page.goto(listing_url, wait_until="domcontentloaded", timeout=30_000)
+            page.wait_for_timeout(3000)
+
+            surveys_found = page.evaluate(_FIND_SURVEYS_JS)
+            logger.info(f"[TopSurveys] Found {len(surveys_found)} survey entries on listing page")
+
+            if not surveys_found:
+                logger.warning("[TopSurveys] No surveys found on listing page — trying simulation")
+                return self._simulate_all(account_id, site_id, listing_url, max_surveys, t0)
+
+            surveys_to_process = surveys_found[:max_surveys]
+            total = len(surveys_to_process)
+
+            for idx, survey_entry in enumerate(surveys_to_process):
+                survey_href  = self.normalize_url(survey_entry.get("href") or "")  # ← normalize
+                survey_label = survey_entry.get("text") or f"Survey {idx + 1}"
+                is_cta       = survey_entry.get("isCTA", False)
+                btn_text     = survey_entry.get("btnText", "")
+
+                if progress_callback:
+                    progress_callback(
+                        idx + 1, total,
+                        f"Extracting survey {idx+1}/{total}: {survey_label[:50]}"
+                    )
+
+                logger.info(f"[TopSurveys] Processing survey {idx+1}/{total}: {survey_label[:60]}")
+
+                batch_id = f"topsurveys_{account_id}_{int(time.time())}_{idx}"
+
+                try:
+                    current_url = page.url
+                    if listing_url not in current_url and current_url != listing_url:
+                        page.goto(listing_url, wait_until="domcontentloaded", timeout=20_000)
+                        page.wait_for_timeout(2500)
+
+                    if survey_href:
+                        page.goto(survey_href, wait_until="domcontentloaded", timeout=20_000)
+                    elif is_cta and btn_text:
+                        clicked = page.evaluate(_CLICK_START_JS, btn_text)
+                        if not clicked:
+                            logger.warning(f"[TopSurveys] Could not click CTA for '{survey_label}'")
+                            survey_results.append({
+                                "survey_label": survey_label,
+                                "status":       "skip",
+                                "reason":       "could not click CTA",
+                                "questions":    0,
+                                "inserted":     0,
+                            })
+                            continue
+                    else:
+                        all_surveys_now = page.evaluate(_FIND_SURVEYS_JS)
+                        if idx < len(all_surveys_now):
+                            entry = all_surveys_now[idx]
+                            entry_href = self.normalize_url(entry.get("href") or "")  # ← normalize
+                            if entry_href:
+                                page.goto(entry_href, wait_until="domcontentloaded", timeout=20_000)
+                            else:
+                                logger.warning(f"[TopSurveys] No href for survey {idx+1}, skipping")
+                                survey_results.append({
+                                    "survey_label": survey_label,
+                                    "status":       "skip",
+                                    "reason":       "no navigable href",
+                                    "questions":    0,
+                                    "inserted":     0,
+                                })
+                                continue
+
+                    page.wait_for_timeout(2500)
+
+                    is_dq = page.evaluate(_DQ_JS)
+                    if is_dq:
+                        logger.info(f"[TopSurveys] Survey '{survey_label}' DQ/unavailable, skipping")
+                        survey_results.append({
+                            "survey_label": survey_label,
+                            "status":       "dq",
+                            "reason":       "DQ/unavailable immediately",
+                            "questions":    0,
+                            "inserted":     0,
+                        })
+                        continue
+
+                    try:
+                        survey_name = page.evaluate(_SURVEY_NAME_JS) or survey_label
+                    except Exception:
+                        survey_name = survey_label
+
+                    questions: List[Dict] = []
+                    page_num = 0
+
+                    while len(questions) < max_questions_per_survey:
+                        page_num += 1
+
+                        if page.evaluate(_DQ_JS):
+                            logger.info(f"[TopSurveys] DQ on page {page_num} of '{survey_name}'")
+                            break
+
+                        new_qs = page.evaluate(_EXTRACT_JS)
+                        if not isinstance(new_qs, list) or not new_qs:
+                            logger.info(f"[TopSurveys] No more questions on page {page_num}")
+                            break
+
+                        questions.extend(new_qs)
+
+                        advanced = self._advance_page(page)
+                        if not advanced:
+                            break
+                        page.wait_for_timeout(1800)
+
+                    for q in questions:
+                        q["survey_name"] = survey_name
+
+                    inserted = self.save_questions_to_db(
+                        account_id, site_id,
+                        questions[:max_questions_per_survey],
+                        batch_id,
+                        survey_name=survey_name,
+                    )
+                    self.log_extraction(account_id, site_id, batch_id, len(questions))
+
+                    all_questions.extend(questions)
+                    total_inserted += inserted
+
+                    survey_results.append({
+                        "survey_label": survey_label,
+                        "survey_name":  survey_name,
+                        "status":       "success",
+                        "questions":    len(questions),
+                        "inserted":     inserted,
+                        "batch_id":     batch_id,
+                    })
+
+                    logger.info(
+                        f"[TopSurveys] '{survey_name}': "
+                        f"{len(questions)} questions, {inserted} inserted"
+                    )
+
+                    time.sleep(1.5)
+
+                except Exception as exc:
+                    logger.error(f"[TopSurveys] Error on survey '{survey_label}': {exc}")
+                    survey_results.append({
+                        "survey_label": survey_label,
+                        "status":       "error",
+                        "reason":       str(exc),
+                        "questions":    0,
+                        "inserted":     0,
+                    })
+                    try:
+                        page.goto(listing_url, wait_until="domcontentloaded", timeout=15_000)
+                        page.wait_for_timeout(2000)
+                    except Exception:
+                        pass
+
+        finally:
+            try:
+                pw.stop()
+            except Exception:
+                pass
+
+        successful = [r for r in survey_results if r["status"] == "success"]
+        failed     = [r for r in survey_results if r["status"] in ("dq", "error", "skip")]
+
+        return {
+            "success":                True,
+            "questions":              all_questions,
+            "questions_found":        len(all_questions),
+            "inserted":               total_inserted,
+            "surveys_found":          len(surveys_found),
+            "surveys_processed":      len(survey_results),
+            "surveys_successful":     len(successful),
+            "surveys_failed":         len(failed),
+            "survey_results":         survey_results,
+            "batch_id":               f"topsurveys_all_{account_id}_{int(t0)}",
+            "execution_time_seconds": round(time.time() - t0, 2),
+        }
 
     def _advance_page(self, page) -> bool:
         """Click the Next button. Returns True if found and clicked."""

@@ -241,6 +241,13 @@ class GenerateManualWorkflowsPage:
             url_map[f"{star}{u['url']}{used}"] = u
         sel_url = url_map[st.selectbox("Dashboard / Listing URL:", list(url_map), key="ext_url")]
 
+        # ── URL scheme warning ──────────────────────────────────────────────
+        raw_url = sel_url["url"].strip()
+        if raw_url and not raw_url.startswith(("http://", "https://")):
+            st.warning(
+                f"⚠️ URL **`{raw_url}`** has no scheme — `https://` will be prepended automatically."
+            )
+
         if sel_url.get("is_used"):
             st.warning("⚠️ URL already marked used — you can still proceed.")
 
@@ -281,7 +288,6 @@ class GenerateManualWorkflowsPage:
                 self._do_extract_all(
                     acct, site, prompt, sel_url, use_chrome, int(max_surveys)
                 )
-
     def _do_extract(self, acct, site, prompt, url_info, use_chrome):
         self.log(f"Extraction start: {acct['username']} / {site['site_name']}")
         st.session_state.generation_in_progress = True

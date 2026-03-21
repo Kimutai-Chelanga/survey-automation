@@ -494,9 +494,12 @@ class TopSurveysWorkflowCreator(BaseWorkflowCreator):
 
             elif q_type in ("text", "textarea"):
                 bid = _bid()
+                _default_sel = "textarea, input[type='text']"
+                _sel_json    = json.dumps(input_el or _default_sel)
+                _ans_json    = json.dumps(answer)
                 fill_js = (
-                    f"const ans = {json.dumps(answer)};\n"
-                    f"const sel = {json.dumps(input_el or 'textarea, input[type=\\'text\\']')};\n"
+                    f"const ans = {_ans_json};\n"
+                    f"const sel = {_sel_json};\n"
                     "const el = document.querySelector(sel);\n"
                     "if (!el) return false;\n"
                     "el.focus(); el.value = ans;\n"

@@ -395,173 +395,35 @@ def create_postgres_tables():
                 logger.info("✓ All indexes ready")
 
                 # ======================================================
-                # STEP 3: CREATE TRIGGER FUNCTIONS
+                # STEP 3: DROP EXISTING FUNCTIONS (TO AVOID SIGNATURE CONFLICTS)
                 # ======================================================
-                logger.info("Creating trigger functions...")
-
-                cursor.execute("""
-                    CREATE OR REPLACE FUNCTION update_updated_time_column()
-                    RETURNS TRIGGER AS $$
-                    BEGIN
-                        NEW.updated_time = CURRENT_TIMESTAMP;
-                        RETURN NEW;
-                    END;
-                    $$ LANGUAGE plpgsql;
-                """)
-
-                cursor.execute("""
-                    CREATE OR REPLACE FUNCTION update_updated_at_column()
-                    RETURNS TRIGGER AS $$
-                    BEGIN
-                        NEW.updated_at = CURRENT_TIMESTAMP;
-                        RETURN NEW;
-                    END;
-                    $$ LANGUAGE plpgsql;
-                """)
-
-                cursor.execute("""
-                    CREATE OR REPLACE FUNCTION update_extraction_state_updated_at()
-                    RETURNS TRIGGER AS $$
-                    BEGIN
-                        NEW.updated_at = CURRENT_TIMESTAMP;
-                        RETURN NEW;
-                    END;
-                    $$ LANGUAGE plpgsql;
-                """)
-
-                cursor.execute("""
-                    CREATE OR REPLACE FUNCTION auto_backup_prompt()
-                    RETURNS TRIGGER AS $$
-                    DECLARE
-                        v_version_number INTEGER;
-                        v_backup_type VARCHAR(50);
-                        v_username VARCHAR(255);
-                    BEGIN
-                        IF TG_OP = 'DELETE' THEN
-                            v_backup_type := 'pre_delete';
-                        ELSE
-                            v_backup_type := 'pre_update';
-                        END IF;
-
-                        SELECT username INTO v_username
-                        FROM accounts
-                        WHERE account_id = OLD.account_id;
-
-                        SELECT COALESCE(MAX(version_number), 0) + 1
-                        INTO v_version_number
-                        FROM prompt_backups
-                        WHERE prompt_id = OLD.prompt_id;
-
-                        INSERT INTO prompt_backups (
-                            prompt_id, account_id, username, prompt_name, prompt_content,
-                            version_number, backup_type, backup_reason, metadata
-                        )
-                        VALUES (
-                            OLD.prompt_id, OLD.account_id, v_username, OLD.name, OLD.content,
-                            v_version_number, v_backup_type,
-                            CASE WHEN TG_OP = 'DELETE' THEN 'Automatic backup before deletion'
-                                 ELSE 'Automatic backup before update' END,
-                            jsonb_build_object(
-                                'is_active', OLD.is_active,
-                                'created_time', OLD.created_time,
-                                'updated_time', OLD.updated_time
-                            )
-                        );
-                        RETURN OLD;
-                    END;
-                    $$ LANGUAGE plpgsql;
-                """)
-
-                logger.info("✓ Trigger functions ready")
-
-                # ======================================================
-                # STEP 4: CREATE TRIGGERS
-                # ======================================================
-                logger.info("Creating triggers...")
-
-                def trigger_exists(trigger_name, table_name):
-                    try:
-                        cursor.execute("""
-                            SELECT 1 FROM pg_trigger t
-                            JOIN pg_class c ON t.tgrelid = c.oid
-                            WHERE t.tgname = %s AND c.relname = %s
-                            LIMIT 1;
-                        """, (trigger_name, table_name))
-                        return cursor.fetchone() is not None
-                    except Exception as e:
-                        logger.error(f"Error checking trigger {trigger_name}: {e}")
-                        return False
-
-                triggers = [
-                    ("update_accounts_updated_time", "accounts", """
-                        CREATE TRIGGER update_accounts_updated_time
-                        BEFORE UPDATE ON accounts
-                        FOR EACH ROW
-                        EXECUTE FUNCTION update_updated_time_column();
-                    """),
-                    ("update_prompts_updated_time", "prompts", """
-                        CREATE TRIGGER update_prompts_updated_time
-                        BEFORE UPDATE ON prompts
-                        FOR EACH ROW
-                        EXECUTE FUNCTION update_updated_time_column();
-                    """),
-                    ("update_survey_sites_updated_time", "survey_sites", """
-                        CREATE TRIGGER update_survey_sites_updated_time
-                        BEFORE UPDATE ON survey_sites
-                        FOR EACH ROW
-                        EXECUTE FUNCTION update_updated_time_column();
-                    """),
-                    ("update_workflows_updated_time", "workflows", """
-                        CREATE TRIGGER update_workflows_updated_time
-                        BEFORE UPDATE ON workflows
-                        FOR EACH ROW
-                        EXECUTE FUNCTION update_updated_time_column();
-                    """),
-                    ("update_account_urls_updated_time", "account_urls", """
-                        CREATE TRIGGER update_account_urls_updated_time
-                        BEFORE UPDATE ON account_urls
-                        FOR EACH ROW
-                        EXECUTE FUNCTION update_updated_time_column();
-                    """),
-                    ("trg_extraction_state_updated_at", "extraction_state", """
-                        CREATE TRIGGER trg_extraction_state_updated_at
-                        BEFORE UPDATE ON extraction_state
-                        FOR EACH ROW
-                        EXECUTE FUNCTION update_extraction_state_updated_at();
-                    """),
-                    ("backup_prompt_before_update", "prompts", """
-                        CREATE TRIGGER backup_prompt_before_update
-                        BEFORE UPDATE ON prompts
-                        FOR EACH ROW
-                        WHEN (OLD.content IS DISTINCT FROM NEW.content OR OLD.name IS DISTINCT FROM NEW.name)
-                        EXECUTE FUNCTION auto_backup_prompt();
-                    """),
-                    ("backup_prompt_before_delete", "prompts", """
-                        CREATE TRIGGER backup_prompt_before_delete
-                        BEFORE DELETE ON prompts
-                        FOR EACH ROW
-                        EXECUTE FUNCTION auto_backup_prompt();
-                    """),
+                logger.info("Dropping existing functions to avoid signature conflicts...")
+                
+                functions_to_drop = [
+                    "get_questions_by_site",
+                    "get_unused_questions",
+                    "get_answers_for_question",
+                    "get_prompt_for_account",
+                    "get_workflows_by_site",
+                    "record_extraction_batch",
+                    "get_answer_statistics"
                 ]
-
-                created_count = 0
-                existing_count = 0
-                for trigger_name, table_name, create_sql in triggers:
-                    if not trigger_exists(trigger_name, table_name):
-                        try:
-                            cursor.execute(create_sql)
-                            created_count += 1
-                            logger.debug(f"Created trigger: {trigger_name} on {table_name}")
-                        except Exception as e:
-                            logger.error(f"Failed to create trigger {trigger_name}: {e}")
-                    else:
-                        existing_count += 1
-                        logger.debug(f"Trigger already exists: {trigger_name} on {table_name}")
-
-                logger.info(f"✓ Triggers ready — created: {created_count}, existing: {existing_count}")
+                
+                for func in functions_to_drop:
+                    try:
+                        cursor.execute(f"DROP FUNCTION IF EXISTS {func}(integer) CASCADE;")
+                        cursor.execute(f"DROP FUNCTION IF EXISTS {func}(integer, integer) CASCADE;")
+                        cursor.execute(f"DROP FUNCTION IF EXISTS {func}(integer, integer, integer, varchar, integer) CASCADE;")
+                        cursor.execute(f"DROP FUNCTION IF EXISTS {func}(integer, integer, integer, varchar, integer) CASCADE;")
+                        cursor.execute(f"DROP FUNCTION IF EXISTS {func}(integer) CASCADE;")
+                        cursor.execute(f"DROP FUNCTION IF EXISTS {func}(integer, boolean) CASCADE;")
+                    except Exception as e:
+                        logger.debug(f"Could not drop {func}: {e}")
+                
+                logger.info("✓ Existing functions dropped")
 
                 # ======================================================
-                # STEP 5: CREATE HELPER FUNCTIONS
+                # STEP 4: CREATE HELPER FUNCTIONS
                 # ======================================================
                 logger.info("Creating helper functions...")
 
@@ -825,7 +687,173 @@ def create_postgres_tables():
                 logger.info("✓ Helper functions ready (7 functions)")
 
                 # ======================================================
-                # STEP 6: CREATE VIEWS
+                # STEP 5: CREATE TRIGGER FUNCTIONS
+                # ======================================================
+                logger.info("Creating trigger functions...")
+
+                cursor.execute("""
+                    CREATE OR REPLACE FUNCTION update_updated_time_column()
+                    RETURNS TRIGGER AS $$
+                    BEGIN
+                        NEW.updated_time = CURRENT_TIMESTAMP;
+                        RETURN NEW;
+                    END;
+                    $$ LANGUAGE plpgsql;
+                """)
+
+                cursor.execute("""
+                    CREATE OR REPLACE FUNCTION update_updated_at_column()
+                    RETURNS TRIGGER AS $$
+                    BEGIN
+                        NEW.updated_at = CURRENT_TIMESTAMP;
+                        RETURN NEW;
+                    END;
+                    $$ LANGUAGE plpgsql;
+                """)
+
+                cursor.execute("""
+                    CREATE OR REPLACE FUNCTION update_extraction_state_updated_at()
+                    RETURNS TRIGGER AS $$
+                    BEGIN
+                        NEW.updated_at = CURRENT_TIMESTAMP;
+                        RETURN NEW;
+                    END;
+                    $$ LANGUAGE plpgsql;
+                """)
+
+                cursor.execute("""
+                    CREATE OR REPLACE FUNCTION auto_backup_prompt()
+                    RETURNS TRIGGER AS $$
+                    DECLARE
+                        v_version_number INTEGER;
+                        v_backup_type VARCHAR(50);
+                        v_username VARCHAR(255);
+                    BEGIN
+                        IF TG_OP = 'DELETE' THEN
+                            v_backup_type := 'pre_delete';
+                        ELSE
+                            v_backup_type := 'pre_update';
+                        END IF;
+
+                        SELECT username INTO v_username
+                        FROM accounts
+                        WHERE account_id = OLD.account_id;
+
+                        SELECT COALESCE(MAX(version_number), 0) + 1
+                        INTO v_version_number
+                        FROM prompt_backups
+                        WHERE prompt_id = OLD.prompt_id;
+
+                        INSERT INTO prompt_backups (
+                            prompt_id, account_id, username, prompt_name, prompt_content,
+                            version_number, backup_type, backup_reason, metadata
+                        )
+                        VALUES (
+                            OLD.prompt_id, OLD.account_id, v_username, OLD.name, OLD.content,
+                            v_version_number, v_backup_type,
+                            CASE WHEN TG_OP = 'DELETE' THEN 'Automatic backup before deletion'
+                                 ELSE 'Automatic backup before update' END,
+                            jsonb_build_object(
+                                'is_active', OLD.is_active,
+                                'created_time', OLD.created_time,
+                                'updated_time', OLD.updated_time
+                            )
+                        );
+                        RETURN OLD;
+                    END;
+                    $$ LANGUAGE plpgsql;
+                """)
+
+                logger.info("✓ Trigger functions ready")
+
+                # ======================================================
+                # STEP 6: CREATE TRIGGERS
+                # ======================================================
+                logger.info("Creating triggers...")
+
+                def trigger_exists(trigger_name, table_name):
+                    try:
+                        cursor.execute("""
+                            SELECT 1 FROM pg_trigger t
+                            JOIN pg_class c ON t.tgrelid = c.oid
+                            WHERE t.tgname = %s AND c.relname = %s
+                            LIMIT 1;
+                        """, (trigger_name, table_name))
+                        return cursor.fetchone() is not None
+                    except Exception as e:
+                        logger.error(f"Error checking trigger {trigger_name}: {e}")
+                        return False
+
+                triggers = [
+                    ("update_accounts_updated_time", "accounts", """
+                        CREATE TRIGGER update_accounts_updated_time
+                        BEFORE UPDATE ON accounts
+                        FOR EACH ROW
+                        EXECUTE FUNCTION update_updated_time_column();
+                    """),
+                    ("update_prompts_updated_time", "prompts", """
+                        CREATE TRIGGER update_prompts_updated_time
+                        BEFORE UPDATE ON prompts
+                        FOR EACH ROW
+                        EXECUTE FUNCTION update_updated_time_column();
+                    """),
+                    ("update_survey_sites_updated_time", "survey_sites", """
+                        CREATE TRIGGER update_survey_sites_updated_time
+                        BEFORE UPDATE ON survey_sites
+                        FOR EACH ROW
+                        EXECUTE FUNCTION update_updated_time_column();
+                    """),
+                    ("update_workflows_updated_time", "workflows", """
+                        CREATE TRIGGER update_workflows_updated_time
+                        BEFORE UPDATE ON workflows
+                        FOR EACH ROW
+                        EXECUTE FUNCTION update_updated_time_column();
+                    """),
+                    ("update_account_urls_updated_time", "account_urls", """
+                        CREATE TRIGGER update_account_urls_updated_time
+                        BEFORE UPDATE ON account_urls
+                        FOR EACH ROW
+                        EXECUTE FUNCTION update_updated_time_column();
+                    """),
+                    ("trg_extraction_state_updated_at", "extraction_state", """
+                        CREATE TRIGGER trg_extraction_state_updated_at
+                        BEFORE UPDATE ON extraction_state
+                        FOR EACH ROW
+                        EXECUTE FUNCTION update_extraction_state_updated_at();
+                    """),
+                    ("backup_prompt_before_update", "prompts", """
+                        CREATE TRIGGER backup_prompt_before_update
+                        BEFORE UPDATE ON prompts
+                        FOR EACH ROW
+                        WHEN (OLD.content IS DISTINCT FROM NEW.content OR OLD.name IS DISTINCT FROM NEW.name)
+                        EXECUTE FUNCTION auto_backup_prompt();
+                    """),
+                    ("backup_prompt_before_delete", "prompts", """
+                        CREATE TRIGGER backup_prompt_before_delete
+                        BEFORE DELETE ON prompts
+                        FOR EACH ROW
+                        EXECUTE FUNCTION auto_backup_prompt();
+                    """),
+                ]
+
+                created_count = 0
+                existing_count = 0
+                for trigger_name, table_name, create_sql in triggers:
+                    if not trigger_exists(trigger_name, table_name):
+                        try:
+                            cursor.execute(create_sql)
+                            created_count += 1
+                            logger.debug(f"Created trigger: {trigger_name} on {table_name}")
+                        except Exception as e:
+                            logger.error(f"Failed to create trigger {trigger_name}: {e}")
+                    else:
+                        existing_count += 1
+                        logger.debug(f"Trigger already exists: {trigger_name} on {table_name}")
+
+                logger.info(f"✓ Triggers ready — created: {created_count}, existing: {existing_count}")
+
+                # ======================================================
+                # STEP 7: CREATE VIEWS
                 # ======================================================
                 logger.info("Creating views...")
 
@@ -1080,7 +1108,7 @@ def create_postgres_tables():
                 logger.info("✓ All views ready (9 views)")
 
                 # ======================================================
-                # STEP 7: INSERT DEFAULT DATA
+                # STEP 8: INSERT DEFAULT DATA
                 # ======================================================
                 logger.info("Inserting default data...")
 
@@ -1116,34 +1144,11 @@ def create_postgres_tables():
                 logger.info("✅ POSTGRESQL SCHEMA FULLY INITIALIZED")
                 logger.info("=" * 60)
                 logger.info("📊 Schema summary:")
-                logger.info("  • 12 tables:")
-                logger.info("    - accounts (with 20+ demographic fields)")
-                logger.info("    - account_cookies")
-                logger.info("    - survey_sites (by name)")
-                logger.info("    - account_urls (with usage tracking)")
-                logger.info("    - prompts (one per user - UNIQUE constraint)")
-                logger.info("    - prompt_backups")
-                logger.info("    - workflows (with upload tracking)")
-                logger.info("    - questions (with click elements, categories, survey tracking)")
-                logger.info("    - answers (linked to workflows)")
-                logger.info("    - extraction_state (with URL tracking)")
-                logger.info("    - workflow_generation_log")
-                logger.info("    - screening_results (NEW: pass/fail tracking)")
+                logger.info("  • 12 tables")
                 logger.info("  • 7 helper functions")
-                logger.info("  • 9 views (including screening_summary)")
+                logger.info("  • 9 views")
                 logger.info("  • 8 triggers")
                 logger.info("  • ~45 indexes")
-                logger.info("=" * 60)
-                logger.info("🎯 Features:")
-                logger.info("   - Click elements stored per question")
-                logger.info("   - Question categories for better organization")
-                logger.info("   - Survey name tracking per question")
-                logger.info("   - Survey completion status tracking")
-                logger.info("   - URL usage tracking (is_used flag)")
-                logger.info("   - Workflow upload tracking to Chrome")
-                logger.info("   - Demographic fields for rich prompts")
-                logger.info("   - Screening results with pass/fail tracking")
-                logger.info("   - Survey sites by name (not URL)")
                 logger.info("=" * 60)
 
                 return True

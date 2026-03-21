@@ -90,6 +90,14 @@ class BaseExtractor(ABC):
             return t
         return QUESTION_TYPE_MAP.get(t, "text")
 
+    @staticmethod
+    def normalize_url(url: str) -> str:
+        """Ensure URL has a scheme; default to https:// if missing."""
+        url = (url or "").strip()
+        if url and not url.startswith(("http://", "https://")):
+            url = "https://" + url
+        return url
+
     # ------------------------------------------------------------------
     # DB helpers
     # ------------------------------------------------------------------

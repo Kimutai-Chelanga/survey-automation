@@ -17,6 +17,8 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
+BASE_CLASSES = {"BaseExtractor", "BaseWorkflowCreator"}
+
 
 class SurveySiteOrchestrator:
 
@@ -69,6 +71,15 @@ class SurveySiteOrchestrator:
             logger.error(f"Failed to pre-load {module_name}: {e}", exc_info=True)
 
     def _load_dir(self, directory: Path, class_suffix: str, target: Dict):
+        """
+        Load every *.py file in directory, find the first class whose name ends
+        with class_suffix, instantiate it, and register it by site_name.
+
+        The __module__ check is intentionally relaxed: we accept any class that
+        either (a) was defined in this file, or (b) is present in the module's
+        namespace — this handles the common pattern where topsurveys_workflow.py
+        defines TopSurveysWorkflowCreator directly (no re-export via __init__).
+        """
         if not directory.exists():
             logger.warning(f"Directory not found: {directory}")
             return
@@ -79,26 +90,63 @@ class SurveySiteOrchestrator:
 
             module_name = f"_genmw_{fp.stem}"
             try:
+                # Always reload to avoid stale cached versions
+                sys.modules.pop(module_name, None)
+
                 spec = importlib.util.spec_from_file_location(module_name, fp)
                 mod  = importlib.util.module_from_spec(spec)
                 sys.modules[module_name] = mod
                 spec.loader.exec_module(mod)
 
-                for name, obj in inspect.getmembers(mod, inspect.isclass):
-                    if (
-                        name.endswith(class_suffix)
-                        and name not in ("BaseExtractor", "BaseWorkflowCreator")
-                        and obj.__module__ == module_name
-                    ):
-                        instance  = obj(self.db_manager)
+                found = False
+                for cls_name, cls_obj in inspect.getmembers(mod, inspect.isclass):
+                    # Must end with the expected suffix
+                    if not cls_name.endswith(class_suffix):
+                        continue
+                    # Skip abstract base classes
+                    if cls_name in BASE_CLASSES:
+                        continue
+                    # Must actually be present in this module's namespace
+                    # (filters out classes that were imported from somewhere else
+                    # but whose names happen to end with the suffix)
+                    if not hasattr(mod, cls_name):
+                        continue
+
+                    try:
+                        instance  = cls_obj(self.db_manager)
                         site_name = instance.get_site_info().get("site_name")
                         if site_name:
                             target[site_name] = instance
-                            logger.info(f"  ✓ {class_suffix}: '{site_name}' ({fp.name})")
-                        break
+                            logger.info(
+                                f"  ✓ {class_suffix}: '{site_name}' "
+                                f"({fp.name})"
+                            )
+                            found = True
+                            break
+                        else:
+                            logger.warning(
+                                f"  ⚠ {cls_name} in {fp.name} returned no site_name"
+                            )
+                    except Exception as inst_exc:
+                        logger.error(
+                            f"  ✗ Could not instantiate {cls_name} from {fp.name}: "
+                            f"{inst_exc}",
+                            exc_info=True,
+                        )
+
+                if not found:
+                    all_cls = [
+                        n for n, _ in inspect.getmembers(mod, inspect.isclass)
+                    ]
+                    logger.debug(
+                        f"  — No usable {class_suffix} found in {fp.name}. "
+                        f"Classes present: {all_cls}"
+                    )
 
             except Exception as exc:
-                logger.error(f"  ✗ Failed to load {fp.name}: {exc}", exc_info=True)
+                logger.error(
+                    f"  ✗ Failed to load {fp.name}: {exc}", exc_info=True
+                )
 
     # ------------------------------------------------------------------
     # Public helpers
@@ -160,7 +208,6 @@ class SurveySiteOrchestrator:
 
         extractor = self.extractors[site_name]
 
-        # Use multi-survey API if the extractor supports it
         if hasattr(extractor, "extract_all_from_listing"):
             return extractor.extract_all_from_listing(
                 account_id=account_id,
@@ -173,7 +220,6 @@ class SurveySiteOrchestrator:
                 **kw,
             )
 
-        # Fallback for extractors that only support single-URL extraction
         logger.warning(
             f"Extractor for '{site_name}' does not support extract_all_from_listing. "
             "Falling back to single-URL extraction."
