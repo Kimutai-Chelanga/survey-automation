@@ -1,5 +1,5 @@
 # File: src/streamlit/ui/pages/accounts/questions_page.py
-# Questions management page for surveys - with click elements and classification
+# Questions management page — updated for survey_name, survey_complete tracking
 
 import streamlit as st
 import pandas as pd
@@ -14,91 +14,33 @@ logger = logging.getLogger(__name__)
 
 
 class QuestionsPage:
-    """Questions management page for surveys - with click elements and classification."""
+    """Questions management page — supports survey_name and survey_complete tracking."""
 
     def __init__(self, db_manager):
         self.db_manager = db_manager
-        self._ensure_tables_exist()
+        self._ensure_new_columns()
 
-    def _ensure_tables_exist(self):
-        """Ensure the questions and answers tables exist with proper structure."""
-        try:
-            # Questions table
-            create_questions_table = """
-            CREATE TABLE IF NOT EXISTS questions (
-                question_id SERIAL PRIMARY KEY,
-                survey_site_id INTEGER NOT NULL REFERENCES survey_sites(site_id) ON DELETE CASCADE,
-                account_id INTEGER REFERENCES accounts(account_id) ON DELETE CASCADE,
-                workflow_id INTEGER REFERENCES workflows(workflow_id) ON DELETE SET NULL,
-                question_text TEXT NOT NULL,
-                question_type VARCHAR(50) NOT NULL CHECK (question_type IN (
-                    'multiple_choice', 'text', 'rating', 'yes_no', 'dropdown', 'checkbox', 'radio'
-                )),
-                question_category VARCHAR(100),
-                options JSONB,
-                click_element TEXT,
-                input_element TEXT,
-                submit_element TEXT,
-                required BOOLEAN DEFAULT TRUE,
-                order_index INTEGER DEFAULT 0,
-                page_url TEXT,
-                element_html TEXT,
-                extracted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                is_active BOOLEAN DEFAULT TRUE,
-                extraction_batch_id VARCHAR(100),
-                used_in_workflow BOOLEAN DEFAULT FALSE,
-                used_at TIMESTAMP,
-                metadata JSONB,
-                UNIQUE(survey_site_id, question_text, account_id)
-            );
-            """
-            self.db_manager.execute_query(create_questions_table)
-
-            # Indexes for questions - separate statements
-            for idx_sql in [
-                "CREATE INDEX IF NOT EXISTS idx_questions_survey_site ON questions(survey_site_id);",
-                "CREATE INDEX IF NOT EXISTS idx_questions_account ON questions(account_id);",
-                "CREATE INDEX IF NOT EXISTS idx_questions_type ON questions(question_type);",
-                "CREATE INDEX IF NOT EXISTS idx_questions_category ON questions(question_category);",
-                "CREATE INDEX IF NOT EXISTS idx_questions_batch ON questions(extraction_batch_id);",
-                "CREATE INDEX IF NOT EXISTS idx_questions_unused ON questions(used_in_workflow) WHERE used_in_workflow = FALSE;",
-                "CREATE INDEX IF NOT EXISTS idx_questions_active ON questions(is_active) WHERE is_active = TRUE;",
-            ]:
-                self.db_manager.execute_query(idx_sql)
-
-            # Answers table
-            create_answers_table = """
-            CREATE TABLE IF NOT EXISTS answers (
-                answer_id SERIAL PRIMARY KEY,
-                question_id INTEGER NOT NULL REFERENCES questions(question_id) ON DELETE CASCADE,
-                account_id INTEGER REFERENCES accounts(account_id) ON DELETE CASCADE,
-                workflow_id INTEGER REFERENCES workflows(workflow_id) ON DELETE SET NULL,
-                answer_text TEXT,
-                answer_value_numeric NUMERIC,
-                answer_value_boolean BOOLEAN,
-                submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                submission_batch_id VARCHAR(100),
-                metadata JSONB
-            );
-            """
-            self.db_manager.execute_query(create_answers_table)
-
-            # Indexes for answers - separate statements
-            for idx_sql in [
-                "CREATE INDEX IF NOT EXISTS idx_answers_question ON answers(question_id);",
-                "CREATE INDEX IF NOT EXISTS idx_answers_account ON answers(account_id);",
-                "CREATE INDEX IF NOT EXISTS idx_answers_batch ON answers(submission_batch_id);",
-                "CREATE INDEX IF NOT EXISTS idx_answers_submitted ON answers(submitted_at DESC);",
-            ]:
-                self.db_manager.execute_query(idx_sql)
-
-            logger.info("✅ Ensured questions and answers tables exist with click elements")
-        except Exception as e:
-            logger.error(f"Failed to create tables: {e}")
+    def _ensure_new_columns(self):
+        """
+        Add survey_name / survey_complete / survey_completed_at columns if they
+        don't exist yet (safe to run on an already-migrated DB — uses IF NOT EXISTS).
+        Does NOT recreate the table; the full schema in init-db.sql owns the structure.
+        """
+        migrations = [
+            "ALTER TABLE questions ADD COLUMN IF NOT EXISTS survey_name VARCHAR(255);",
+            "ALTER TABLE questions ADD COLUMN IF NOT EXISTS survey_complete BOOLEAN DEFAULT FALSE;",
+            "ALTER TABLE questions ADD COLUMN IF NOT EXISTS survey_completed_at TIMESTAMP;",
+            "CREATE INDEX IF NOT EXISTS idx_questions_survey_name ON questions(survey_name) WHERE survey_name IS NOT NULL;",
+            "CREATE INDEX IF NOT EXISTS idx_questions_survey_complete ON questions(survey_complete) WHERE survey_complete = FALSE;",
+        ]
+        for sql in migrations:
+            try:
+                self.db_manager.execute_query(sql)
+            except Exception as e:
+                logger.warning(f"Migration skipped (likely already applied): {e}")
 
     # =========================================================================
-    # QUESTION QUERY METHODS
+    # QUERY METHODS
     # =========================================================================
 
     def get_question(self, question_id: int) -> Optional[Dict[str, Any]]:
@@ -109,110 +51,121 @@ class QuestionsPage:
                     cursor.execute("""
                         SELECT
                             q.*,
-                            ss.site_name as survey_site_name,
-                            a.username as account_username,
-                            COUNT(ans.answer_id) as answer_count
+                            ss.site_name  AS survey_site_name,
+                            a.username    AS account_username,
+                            COUNT(ans.answer_id) AS answer_count
                         FROM questions q
                         LEFT JOIN survey_sites ss ON q.survey_site_id = ss.site_id
-                        LEFT JOIN accounts a ON q.account_id = a.account_id
-                        LEFT JOIN answers ans ON q.question_id = ans.question_id
+                        LEFT JOIN accounts      a  ON q.account_id     = a.account_id
+                        LEFT JOIN answers       ans ON q.question_id   = ans.question_id
                         WHERE q.question_id = %s
                         GROUP BY q.question_id, ss.site_name, a.username
                     """, (question_id,))
-
                     row = cursor.fetchone()
                     if row:
                         row = dict(row)
-                        if row.get('options') and isinstance(row['options'], str):
-                            row['options'] = json.loads(row['options'])
-                        if row.get('metadata') and isinstance(row['metadata'], str):
-                            row['metadata'] = json.loads(row['metadata'])
+                        if isinstance(row.get('options'),  str): row['options']  = json.loads(row['options'])
+                        if isinstance(row.get('metadata'), str): row['metadata'] = json.loads(row['metadata'])
                     return row
-
         except Exception as e:
-            logger.error(f"Error getting question: {e}")
+            logger.error(f"get_question: {e}")
             return None
 
     def get_questions(
         self,
-        survey_site_id: Optional[int] = None,
-        account_id: Optional[int] = None,
-        question_type: Optional[str] = None,
-        question_category: Optional[str] = None,
-        is_active: Optional[bool] = True,
-        unused_only: bool = False,
-        limit: int = 1000,
-        batch_id: Optional[str] = None
+        survey_site_id:    Optional[int]  = None,
+        account_id:        Optional[int]  = None,
+        question_type:     Optional[str]  = None,
+        question_category: Optional[str]  = None,
+        survey_name:       Optional[str]  = None,
+        survey_complete:   Optional[bool] = None,
+        is_active:         Optional[bool] = True,
+        unused_only:       bool           = False,
+        limit:             int            = 1000,
+        batch_id:          Optional[str]  = None,
     ) -> List[Dict[str, Any]]:
-        """Get questions with optional filters."""
+        """Get questions with optional filters including survey_name."""
         try:
             with get_postgres_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
                     query = """
                         SELECT
                             q.*,
-                            ss.site_name as survey_site_name,
-                            a.username as account_username,
-                            COUNT(ans.answer_id) as answer_count
+                            ss.site_name  AS survey_site_name,
+                            a.username    AS account_username,
+                            COUNT(ans.answer_id) AS answer_count
                         FROM questions q
                         LEFT JOIN survey_sites ss ON q.survey_site_id = ss.site_id
-                        LEFT JOIN accounts a ON q.account_id = a.account_id
-                        LEFT JOIN answers ans ON q.question_id = ans.question_id
+                        LEFT JOIN accounts      a  ON q.account_id     = a.account_id
+                        LEFT JOIN answers       ans ON q.question_id   = ans.question_id
                         WHERE 1=1
                     """
                     params = []
 
                     if survey_site_id:
-                        query += " AND q.survey_site_id = %s"
-                        params.append(survey_site_id)
-
+                        query += " AND q.survey_site_id = %s";  params.append(survey_site_id)
                     if account_id:
-                        query += " AND q.account_id = %s"
-                        params.append(account_id)
-
+                        query += " AND q.account_id = %s";      params.append(account_id)
                     if question_type:
-                        query += " AND q.question_type = %s"
-                        params.append(question_type)
-
+                        query += " AND q.question_type = %s";   params.append(question_type)
                     if question_category:
-                        query += " AND q.question_category = %s"
-                        params.append(question_category)
-
+                        query += " AND q.question_category = %s"; params.append(question_category)
+                    if survey_name:
+                        query += " AND q.survey_name = %s";     params.append(survey_name)
+                    if survey_complete is not None:
+                        query += " AND q.survey_complete = %s"; params.append(survey_complete)
                     if is_active is not None:
-                        query += " AND q.is_active = %s"
-                        params.append(is_active)
-
+                        query += " AND q.is_active = %s";       params.append(is_active)
                     if unused_only:
                         query += " AND (q.used_in_workflow IS NULL OR q.used_in_workflow = FALSE)"
-
                     if batch_id:
-                        query += " AND q.extraction_batch_id = %s"
-                        params.append(batch_id)
+                        query += " AND q.extraction_batch_id = %s"; params.append(batch_id)
 
                     query += """
                         GROUP BY q.question_id, ss.site_name, a.username
-                        ORDER BY q.survey_site_id, q.question_category, q.order_index, q.extracted_at DESC
+                        ORDER BY q.survey_site_id, q.survey_name, q.question_category,
+                                 q.order_index, q.extracted_at DESC
                         LIMIT %s
                     """
                     params.append(limit)
-
                     cursor.execute(query, params)
-                    results = cursor.fetchall()
 
                     rows = []
-                    for row in results:
+                    for row in cursor.fetchall():
                         row = dict(row)
-                        if row.get('options') and isinstance(row['options'], str):
-                            row['options'] = json.loads(row['options'])
-                        if row.get('metadata') and isinstance(row['metadata'], str):
-                            row['metadata'] = json.loads(row['metadata'])
+                        if isinstance(row.get('options'),  str): row['options']  = json.loads(row['options'])
+                        if isinstance(row.get('metadata'), str): row['metadata'] = json.loads(row['metadata'])
                         rows.append(row)
-
                     return rows
-
         except Exception as e:
-            logger.error(f"Error getting questions: {e}")
+            logger.error(f"get_questions: {e}")
             st.error(f"Database error: {e}")
+            return []
+
+    def get_distinct_survey_names(
+        self,
+        account_id:     Optional[int] = None,
+        survey_site_id: Optional[int] = None,
+    ) -> List[str]:
+        """Return all distinct survey_name values (for filter dropdowns)."""
+        try:
+            with get_postgres_connection() as conn:
+                with conn.cursor() as cursor:
+                    query = """
+                        SELECT DISTINCT survey_name
+                        FROM questions
+                        WHERE survey_name IS NOT NULL
+                    """
+                    params = []
+                    if account_id:
+                        query += " AND account_id = %s";      params.append(account_id)
+                    if survey_site_id:
+                        query += " AND survey_site_id = %s";  params.append(survey_site_id)
+                    query += " ORDER BY survey_name"
+                    cursor.execute(query, params)
+                    return [row[0] for row in cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"get_distinct_survey_names: {e}")
             return []
 
     def get_questions_by_survey_site(self, survey_site_id: int) -> List[Dict[str, Any]]:
@@ -221,30 +174,32 @@ class QuestionsPage:
     def get_questions_by_account(self, account_id: int) -> List[Dict[str, Any]]:
         return self.get_questions(account_id=account_id)
 
-    def get_questions_by_type(self, question_type: str) -> List[Dict[str, Any]]:
-        return self.get_questions(question_type=question_type)
-
-    def get_questions_by_category(self, question_category: str) -> List[Dict[str, Any]]:
-        return self.get_questions(question_category=question_category)
-
-    def get_unused_questions(self, account_id: Optional[int] = None, site_id: Optional[int] = None) -> List[Dict[str, Any]]:
-        return self.get_questions(account_id=account_id, survey_site_id=site_id, unused_only=True)
+    def get_unused_questions(
+        self,
+        account_id: Optional[int] = None,
+        site_id:    Optional[int] = None,
+        survey_name: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        return self.get_questions(
+            account_id=account_id, survey_site_id=site_id,
+            survey_name=survey_name, unused_only=True,
+        )
 
     def get_recent_extractions(self, limit: int = 10) -> List[Dict[str, Any]]:
-        """Get most recent extraction batches."""
         try:
             with get_postgres_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
                     cursor.execute("""
                         SELECT
                             extraction_batch_id,
-                            COUNT(*) as question_count,
-                            MIN(extracted_at) as first_extracted,
-                            MAX(extracted_at) as last_extracted,
-                            COUNT(DISTINCT survey_site_id) as site_count,
-                            COUNT(DISTINCT account_id) as account_count,
-                            COUNT(DISTINCT question_type) as type_count,
-                            COUNT(DISTINCT question_category) as category_count
+                            COUNT(*)                        AS question_count,
+                            COUNT(DISTINCT survey_name)     AS survey_count,
+                            MIN(extracted_at)               AS first_extracted,
+                            MAX(extracted_at)               AS last_extracted,
+                            COUNT(DISTINCT survey_site_id)  AS site_count,
+                            COUNT(DISTINCT account_id)      AS account_count,
+                            COUNT(DISTINCT question_type)   AS type_count,
+                            COUNT(DISTINCT question_category) AS category_count
                         FROM questions
                         WHERE extraction_batch_id IS NOT NULL
                         GROUP BY extraction_batch_id
@@ -253,71 +208,59 @@ class QuestionsPage:
                     """, (limit,))
                     return [dict(row) for row in cursor.fetchall()]
         except Exception as e:
-            logger.error(f"Error getting recent extractions: {e}")
+            logger.error(f"get_recent_extractions: {e}")
             return []
 
     # =========================================================================
-    # QUESTION UPDATE METHODS
+    # UPDATE METHODS
     # =========================================================================
 
-    def update_question_click_element(self, question_id: int, click_element: str) -> Dict[str, Any]:
+    def _simple_update(self, question_id: int, column: str, value) -> Dict[str, Any]:
         try:
             with get_postgres_connection() as conn:
                 with conn.cursor() as cursor:
-                    cursor.execute("""
-                        UPDATE questions SET click_element = %s WHERE question_id = %s
-                    """, (click_element, question_id))
+                    cursor.execute(
+                        f"UPDATE questions SET {column} = %s WHERE question_id = %s",
+                        (value, question_id),
+                    )
                     conn.commit()
-                    if cursor.rowcount == 0:
-                        return {'success': False, 'error': 'Question not found'}
-                    return {'success': True}
+                    return {'success': cursor.rowcount > 0, 'error': 'Not found' if cursor.rowcount == 0 else None}
         except Exception as e:
-            logger.error(f"Error updating click element: {e}")
+            logger.error(f"_simple_update {column}: {e}")
             return {'success': False, 'error': str(e)}
+
+    def update_question_click_element(self, question_id: int, value: str) -> Dict[str, Any]:
+        return self._simple_update(question_id, 'click_element', value)
+
+    def update_question_input_element(self, question_id: int, value: str) -> Dict[str, Any]:
+        return self._simple_update(question_id, 'input_element', value)
+
+    def update_question_submit_element(self, question_id: int, value: str) -> Dict[str, Any]:
+        return self._simple_update(question_id, 'submit_element', value)
 
     def update_question_category(self, question_id: int, category: str) -> Dict[str, Any]:
-        try:
-            with get_postgres_connection() as conn:
-                with conn.cursor() as cursor:
-                    cursor.execute("""
-                        UPDATE questions SET question_category = %s WHERE question_id = %s
-                    """, (category, question_id))
-                    conn.commit()
-                    if cursor.rowcount == 0:
-                        return {'success': False, 'error': 'Question not found'}
-                    return {'success': True}
-        except Exception as e:
-            logger.error(f"Error updating category: {e}")
-            return {'success': False, 'error': str(e)}
+        return self._simple_update(question_id, 'question_category', category)
 
-    def update_question_input_element(self, question_id: int, input_element: str) -> Dict[str, Any]:
-        try:
-            with get_postgres_connection() as conn:
-                with conn.cursor() as cursor:
-                    cursor.execute("""
-                        UPDATE questions SET input_element = %s WHERE question_id = %s
-                    """, (input_element, question_id))
-                    conn.commit()
-                    if cursor.rowcount == 0:
-                        return {'success': False, 'error': 'Question not found'}
-                    return {'success': True}
-        except Exception as e:
-            logger.error(f"Error updating input element: {e}")
-            return {'success': False, 'error': str(e)}
+    def update_question_survey_name(self, question_id: int, survey_name: str) -> Dict[str, Any]:
+        return self._simple_update(question_id, 'survey_name', survey_name)
 
-    def update_question_submit_element(self, question_id: int, submit_element: str) -> Dict[str, Any]:
+    def mark_survey_complete(self, account_id: int, site_id: int, survey_name: str) -> Dict[str, Any]:
+        """Mark all questions for a survey as complete."""
         try:
             with get_postgres_connection() as conn:
                 with conn.cursor() as cursor:
                     cursor.execute("""
-                        UPDATE questions SET submit_element = %s WHERE question_id = %s
-                    """, (submit_element, question_id))
+                        UPDATE questions
+                        SET survey_complete = TRUE,
+                            survey_completed_at = CURRENT_TIMESTAMP
+                        WHERE account_id = %s
+                          AND survey_site_id = %s
+                          AND survey_name = %s
+                    """, (account_id, site_id, survey_name))
                     conn.commit()
-                    if cursor.rowcount == 0:
-                        return {'success': False, 'error': 'Question not found'}
-                    return {'success': True}
+                    return {'success': True, 'updated': cursor.rowcount}
         except Exception as e:
-            logger.error(f"Error updating submit element: {e}")
+            logger.error(f"mark_survey_complete: {e}")
             return {'success': False, 'error': str(e)}
 
     def mark_question_used(self, question_id: int) -> Dict[str, Any]:
@@ -325,219 +268,120 @@ class QuestionsPage:
             with get_postgres_connection() as conn:
                 with conn.cursor() as cursor:
                     cursor.execute("""
-                        UPDATE questions SET used_in_workflow = TRUE, used_at = CURRENT_TIMESTAMP
+                        UPDATE questions
+                        SET used_in_workflow = TRUE, used_at = CURRENT_TIMESTAMP
                         WHERE question_id = %s
                     """, (question_id,))
                     conn.commit()
-                    if cursor.rowcount == 0:
-                        return {'success': False, 'error': 'Question not found'}
-                    return {'success': True}
+                    return {'success': cursor.rowcount > 0}
         except Exception as e:
-            logger.error(f"Error marking question used: {e}")
             return {'success': False, 'error': str(e)}
 
     def deactivate_question(self, question_id: int) -> Dict[str, Any]:
-        try:
-            with get_postgres_connection() as conn:
-                with conn.cursor() as cursor:
-                    cursor.execute("""
-                        UPDATE questions SET is_active = FALSE, last_seen_at = CURRENT_TIMESTAMP
-                        WHERE question_id = %s
-                    """, (question_id,))
-                    conn.commit()
-                    if cursor.rowcount == 0:
-                        return {'success': False, 'error': 'Question not found'}
-                    return {'success': True}
-        except Exception as e:
-            logger.error(f"Error deactivating question: {e}")
-            return {'success': False, 'error': str(e)}
+        return self._simple_update(question_id, 'is_active', False)
 
     def reactivate_question(self, question_id: int) -> Dict[str, Any]:
-        try:
-            with get_postgres_connection() as conn:
-                with conn.cursor() as cursor:
-                    cursor.execute("""
-                        UPDATE questions SET is_active = TRUE, last_seen_at = CURRENT_TIMESTAMP
-                        WHERE question_id = %s
-                    """, (question_id,))
-                    conn.commit()
-                    if cursor.rowcount == 0:
-                        return {'success': False, 'error': 'Question not found'}
-                    return {'success': True}
-        except Exception as e:
-            logger.error(f"Error reactivating question: {e}")
-            return {'success': False, 'error': str(e)}
+        return self._simple_update(question_id, 'is_active', True)
 
     # =========================================================================
-    # ANSWER MANAGEMENT
+    # ANSWER HELPERS
     # =========================================================================
-
-    def save_answers(
-        self,
-        answers: List[Dict[str, Any]],
-        account_id: Optional[int] = None,
-        batch_id: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """Save answers to questions."""
-        try:
-            inserted_count = 0
-            failed_count = 0
-
-            with get_postgres_connection() as conn:
-                with conn.cursor() as cursor:
-                    for answer in answers:
-                        try:
-                            cursor.execute("""
-                                INSERT INTO answers (
-                                    question_id, account_id, answer_text,
-                                    answer_value_numeric, answer_value_boolean,
-                                    submitted_at, submission_batch_id, metadata,
-                                    workflow_id
-                                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                            """, (
-                                answer.get('question_id'),
-                                answer.get('account_id') or account_id,
-                                answer.get('answer_text'),
-                                answer.get('answer_value_numeric'),
-                                answer.get('answer_value_boolean'),
-                                answer.get('submitted_at', datetime.now()),
-                                answer.get('submission_batch_id') or batch_id,
-                                json.dumps(answer.get('metadata', {})) if answer.get('metadata') else None,
-                                answer.get('workflow_id')
-                            ))
-                            inserted_count += 1
-                        except Exception as e:
-                            logger.error(f"Failed to save answer: {e}")
-                            failed_count += 1
-
-                    conn.commit()
-                    logger.info(f"✅ Saved {inserted_count} answers, {failed_count} failed")
-                    return {'success': True, 'inserted': inserted_count, 'failed': failed_count}
-
-        except Exception as e:
-            logger.error(f"Error saving answers: {e}")
-            return {'success': False, 'error': str(e)}
 
     def get_answers(
         self,
         question_id: Optional[int] = None,
-        account_id: Optional[int] = None,
-        batch_id: Optional[str] = None,
-        limit: int = 1000
+        account_id:  Optional[int] = None,
+        batch_id:    Optional[str] = None,
+        limit:       int           = 1000,
     ) -> List[Dict[str, Any]]:
-        """Get answers with optional filters."""
         try:
             with get_postgres_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
                     query = """
                         SELECT
                             a.*,
-                            q.question_text,
-                            q.question_type,
-                            q.question_category,
+                            q.question_text, q.question_type,
+                            q.question_category, q.survey_name,
                             q.survey_site_id,
-                            ss.site_name as survey_site_name,
-                            acc.username as account_username
+                            ss.site_name AS survey_site_name,
+                            acc.username  AS account_username
                         FROM answers a
-                        LEFT JOIN questions q ON a.question_id = q.question_id
-                        LEFT JOIN survey_sites ss ON q.survey_site_id = ss.site_id
-                        LEFT JOIN accounts acc ON a.account_id = acc.account_id
+                        LEFT JOIN questions    q   ON a.question_id = q.question_id
+                        LEFT JOIN survey_sites ss  ON q.survey_site_id = ss.site_id
+                        LEFT JOIN accounts     acc ON a.account_id     = acc.account_id
                         WHERE 1=1
                     """
                     params = []
-
-                    if question_id:
-                        query += " AND a.question_id = %s"
-                        params.append(question_id)
-
-                    if account_id:
-                        query += " AND a.account_id = %s"
-                        params.append(account_id)
-
-                    if batch_id:
-                        query += " AND a.submission_batch_id = %s"
-                        params.append(batch_id)
-
-                    query += " ORDER BY a.submitted_at DESC LIMIT %s"
-                    params.append(limit)
+                    if question_id: query += " AND a.question_id = %s"; params.append(question_id)
+                    if account_id:  query += " AND a.account_id = %s";  params.append(account_id)
+                    if batch_id:    query += " AND a.submission_batch_id = %s"; params.append(batch_id)
+                    query += " ORDER BY a.submitted_at DESC LIMIT %s"; params.append(limit)
 
                     cursor.execute(query, params)
-                    results = cursor.fetchall()
-
                     rows = []
-                    for row in results:
+                    for row in cursor.fetchall():
                         row = dict(row)
-                        if row.get('metadata') and isinstance(row['metadata'], str):
-                            row['metadata'] = json.loads(row['metadata'])
+                        if isinstance(row.get('metadata'), str): row['metadata'] = json.loads(row['metadata'])
                         rows.append(row)
-
                     return rows
-
         except Exception as e:
-            logger.error(f"Error getting answers: {e}")
+            logger.error(f"get_answers: {e}")
             return []
 
     def get_answer_statistics(self, question_id: int) -> Dict[str, Any]:
-        """Get statistics for answers to a specific question."""
         try:
             with get_postgres_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                    cursor.execute("""
-                        SELECT question_type, options, question_category
-                        FROM questions WHERE question_id = %s
-                    """, (question_id,))
-
+                    cursor.execute(
+                        "SELECT question_type, options, question_category, survey_name FROM questions WHERE question_id = %s",
+                        (question_id,),
+                    )
                     question = cursor.fetchone()
                     if not question:
                         return {}
 
                     stats = {
-                        'question_id': question_id,
-                        'question_type': question['question_type'],
-                        'question_category': question['question_category'],
-                        'total_answers': 0,
-                        'breakdown': {}
+                        'question_id':      question_id,
+                        'question_type':    question['question_type'],
+                        'question_category':question['question_category'],
+                        'survey_name':      question.get('survey_name'),
+                        'total_answers':    0,
+                        'breakdown':        {},
                     }
 
-                    if question['question_type'] in ('multiple_choice', 'dropdown', 'checkbox', 'radio'):
-                        cursor.execute("""
-                            SELECT answer_text, COUNT(*) as count
-                            FROM answers WHERE question_id = %s
-                            GROUP BY answer_text ORDER BY count DESC
-                        """, (question_id,))
+                    if question['question_type'] in ('multiple_choice','dropdown','checkbox','radio'):
+                        cursor.execute(
+                            "SELECT answer_text, COUNT(*) AS count FROM answers WHERE question_id=%s GROUP BY answer_text ORDER BY count DESC",
+                            (question_id,),
+                        )
                         for row in cursor.fetchall():
                             stats['breakdown'][row['answer_text']] = row['count']
                             stats['total_answers'] += row['count']
 
                     elif question['question_type'] == 'rating':
                         cursor.execute("""
-                            SELECT
-                                COUNT(*) as total,
-                                AVG(answer_value_numeric) as average,
-                                MIN(answer_value_numeric) as min,
-                                MAX(answer_value_numeric) as max,
-                                PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY answer_value_numeric) as median,
-                                PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY answer_value_numeric) as q1,
-                                PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY answer_value_numeric) as q3
-                            FROM answers
-                            WHERE question_id = %s AND answer_value_numeric IS NOT NULL
+                            SELECT COUNT(*) AS total,
+                                   AVG(answer_value_numeric)  AS average,
+                                   MIN(answer_value_numeric)  AS min,
+                                   MAX(answer_value_numeric)  AS max,
+                                   PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY answer_value_numeric) AS median
+                            FROM answers WHERE question_id=%s AND answer_value_numeric IS NOT NULL
                         """, (question_id,))
                         agg = cursor.fetchone()
                         if agg:
-                            stats['total_answers'] = agg['total']
-                            stats['average'] = float(agg['average']) if agg['average'] else None
-                            stats['min'] = float(agg['min']) if agg['min'] else None
-                            stats['max'] = float(agg['max']) if agg['max'] else None
-                            stats['median'] = float(agg['median']) if agg['median'] else None
-                            stats['q1'] = float(agg['q1']) if agg['q1'] else None
-                            stats['q3'] = float(agg['q3']) if agg['q3'] else None
+                            stats.update({
+                                'total_answers': agg['total'],
+                                'average':  float(agg['average'])  if agg['average']  else None,
+                                'min':      float(agg['min'])       if agg['min']       else None,
+                                'max':      float(agg['max'])       if agg['max']       else None,
+                                'median':   float(agg['median'])    if agg['median']    else None,
+                            })
 
                     elif question['question_type'] == 'yes_no':
-                        cursor.execute("""
-                            SELECT answer_value_boolean, COUNT(*) as count
-                            FROM answers WHERE question_id = %s
-                            GROUP BY answer_value_boolean
-                        """, (question_id,))
+                        cursor.execute(
+                            "SELECT answer_value_boolean, COUNT(*) AS count FROM answers WHERE question_id=%s GROUP BY answer_value_boolean",
+                            (question_id,),
+                        )
                         for row in cursor.fetchall():
                             key = 'Yes' if row['answer_value_boolean'] else 'No'
                             stats['breakdown'][key] = row['count']
@@ -545,56 +389,81 @@ class QuestionsPage:
 
                     else:
                         cursor.execute("""
-                            SELECT COUNT(*) as total,
-                                   COUNT(DISTINCT answer_text) as unique_responses,
-                                   AVG(LENGTH(answer_text)) as avg_length
-                            FROM answers WHERE question_id = %s
+                            SELECT COUNT(*) AS total,
+                                   COUNT(DISTINCT answer_text) AS unique_responses,
+                                   AVG(LENGTH(answer_text))    AS avg_length
+                            FROM answers WHERE question_id=%s
                         """, (question_id,))
                         agg = cursor.fetchone()
                         if agg:
-                            stats['total_answers'] = agg['total']
-                            stats['unique_responses'] = agg['unique_responses']
-                            stats['avg_length'] = float(agg['avg_length']) if agg['avg_length'] else 0
+                            stats.update({
+                                'total_answers':    agg['total'],
+                                'unique_responses': agg['unique_responses'],
+                                'avg_length':       float(agg['avg_length']) if agg['avg_length'] else 0,
+                            })
 
                     return stats
-
         except Exception as e:
-            logger.error(f"Error getting answer statistics: {e}")
+            logger.error(f"get_answer_statistics: {e}")
             return {}
 
     # =========================================================================
-    # STATISTICS AND SUMMARY
+    # SUMMARY STATS
     # =========================================================================
 
     def get_questions_summary(self) -> pd.DataFrame:
-        """Get summary statistics for questions by survey site."""
         try:
             with get_postgres_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
                     cursor.execute("""
                         SELECT
                             ss.site_id,
-                            ss.site_name as survey_site,
-                            COUNT(DISTINCT q.question_id) as total_questions,
-                            COUNT(DISTINCT CASE WHEN q.is_active THEN q.question_id END) as active_questions,
-                            COUNT(DISTINCT q.account_id) as unique_accounts,
-                            COUNT(a.answer_id) as total_answers,
-                            MIN(q.extracted_at) as first_question,
-                            MAX(q.extracted_at) as latest_question,
-                            COUNT(DISTINCT q.extraction_batch_id) as extraction_batches,
-                            COUNT(DISTINCT q.question_type) as type_count,
-                            COUNT(DISTINCT q.question_category) as category_count,
-                            COUNT(CASE WHEN q.click_element IS NOT NULL THEN 1 END) as questions_with_click_elements
+                            ss.site_name                                                     AS survey_site,
+                            COUNT(DISTINCT q.question_id)                                    AS total_questions,
+                            COUNT(DISTINCT CASE WHEN q.is_active        THEN q.question_id END) AS active_questions,
+                            COUNT(DISTINCT CASE WHEN q.survey_complete   THEN q.question_id END) AS completed_questions,
+                            COUNT(DISTINCT q.survey_name)                                    AS unique_surveys,
+                            COUNT(DISTINCT q.account_id)                                     AS unique_accounts,
+                            COUNT(a.answer_id)                                               AS total_answers,
+                            MIN(q.extracted_at)                                              AS first_question,
+                            MAX(q.extracted_at)                                              AS latest_question,
+                            COUNT(DISTINCT q.extraction_batch_id)                            AS extraction_batches,
+                            COUNT(CASE WHEN q.click_element IS NOT NULL THEN 1 END)          AS questions_with_click_elements
                         FROM survey_sites ss
                         LEFT JOIN questions q ON ss.site_id = q.survey_site_id
-                        LEFT JOIN answers a ON q.question_id = a.question_id
+                        LEFT JOIN answers   a ON q.question_id = a.question_id
                         GROUP BY ss.site_id, ss.site_name
                         ORDER BY ss.site_name
                     """)
-                    results = cursor.fetchall()
-                    return pd.DataFrame([dict(row) for row in results])
+                    return pd.DataFrame([dict(row) for row in cursor.fetchall()])
         except Exception as e:
-            logger.error(f"Error getting questions summary: {e}")
+            logger.error(f"get_questions_summary: {e}")
+            return pd.DataFrame()
+
+    def get_survey_name_summary(self) -> pd.DataFrame:
+        """Summary grouped by survey_name — shows completion status."""
+        try:
+            with get_postgres_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    cursor.execute("""
+                        SELECT
+                            ss.site_name,
+                            q.survey_name,
+                            COUNT(DISTINCT q.question_id)                  AS total_questions,
+                            COUNT(DISTINCT a.answer_id)                    AS answers_generated,
+                            BOOL_AND(q.survey_complete)                    AS all_complete,
+                            MAX(q.survey_completed_at)                     AS completed_at,
+                            COUNT(DISTINCT q.account_id)                   AS accounts
+                        FROM questions q
+                        LEFT JOIN survey_sites ss ON q.survey_site_id = ss.site_id
+                        LEFT JOIN answers       a  ON q.question_id   = a.question_id
+                        WHERE q.survey_name IS NOT NULL
+                        GROUP BY ss.site_name, q.survey_name
+                        ORDER BY ss.site_name, q.survey_name
+                    """)
+                    return pd.DataFrame([dict(row) for row in cursor.fetchall()])
+        except Exception as e:
+            logger.error(f"get_survey_name_summary: {e}")
             return pd.DataFrame()
 
     def get_question_type_distribution(self) -> pd.DataFrame:
@@ -604,16 +473,16 @@ class QuestionsPage:
                     cursor.execute("""
                         SELECT
                             question_type,
-                            COUNT(*) as count,
-                            COUNT(CASE WHEN is_active THEN 1 END) as active_count,
-                            COUNT(CASE WHEN click_element IS NOT NULL THEN 1 END) as has_click_element
+                            COUNT(*)                                                AS count,
+                            COUNT(CASE WHEN is_active          THEN 1 END)         AS active_count,
+                            COUNT(CASE WHEN click_element IS NOT NULL THEN 1 END)  AS has_click_element
                         FROM questions
                         GROUP BY question_type
                         ORDER BY count DESC
                     """)
                     return pd.DataFrame([dict(row) for row in cursor.fetchall()])
         except Exception as e:
-            logger.error(f"Error getting question type distribution: {e}")
+            logger.error(f"get_question_type_distribution: {e}")
             return pd.DataFrame()
 
     def get_question_category_distribution(self) -> pd.DataFrame:
@@ -623,8 +492,8 @@ class QuestionsPage:
                     cursor.execute("""
                         SELECT
                             question_category,
-                            COUNT(*) as count,
-                            COUNT(CASE WHEN is_active THEN 1 END) as active_count
+                            COUNT(*)                                       AS count,
+                            COUNT(CASE WHEN is_active THEN 1 END)         AS active_count
                         FROM questions
                         WHERE question_category IS NOT NULL
                         GROUP BY question_category
@@ -632,200 +501,219 @@ class QuestionsPage:
                     """)
                     return pd.DataFrame([dict(row) for row in cursor.fetchall()])
         except Exception as e:
-            logger.error(f"Error getting question category distribution: {e}")
+            logger.error(f"get_question_category_distribution: {e}")
             return pd.DataFrame()
 
     # =========================================================================
-    # RENDERING METHODS
+    # RENDER
     # =========================================================================
 
     def render(self):
-        """Main render method for questions page."""
         st.header("📋 Questions & Answers")
 
-        tab1, tab2, tab3, tab4 = st.tabs([
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
             "📋 All Questions",
             "📝 Answers",
             "📊 Analytics",
-            "🔄 Extraction History"
+            "🗂️ By Survey",
+            "🔄 Extraction History",
         ])
+        with tab1: self._render_questions_list()
+        with tab2: self._render_answers_view()
+        with tab3: self._render_analytics()
+        with tab4: self._render_by_survey()
+        with tab5: self._render_extraction_history()
 
-        with tab1:
-            self._render_questions_list()
-        with tab2:
-            self._render_answers_view()
-        with tab3:
-            self._render_analytics()
-        with tab4:
-            self._render_extraction_history()
+    # ------------------------------------------------------------------
+    # Tab 1 — Questions list
+    # ------------------------------------------------------------------
 
     def _render_questions_list(self):
-        """Render the questions list with filters and click elements."""
         st.subheader("📋 Extracted Questions")
-
-        st.info("""
-        **Questions are automatically extracted from survey sites** - they cannot be created manually.
-        Each question shows its click element selector and classification type.
-        """)
+        st.info("Questions are extracted automatically from survey sites. Each question shows its survey name, click selector, and classification.")
 
         questions = self.get_questions(limit=1000)
-
         if not questions:
-            st.warning("No questions have been extracted yet. Run the extraction process first.")
+            st.warning("No questions extracted yet. Run the extraction process first.")
             return
 
-        col1, col2, col3, col4, col5 = st.columns(5)
+        # ── Filters ──────────────────────────────────────────────────
+        col1, col2, col3, col4, col5, col6 = st.columns(6)
 
         with col1:
-            sites = list(set([q.get('survey_site_name', 'Unknown') for q in questions]))
-            site_filter = st.selectbox("Survey Site:", ["All"] + sorted(sites), key="q_filter_site")
+            sites = sorted(set(q.get('survey_site_name', 'Unknown') for q in questions))
+            site_filter = st.selectbox("Site:", ["All"] + sites, key="q_filter_site")
 
         with col2:
-            types = list(set([q.get('question_type', 'Unknown') for q in questions]))
-            type_filter = st.selectbox("Question Type:", ["All"] + sorted(types), key="q_filter_type")
+            survey_names = sorted(set(q.get('survey_name') for q in questions if q.get('survey_name')))
+            survey_filter = st.selectbox("Survey:", ["All"] + survey_names, key="q_filter_survey")
 
         with col3:
-            categories = list(set([q.get('question_category') for q in questions if q.get('question_category')]))
-            category_filter = st.selectbox("Category:", ["All"] + sorted(categories), key="q_filter_category")
+            types = sorted(set(q.get('question_type', '') for q in questions))
+            type_filter = st.selectbox("Type:", ["All"] + types, key="q_filter_type")
 
         with col4:
-            active_filter = st.selectbox("Status:", ["All", "Active", "Inactive"], key="q_filter_active")
+            cats = sorted(set(q.get('question_category') for q in questions if q.get('question_category')))
+            cat_filter = st.selectbox("Category:", ["All"] + cats, key="q_filter_category")
 
         with col5:
-            search = st.text_input("Search questions:", placeholder="Type to search...")
+            active_filter = st.selectbox("Status:", ["All", "Active", "Inactive"], key="q_filter_active")
 
-        filtered = questions.copy()
-        if site_filter != "All":
-            filtered = [q for q in filtered if q.get('survey_site_name') == site_filter]
-        if type_filter != "All":
-            filtered = [q for q in filtered if q.get('question_type') == type_filter]
-        if category_filter != "All":
-            filtered = [q for q in filtered if q.get('question_category') == category_filter]
-        if active_filter == "Active":
-            filtered = [q for q in filtered if q.get('is_active')]
-        elif active_filter == "Inactive":
-            filtered = [q for q in filtered if not q.get('is_active')]
-        if search:
-            filtered = [q for q in filtered if search.lower() in q.get('question_text', '').lower()]
+        with col6:
+            complete_filter = st.selectbox("Survey Complete:", ["All", "Complete", "In Progress"], key="q_filter_complete")
+
+        search = st.text_input("🔍 Search question text:", placeholder="Type to filter…")
+
+        # ── Apply filters ─────────────────────────────────────────────
+        filtered = questions
+        if site_filter    != "All": filtered = [q for q in filtered if q.get('survey_site_name') == site_filter]
+        if survey_filter  != "All": filtered = [q for q in filtered if q.get('survey_name') == survey_filter]
+        if type_filter    != "All": filtered = [q for q in filtered if q.get('question_type') == type_filter]
+        if cat_filter     != "All": filtered = [q for q in filtered if q.get('question_category') == cat_filter]
+        if active_filter  == "Active":   filtered = [q for q in filtered if q.get('is_active')]
+        if active_filter  == "Inactive": filtered = [q for q in filtered if not q.get('is_active')]
+        if complete_filter == "Complete":    filtered = [q for q in filtered if q.get('survey_complete')]
+        if complete_filter == "In Progress": filtered = [q for q in filtered if not q.get('survey_complete')]
+        if search: filtered = [q for q in filtered if search.lower() in q.get('question_text', '').lower()]
 
         st.info(f"Showing {len(filtered)} of {len(questions)} questions")
 
+        # ── Question cards ────────────────────────────────────────────
         for q in filtered:
-            status_icon = "✅" if q.get('is_active') else "⭕"
-            used_icon = "📌" if q.get('used_in_workflow') else "🆕"
+            status_icon   = "✅" if q.get('is_active') else "⭕"
+            used_icon     = "📌" if q.get('used_in_workflow') else "🆕"
+            complete_icon = "🏁" if q.get('survey_complete') else ""
+            survey_label  = f"[{q.get('survey_name', q.get('survey_site_name','?'))}]"
 
             with st.expander(
-                f"{status_icon} {used_icon} [{q.get('survey_site_name', 'Unknown')}] "
-                f"{q.get('question_text', '')[:100]}...",
-                expanded=False
+                f"{status_icon}{used_icon}{complete_icon} {survey_label} "
+                f"{q.get('question_text','')[:100]}…",
+                expanded=False,
             ):
                 col1, col2 = st.columns([2, 1])
 
                 with col1:
                     st.markdown(f"**Question:** {q.get('question_text')}")
-                    st.markdown(f"**Type:** `{q.get('question_type')}` | **Category:** `{q.get('question_category', 'Uncategorized')}`")
+                    st.markdown(
+                        f"**Type:** `{q.get('question_type')}` | "
+                        f"**Category:** `{q.get('question_category','Uncategorized')}` | "
+                        f"**Survey:** `{q.get('survey_name') or '—'}`"
+                    )
                     st.markdown(f"**Required:** {'✅ Yes' if q.get('required') else '❌ No'}")
+
+                    if q.get('survey_complete'):
+                        completed_at = q.get('survey_completed_at')
+                        st.success(
+                            f"🏁 Survey complete"
+                            + (f" — {completed_at.strftime('%Y-%m-%d %H:%M')}" if completed_at else "")
+                        )
 
                     if q.get('options'):
                         st.markdown("**Options:**")
-                        for i, opt in enumerate(q.get('options', []), 1):
+                        for i, opt in enumerate(q['options'], 1):
                             st.markdown(f"  {i}. {opt}")
 
-                    st.markdown(f"**🖱️ Click Element:** `{q['click_element'] if q.get('click_element') else 'Not set'}`")
+                    st.markdown(f"**🖱️ Click Element:** `{q.get('click_element') or 'Not set'}`")
                     if q.get('input_element'):
                         st.markdown(f"**📝 Input Element:** `{q['input_element']}`")
                     if q.get('submit_element'):
                         st.markdown(f"**✅ Submit Element:** `{q['submit_element']}`")
                     if q.get('page_url'):
-                        st.markdown(f"**🔗 Page URL:** [{q['page_url'][:50]}...]({q['page_url']})")
+                        st.markdown(f"**🔗 Page URL:** [{q['page_url'][:60]}…]({q['page_url']})")
 
-                    st.caption(f"Extracted: {q.get('extracted_at')} | Last seen: {q.get('last_seen_at')} | Answers: {q.get('answer_count', 0)}")
+                    st.caption(
+                        f"Extracted: {q.get('extracted_at')} | "
+                        f"Answers: {q.get('answer_count', 0)} | "
+                        f"Batch: {(q.get('extraction_batch_id') or '')[:20]}"
+                    )
 
                 with col2:
                     st.markdown("**Actions:**")
+                    qid = q['question_id']
 
-                    if st.button("📝 View Answers", key=f"view_ans_{q['question_id']}", use_container_width=True):
-                        st.session_state[f'viewing_answers_{q["question_id"]}'] = True
-                        st.rerun()
-
-                    if st.button("🖱️ Edit Click Element", key=f"edit_click_{q['question_id']}", use_container_width=True):
-                        st.session_state[f'editing_click_{q["question_id"]}'] = True
-                        st.rerun()
-
-                    if st.button("📂 Edit Category", key=f"edit_cat_{q['question_id']}", use_container_width=True):
-                        st.session_state[f'editing_category_{q["question_id"]}'] = True
-                        st.rerun()
+                    if st.button("📝 View Answers",       key=f"view_ans_{qid}", use_container_width=True):
+                        st.session_state[f'viewing_answers_{qid}'] = True; st.rerun()
+                    if st.button("🖱️ Edit Selectors",     key=f"edit_click_{qid}", use_container_width=True):
+                        st.session_state[f'editing_click_{qid}'] = True; st.rerun()
+                    if st.button("📂 Edit Category",       key=f"edit_cat_{qid}", use_container_width=True):
+                        st.session_state[f'editing_category_{qid}'] = True; st.rerun()
+                    if st.button("🗂️ Edit Survey Name",    key=f"edit_survey_{qid}", use_container_width=True):
+                        st.session_state[f'editing_survey_{qid}'] = True; st.rerun()
 
                     if q.get('is_active'):
-                        if st.button("⭕ Deactivate", key=f"deact_{q['question_id']}", use_container_width=True):
-                            self.deactivate_question(q['question_id'])
-                            st.rerun()
+                        if st.button("⭕ Deactivate", key=f"deact_{qid}", use_container_width=True):
+                            self.deactivate_question(qid); st.rerun()
                     else:
-                        if st.button("✅ Activate", key=f"act_{q['question_id']}", use_container_width=True):
-                            self.reactivate_question(q['question_id'])
-                            st.rerun()
+                        if st.button("✅ Activate", key=f"act_{qid}", use_container_width=True):
+                            self.reactivate_question(qid); st.rerun()
 
                     if not q.get('used_in_workflow'):
-                        if st.button("📌 Mark Used", key=f"mark_used_{q['question_id']}", use_container_width=True):
-                            self.mark_question_used(q['question_id'])
-                            st.rerun()
+                        if st.button("📌 Mark Used", key=f"mark_used_{qid}", use_container_width=True):
+                            self.mark_question_used(qid); st.rerun()
 
-                if st.session_state.get(f'editing_click_{q["question_id"]}', False):
+                # ── Edit selectors form ───────────────────────────────
+                if st.session_state.get(f'editing_click_{qid}', False):
                     st.divider()
-                    with st.form(key=f"click_form_{q['question_id']}"):
-                        st.markdown("**Edit Click Elements**")
-                        new_click = st.text_input("Click Element (CSS Selector or XPath)", value=q.get('click_element', ''))
-                        new_input = st.text_input("Input Element (for text fields)", value=q.get('input_element', ''))
+                    with st.form(key=f"click_form_{qid}"):
+                        st.markdown("**Edit Selectors**")
+                        new_click  = st.text_input("Click Element",  value=q.get('click_element', ''))
+                        new_input  = st.text_input("Input Element",  value=q.get('input_element', ''))
                         new_submit = st.text_input("Submit Element", value=q.get('submit_element', ''))
-
-                        col_save, col_cancel = st.columns(2)
-                        with col_save:
+                        c1, c2 = st.columns(2)
+                        with c1:
                             if st.form_submit_button("💾 Save", use_container_width=True, type="primary"):
-                                if new_click:
-                                    self.update_question_click_element(q['question_id'], new_click)
-                                if new_input:
-                                    self.update_question_input_element(q['question_id'], new_input)
-                                if new_submit:
-                                    self.update_question_submit_element(q['question_id'], new_submit)
-                                del st.session_state[f'editing_click_{q["question_id"]}']
-                                st.rerun()
-                        with col_cancel:
+                                if new_click:  self.update_question_click_element(qid, new_click)
+                                if new_input:  self.update_question_input_element(qid, new_input)
+                                if new_submit: self.update_question_submit_element(qid, new_submit)
+                                del st.session_state[f'editing_click_{qid}']; st.rerun()
+                        with c2:
                             if st.form_submit_button("Cancel", use_container_width=True):
-                                del st.session_state[f'editing_click_{q["question_id"]}']
-                                st.rerun()
+                                del st.session_state[f'editing_click_{qid}']; st.rerun()
 
-                if st.session_state.get(f'editing_category_{q["question_id"]}', False):
+                # ── Edit category form ────────────────────────────────
+                if st.session_state.get(f'editing_category_{qid}', False):
                     st.divider()
-                    with st.form(key=f"category_form_{q['question_id']}"):
-                        st.markdown("**Edit Question Category**")
-                        category_options = [
-                            "demographics", "opinion", "feedback", "product", "service",
-                            "personal", "shopping", "technology", "entertainment", "health",
-                            "education", "employment", "income", "household", "lifestyle",
-                            "brands", "hobbies", "internet", "device", "other"
+                    with st.form(key=f"category_form_{qid}"):
+                        st.markdown("**Edit Category**")
+                        CATEGORIES = [
+                            "demographics","opinion","feedback","product","service",
+                            "personal","shopping","technology","entertainment","health",
+                            "education","employment","income","household","lifestyle",
+                            "brands","hobbies","internet","device","screener","other",
                         ]
-                        current_idx = (category_options.index(q.get('question_category')) + 1
-                                       if q.get('question_category') in category_options else 0)
-                        new_category = st.selectbox("Category", options=[""] + category_options, index=current_idx)
-
-                        col_save, col_cancel = st.columns(2)
-                        with col_save:
+                        current_idx = (CATEGORIES.index(q.get('question_category')) + 1
+                                       if q.get('question_category') in CATEGORIES else 0)
+                        new_cat = st.selectbox("Category", [""] + CATEGORIES, index=current_idx)
+                        c1, c2 = st.columns(2)
+                        with c1:
                             if st.form_submit_button("💾 Save", use_container_width=True, type="primary"):
-                                if new_category:
-                                    self.update_question_category(q['question_id'], new_category)
-                                del st.session_state[f'editing_category_{q["question_id"]}']
-                                st.rerun()
-                        with col_cancel:
+                                if new_cat: self.update_question_category(qid, new_cat)
+                                del st.session_state[f'editing_category_{qid}']; st.rerun()
+                        with c2:
                             if st.form_submit_button("Cancel", use_container_width=True):
-                                del st.session_state[f'editing_category_{q["question_id"]}']
-                                st.rerun()
+                                del st.session_state[f'editing_category_{qid}']; st.rerun()
 
-                if st.session_state.get(f'viewing_answers_{q["question_id"]}', False):
+                # ── Edit survey name form ─────────────────────────────
+                if st.session_state.get(f'editing_survey_{qid}', False):
                     st.divider()
-                    self._render_answers_for_question(q['question_id'])
-                    if st.button("Close Answers", key=f"close_ans_{q['question_id']}"):
-                        del st.session_state[f'viewing_answers_{q["question_id"]}']
-                        st.rerun()
+                    with st.form(key=f"survey_form_{qid}"):
+                        st.markdown("**Edit Survey Name**")
+                        new_survey = st.text_input("Survey Name", value=q.get('survey_name', ''))
+                        c1, c2 = st.columns(2)
+                        with c1:
+                            if st.form_submit_button("💾 Save", use_container_width=True, type="primary"):
+                                if new_survey: self.update_question_survey_name(qid, new_survey)
+                                del st.session_state[f'editing_survey_{qid}']; st.rerun()
+                        with c2:
+                            if st.form_submit_button("Cancel", use_container_width=True):
+                                del st.session_state[f'editing_survey_{qid}']; st.rerun()
+
+                # ── Answers inline view ───────────────────────────────
+                if st.session_state.get(f'viewing_answers_{qid}', False):
+                    st.divider()
+                    self._render_answers_for_question(qid)
+                    if st.button("Close", key=f"close_ans_{qid}"):
+                        del st.session_state[f'viewing_answers_{qid}']; st.rerun()
 
     def _render_answers_for_question(self, question_id: int):
         answers = self.get_answers(question_id=question_id, limit=100)
@@ -834,174 +722,228 @@ class QuestionsPage:
             return
 
         st.markdown(f"#### Answers ({len(answers)})")
-
         stats = self.get_answer_statistics(question_id)
-        if stats:
-            col1, col2, col3, col4 = st.columns(4)
-            if stats.get('average') is not None:
-                col1.metric("Average", f"{stats['average']:.2f}")
-            if stats.get('min') is not None:
-                col2.metric("Min", stats['min'])
-            if stats.get('max') is not None:
-                col3.metric("Max", stats['max'])
-            if stats.get('median') is not None:
-                col4.metric("Median", f"{stats['median']:.2f}")
+        if stats and stats.get('average') is not None:
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Average", f"{stats['average']:.2f}")
+            c2.metric("Min",  stats.get('min', '—'))
+            c3.metric("Max",  stats.get('max', '—'))
+            c4.metric("Total", stats.get('total_answers', 0))
 
-        answers_df = pd.DataFrame([{
+        df = pd.DataFrame([{
             'Answer ID': a['answer_id'],
-            'Account': a.get('account_username', 'Unknown'),
-            'Answer': a.get('answer_text', ''),
+            'Account':   a.get('account_username', 'Unknown'),
+            'Answer':    a.get('answer_text', ''),
             'Submitted': a.get('submitted_at'),
-            'Batch': a.get('submission_batch_id', '')
+            'Batch':     a.get('submission_batch_id', ''),
         } for a in answers])
+        st.dataframe(df, use_container_width=True, hide_index=True)
 
-        st.dataframe(answers_df, use_container_width=True, hide_index=True)
+    # ------------------------------------------------------------------
+    # Tab 2 — Answers view
+    # ------------------------------------------------------------------
 
     def _render_answers_view(self):
         st.subheader("📝 All Answers")
 
         col1, col2, col3 = st.columns(3)
         with col1:
-            site_filter = st.text_input("Filter by survey site:", placeholder="Site name...")
+            survey_names = self.get_distinct_survey_names()
+            survey_filter = st.selectbox("Survey:", ["All"] + survey_names, key="ans_survey_filter")
         with col2:
             date_range = st.date_input(
                 "Date range:",
                 value=(datetime.now() - timedelta(days=7), datetime.now()),
-                key="ans_date_range"
+                key="ans_date_range",
             )
         with col3:
-            batch_filter = st.text_input("Batch ID:", placeholder="Filter by batch...")
+            batch_filter = st.text_input("Batch ID:", placeholder="Filter by batch…")
 
         answers = self.get_answers(limit=500)
-
         if not answers:
             st.info("No answers found.")
             return
 
-        filtered = answers.copy()
-        if site_filter:
-            filtered = [a for a in filtered if site_filter.lower() in (a.get('survey_site_name') or '').lower()]
+        filtered = answers
+        if survey_filter != "All":
+            filtered = [a for a in filtered if a.get('survey_name') == survey_filter]
         if batch_filter:
             filtered = [a for a in filtered if batch_filter in (a.get('submission_batch_id') or '')]
         if len(date_range) == 2:
-            start_date, end_date = date_range
+            s, e = date_range
             filtered = [
                 a for a in filtered
-                if a.get('submitted_at') and start_date <= a['submitted_at'].date() <= end_date
+                if a.get('submitted_at') and s <= a['submitted_at'].date() <= e
             ]
 
         st.info(f"Showing {len(filtered)} of {len(answers)} answers")
 
         df = pd.DataFrame([{
             'Answer ID': a['answer_id'],
-            'Question': (a.get('question_text') or '')[:100] + '...' if len(a.get('question_text') or '') > 100 else (a.get('question_text') or ''),
-            'Answer': a.get('answer_text', ''),
-            'Type': a.get('question_type', ''),
-            'Category': a.get('question_category', ''),
-            'Account': a.get('account_username', 'Unknown'),
-            'Site': a.get('survey_site_name', 'Unknown'),
+            'Question':  (a.get('question_text') or '')[:100],
+            'Survey':    a.get('survey_name', '—'),
+            'Answer':    a.get('answer_text', ''),
+            'Type':      a.get('question_type', ''),
+            'Account':   a.get('account_username', 'Unknown'),
+            'Site':      a.get('survey_site_name', 'Unknown'),
             'Submitted': a.get('submitted_at'),
-            'Batch': a.get('submission_batch_id', '')
+            'Batch':     (a.get('submission_batch_id') or '')[:20],
         } for a in filtered])
 
         st.dataframe(df, use_container_width=True, hide_index=True, height=500)
-
-        csv = df.to_csv(index=False)
         st.download_button(
-            label="📥 Download Answers CSV",
-            data=csv,
+            "📥 Download CSV", data=df.to_csv(index=False),
             file_name=f"answers_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-            mime="text/csv"
+            mime="text/csv",
         )
+
+    # ------------------------------------------------------------------
+    # Tab 3 — Analytics
+    # ------------------------------------------------------------------
 
     def _render_analytics(self):
         st.subheader("📊 Questions Analytics")
 
-        summary_df = self.get_questions_summary()
-        type_dist_df = self.get_question_type_distribution()
-        category_dist_df = self.get_question_category_distribution()
+        summary_df      = self.get_questions_summary()
+        type_dist_df    = self.get_question_type_distribution()
+        category_dist_df= self.get_question_category_distribution()
 
         if summary_df.empty:
             st.info("No data available yet.")
             return
 
         col1, col2, col3, col4, col5 = st.columns(5)
-        with col1:
-            st.metric("Total Questions", summary_df['total_questions'].sum())
-        with col2:
-            st.metric("Active Questions", summary_df['active_questions'].sum())
-        with col3:
-            st.metric("Total Answers", summary_df['total_answers'].sum())
-        with col4:
-            st.metric("Survey Sites", len(summary_df))
-        with col5:
-            st.metric("With Click Elements", summary_df['questions_with_click_elements'].sum())
+        col1.metric("Total Questions",    summary_df['total_questions'].sum())
+        col2.metric("Active Questions",   summary_df['active_questions'].sum())
+        col3.metric("Total Answers",      summary_df['total_answers'].sum())
+        col4.metric("Survey Sites",       len(summary_df))
+        col5.metric("With Click Elements",summary_df['questions_with_click_elements'].sum())
 
         st.divider()
-        st.subheader("Breakdown by Survey Site")
+        st.subheader("By Survey Site")
         st.dataframe(summary_df, use_container_width=True, hide_index=True)
 
         st.divider()
         col1, col2 = st.columns(2)
-
         with col1:
             st.subheader("Question Types")
             if not type_dist_df.empty:
                 st.dataframe(type_dist_df, use_container_width=True, hide_index=True)
                 st.bar_chart(type_dist_df.set_index('question_type')['count'])
-
         with col2:
             st.subheader("Question Categories")
             if not category_dist_df.empty:
                 st.dataframe(category_dist_df, use_container_width=True, hide_index=True)
                 st.bar_chart(category_dist_df.set_index('question_category')['count'])
 
+    # ------------------------------------------------------------------
+    # Tab 4 — By Survey
+    # ------------------------------------------------------------------
+
+    def _render_by_survey(self):
+        st.subheader("🗂️ Questions by Survey")
+        st.caption("View and manage questions grouped by survey name, including completion status.")
+
+        survey_df = self.get_survey_name_summary()
+        if survey_df.empty:
+            st.info("No survey names found yet. Extract questions first.")
+            return
+
+        # Summary table
+        display = survey_df.copy()
+        if 'completed_at' in display.columns:
+            display['completed_at'] = pd.to_datetime(display['completed_at']).dt.strftime('%Y-%m-%d %H:%M').fillna('—')
+        display['all_complete'] = display['all_complete'].apply(lambda x: '🏁 Yes' if x else '⏳ No')
+        st.dataframe(display, use_container_width=True, hide_index=True)
+
         st.divider()
-        questions = self.get_questions(limit=1000)
-        if questions:
-            status_df = pd.DataFrame([
-                {'Status': 'Active', 'Count': len([q for q in questions if q.get('is_active')])},
-                {'Status': 'Inactive', 'Count': len([q for q in questions if not q.get('is_active')])},
-                {'Status': 'Used in Workflow', 'Count': len([q for q in questions if q.get('used_in_workflow')])},
-                {'Status': 'Unused', 'Count': len([q for q in questions if not q.get('used_in_workflow')])}
-            ])
-            st.subheader("Question Status Distribution")
-            st.bar_chart(status_df.set_index('Status'))
+
+        # Drill-down into a specific survey
+        survey_names = survey_df['survey_name'].tolist()
+        selected = st.selectbox("Drill into survey:", survey_names, key="by_survey_select")
+
+        if selected:
+            qs = self.get_questions(survey_name=selected, limit=200)
+            if qs:
+                st.success(f"**{len(qs)}** questions for *{selected}*")
+
+                answered   = sum(1 for q in qs if (q.get('answer_count') or 0) > 0)
+                used       = sum(1 for q in qs if q.get('used_in_workflow'))
+                completed  = sum(1 for q in qs if q.get('survey_complete'))
+
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Answered by Gemini", answered)
+                c2.metric("Used in workflow",   used)
+                c3.metric("Survey complete",    f"{'Yes' if completed == len(qs) else 'No'}")
+
+                # Mark all complete button
+                if not all(q.get('survey_complete') for q in qs):
+                    row = survey_df[survey_df['survey_name'] == selected].iloc[0]
+                    # We need account_id and site_id — pull from first question
+                    first_q = qs[0]
+                    if st.button(f"🏁 Mark all '{selected}' questions as complete"):
+                        result = self.mark_survey_complete(
+                            first_q.get('account_id'), first_q.get('survey_site_id'), selected
+                        )
+                        if result['success']:
+                            st.success(f"✅ Marked {result['updated']} questions complete."); st.rerun()
+                        else:
+                            st.error(result.get('error'))
+
+                for q in qs[:30]:
+                    complete_badge = " 🏁" if q.get('survey_complete') else ""
+                    answer_badge   = f" ({q.get('answer_count',0)} answers)" if q.get('answer_count') else ""
+                    st.markdown(
+                        f"- **{q['question_type']}**{complete_badge}{answer_badge}: "
+                        f"{q['question_text'][:100]}"
+                    )
+                if len(qs) > 30:
+                    st.caption(f"… and {len(qs)-30} more")
+
+    # ------------------------------------------------------------------
+    # Tab 5 — Extraction history
+    # ------------------------------------------------------------------
 
     def _render_extraction_history(self):
         st.subheader("🔄 Extraction History")
-        st.info("This shows when questions were extracted from survey sites. Each batch represents one extraction run.")
+        st.info("Each batch represents one extraction run. The **Surveys** column shows how many distinct surveys were found in that run.")
 
         batches = self.get_recent_extractions(limit=50)
-
         if not batches:
             st.info("No extraction history yet.")
             return
 
         df = pd.DataFrame([{
-            'Batch ID': b['extraction_batch_id'][:30] + '...' if len(b['extraction_batch_id']) > 30 else b['extraction_batch_id'],
-            'Questions': b['question_count'],
-            'Sites': b['site_count'],
-            'Accounts': b['account_count'],
-            'Types': b.get('type_count', 0),
-            'Categories': b.get('category_count', 0),
+            'Batch ID':        b['extraction_batch_id'][:30] + ('…' if len(b['extraction_batch_id']) > 30 else ''),
+            'Questions':       b['question_count'],
+            'Surveys':         b.get('survey_count', 0),
+            'Sites':           b['site_count'],
+            'Accounts':        b['account_count'],
             'First Extracted': b['first_extracted'],
-            'Last Extracted': b['last_extracted']
+            'Last Extracted':  b['last_extracted'],
         } for b in batches])
-
         st.dataframe(df, use_container_width=True, hide_index=True)
 
         selected_batch = st.selectbox(
             "View questions from batch:",
             options=[b['extraction_batch_id'] for b in batches if b['extraction_batch_id']],
-            format_func=lambda x: f"{x[:30]}... ({next(b['question_count'] for b in batches if b['extraction_batch_id'] == x)} questions)"
+            format_func=lambda x: (
+                f"{x[:30]}… "
+                f"({next(b['question_count'] for b in batches if b['extraction_batch_id'] == x)} questions, "
+                f"{next(b.get('survey_count',0) for b in batches if b['extraction_batch_id'] == x)} surveys)"
+            ),
         )
 
         if selected_batch:
-            batch_questions = self.get_questions(batch_id=selected_batch, limit=100)
-            if batch_questions:
-                st.write(f"**Questions from batch {selected_batch[:30]}...**")
-                for q in batch_questions[:20]:
-                    st.markdown(f"- {q.get('question_text', '')[:100]}... ({q.get('question_type')}, {q.get('question_category', 'No category')})")
-                if len(batch_questions) > 20:
-                    st.caption(f"... and {len(batch_questions) - 20} more")
+            batch_qs = self.get_questions(batch_id=selected_batch, limit=100)
+            if batch_qs:
+                st.write(f"**Questions from batch** `{selected_batch[:30]}…`")
+                for q in batch_qs[:25]:
+                    survey_label = f"[{q.get('survey_name','?')}] " if q.get('survey_name') else ""
+                    st.markdown(
+                        f"- {survey_label}`{q.get('question_type')}` "
+                        f"`{q.get('question_category','—')}`: "
+                        f"{q.get('question_text','')[:100]}"
+                    )
+                if len(batch_qs) > 25:
+                    st.caption(f"… and {len(batch_qs)-25} more")

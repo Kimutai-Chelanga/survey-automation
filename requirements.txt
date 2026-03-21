@@ -1,6 +1,7 @@
 # ============================================================
 # requirements.txt
 # ============================================================
+
 # Core framework
 streamlit>=1.28.0
 
@@ -38,3 +39,10 @@ watchdog
 
 # Additional utilities for media handling
 python-magic>=0.4.27
+
+# Database migrations
+alembic>=1.13.0
+
+# Gemini AI (official SDK — used for answering survey questions)
+google-generativeai>=0.7.0
+websocket-client>=1.6.0

@@ -31,16 +31,14 @@ class SurveySiteOrchestrator:
     # ------------------------------------------------------------------
 
     def _load_modules(self):
-        base = Path(__file__).parent  # .../generate_manual_workflows/
+        base = Path(__file__).parent
 
-        # Base classes live in base/ but the extractor/creator files import them as:
-        #   from extraction.base_extractor import BaseExtractor
-        #   from extraction.base_workflow_creator import BaseWorkflowCreator
-        # So we register them under BOTH names so either works.
         base_dir = base / "base"
         for filename, module_names in [
-            ("base_extractor.py",       ["extraction.base_extractor",       "genmw.base_extractor"]),
-            ("base_workflow_creator.py",["extraction.base_workflow_creator", "genmw.base_workflow_creator"]),
+            ("base_extractor.py",
+             ["extraction.base_extractor", "genmw.base_extractor"]),
+            ("base_workflow_creator.py",
+             ["extraction.base_workflow_creator", "genmw.base_workflow_creator"]),
         ]:
             filepath = base_dir / filename
             for mod_name in module_names:
@@ -56,11 +54,6 @@ class SurveySiteOrchestrator:
         )
 
     def _preload_file(self, filepath: Path, module_name: str):
-        """
-        Register a file into sys.modules under module_name.
-        This lets subclass files do `from extraction.base_extractor import ...`
-        and find it regardless of the actual directory structure.
-        """
         if not filepath.exists():
             logger.warning(f"Base file not found: {filepath}")
             return
@@ -76,11 +69,6 @@ class SurveySiteOrchestrator:
             logger.error(f"Failed to pre-load {module_name}: {e}", exc_info=True)
 
     def _load_dir(self, directory: Path, class_suffix: str, target: Dict):
-        """
-        Load every *.py in directory by absolute file path.
-        Finds the first class ending with class_suffix, instantiates it,
-        and registers it by site_name.
-        """
         if not directory.exists():
             logger.warning(f"Directory not found: {directory}")
             return
@@ -139,8 +127,10 @@ class SurveySiteOrchestrator:
     def get_creator_only_sites(self) -> List[str]:
         return sorted(set(self.workflow_creators) - set(self.extractors))
 
-    def extract_questions(self, account_id, site_id, url, profile_path,
-                          site_name, **kw) -> Dict:
+    def extract_questions(
+        self, account_id, site_id, url, profile_path, site_name, **kw
+    ) -> Dict:
+        """Extract questions from a single URL."""
         if site_name not in self.extractors:
             raise ValueError(
                 f"No extractor for '{site_name}'. "
@@ -151,8 +141,52 @@ class SurveySiteOrchestrator:
             url=url, profile_path=profile_path, **kw
         )
 
-    def create_workflows(self, account_id, site_id, questions, prompt,
-                         site_name, **kw) -> Dict:
+    def extract_all_questions(
+        self, account_id, site_id, listing_url, profile_path,
+        site_name, debug_port=None, max_surveys=20,
+        progress_callback=None, **kw
+    ) -> Dict:
+        """
+        Extract questions from ALL surveys on the listing/dashboard page.
+        Delegates to the extractor's extract_all_from_listing() method.
+        Falls back to extract_questions() for extractors that don't support
+        the multi-survey API.
+        """
+        if site_name not in self.extractors:
+            raise ValueError(
+                f"No extractor for '{site_name}'. "
+                f"Available: {list(self.extractors)}"
+            )
+
+        extractor = self.extractors[site_name]
+
+        # Use multi-survey API if the extractor supports it
+        if hasattr(extractor, "extract_all_from_listing"):
+            return extractor.extract_all_from_listing(
+                account_id=account_id,
+                site_id=site_id,
+                listing_url=listing_url,
+                profile_path=profile_path,
+                debug_port=debug_port,
+                max_surveys=max_surveys,
+                progress_callback=progress_callback,
+                **kw,
+            )
+
+        # Fallback for extractors that only support single-URL extraction
+        logger.warning(
+            f"Extractor for '{site_name}' does not support extract_all_from_listing. "
+            "Falling back to single-URL extraction."
+        )
+        return extractor.extract_questions(
+            account_id=account_id, site_id=site_id,
+            url=listing_url, profile_path=profile_path,
+            debug_port=debug_port, **kw
+        )
+
+    def create_workflows(
+        self, account_id, site_id, questions, prompt, site_name, **kw
+    ) -> Dict:
         if site_name not in self.workflow_creators:
             raise ValueError(
                 f"No creator for '{site_name}'. "
