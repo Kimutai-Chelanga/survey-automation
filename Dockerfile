@@ -71,6 +71,20 @@ RUN apt-get update \
         libharfbuzz-icu0 \
         libhyphen0 \
         libmanette-0.2-0 \
+        # Additional dependencies for browser-use
+        libgtk-3-0 \
+        libx11-xcb1 \
+        libxcb1 \
+        libxcb-shm0 \
+        libxcb-xfixes0 \
+        libxcb-shape0 \
+        libxcb-randr0 \
+        libxcb-icccm4 \
+        libxcb-image0 \
+        libxcb-keysyms1 \
+        libxcb-util1 \
+        libxcb-xinerama0 \
+        libxcb-xkb1 \
     && rm -rf /var/lib/apt/lists/*
 
 # ------------------------------------------------------------------

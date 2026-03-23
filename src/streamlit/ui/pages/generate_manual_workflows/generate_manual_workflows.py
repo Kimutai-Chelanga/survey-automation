@@ -1,15 +1,10 @@
 # src/streamlit/ui/pages/generate_manual_workflows/generate_manual_workflows.py
 """
-Generate Manual Workflows — Streamlit page  v2.0.0
-Changes over v1:
-  - _do_extract_all renders a live diagnostic log panel using diag_events
-    returned by the v12 extractor.
-  - _render_diag_panel() formats structured events with colour-coded badges,
-    phase labels, expandable DEBUG section, and a plain-text download button.
-  - Per-survey summary table shows provider + reason for each result.
-  - discovery_source and network_api_calls surfaced in results panel.
-  - Diagnostic panel also shown on failure so errors are diagnosable.
-  - Everything else unchanged from v1.
+Generate Manual Workflows — Streamlit page v3.0.0
+Changes over v2:
+  - Removed extraction, workflow creation, and upload tabs
+  - Added direct AI answering with browser-use
+  - Simplified to just answer questions using AI agent
 """
 
 import io
@@ -31,150 +26,13 @@ from .utils.chrome_helpers import (
     get_debug_port_for_account,
 )
 
+# Import browser-use
+from browser_use import Agent, Browser
+from browser_use import ChatOpenAI, ChatAnthropic, ChatGoogle
+import asyncio
+
 logger = logging.getLogger(__name__)
 
-
-# ---------------------------------------------------------------------------
-# Diagnostic event rendering
-# ---------------------------------------------------------------------------
-
-_LEVEL_STYLE = {
-    "OK":      ("✅", "#155724", "#d4edda", "#c3e6cb"),
-    "ERROR":   ("❌", "#721c24", "#f8d7da", "#f5c6cb"),
-    "WARN":    ("⚠️", "#856404", "#fff3cd", "#ffeeba"),
-    "INFO":    ("ℹ️", "#0c5460", "#d1ecf1", "#bee5eb"),
-    "STEP":    ("▶️", "#383d41", "#e2e3e5", "#d6d8db"),
-    "DEBUG":   ("🔍", "#555",    "#f8f9fa", "#dee2e6"),
-    "SECTION": ("",  "#fff",    "#343a40", "#343a40"),
-}
-
-_PHASE_COLOR = {
-    "INIT":      "#6c757d",
-    "NETWORK":   "#0d6efd",
-    "DISCOVERY": "#6f42c1",
-    "NAV":       "#fd7e14",
-    "IFRAME":    "#20c997",
-    "EXTRACT":   "#0dcaf0",
-    "DB":        "#198754",
-    "SURVEY":    "#dc3545",
-}
-
-
-def _render_diag_panel(events: List[Dict], container=None):
-    """
-    Render DiagnosticLogger events as a formatted, colour-coded log panel.
-    Pass container=st (default) or any st.container / st.expander.
-    """
-    tgt = container or st
-
-    if not events:
-        tgt.info("No diagnostic events captured.")
-        return
-
-    # Summary bar
-    counts: Dict[str, int] = {}
-    for e in events:
-        counts[e.get("level", "INFO")] = counts.get(e.get("level", "INFO"), 0) + 1
-
-    cols = tgt.columns(5)
-    for i, (lvl, label) in enumerate([
-        ("OK",    "✅ OK"),
-        ("ERROR", "❌ Errors"),
-        ("WARN",  "⚠️ Warnings"),
-        ("STEP",  "▶️ Steps"),
-        ("DEBUG", "🔍 Debug"),
-    ]):
-        cols[i].metric(label, counts.get(lvl, 0))
-
-    tgt.markdown("---")
-
-    plain_lines: List[str] = []
-    debug_events: List[Dict] = []
-
-    for e in events:
-        level  = e.get("level", "INFO")
-        phase  = e.get("phase", "")
-        msg    = e.get("msg", "")
-        detail = e.get("detail", "")
-        ts     = e.get("ts", "")
-
-        plain_lines.append(
-            f"[{ts}] {level:7s} [{phase:10s}] {msg}"
-            + (f"  -- {detail}" if detail else "")
-        )
-
-        if level == "SECTION":
-            tgt.markdown(
-                f"<div style='background:#343a40;color:#fff;padding:5px 12px;"
-                f"border-radius:4px;margin:10px 0 4px;font-size:12px;"
-                f"font-weight:700;letter-spacing:0.06em'>{msg}</div>",
-                unsafe_allow_html=True,
-            )
-            continue
-
-        if level == "DEBUG":
-            debug_events.append(e)
-            continue
-
-        icon, text_col, bg_col, border_col = _LEVEL_STYLE.get(
-            level, ("•", "#333", "#fff", "#ccc")
-        )
-        phase_color = _PHASE_COLOR.get(phase, "#888")
-
-        phase_span = (
-            f"<span style='background:{phase_color};color:#fff;padding:1px 7px;"
-            f"border-radius:3px;font-size:10px;font-weight:700;"
-            f"margin-right:7px;vertical-align:middle'>{phase}</span>"
-        ) if phase else ""
-
-        detail_span = (
-            f"<span style='color:#777;font-size:11px;margin-left:10px'>{detail}</span>"
-        ) if detail else ""
-
-        ts_span = (
-            f"<span style='color:#bbb;font-size:10px;margin-right:8px;"
-            f"font-family:monospace'>{ts}</span>"
-        )
-
-        tgt.markdown(
-            f"<div style='background:{bg_col};border-left:4px solid {border_col};"
-            f"padding:5px 12px;margin:2px 0;border-radius:0 5px 5px 0;"
-            f"font-size:13px;line-height:1.6'>"
-            f"{ts_span}{icon}&nbsp;{phase_span}"
-            f"<span style='color:{text_col}'>{msg}</span>"
-            f"{detail_span}</div>",
-            unsafe_allow_html=True,
-        )
-
-    # Debug section (collapsed)
-    if debug_events:
-        with tgt.expander(f"🔍 Debug details ({len(debug_events)} lines)", expanded=False):
-            for e in debug_events:
-                phase = e.get("phase", "")
-                pc    = _PHASE_COLOR.get(phase, "#888")
-                st.markdown(
-                    f"<div style='font-size:11px;color:#555;padding:2px 8px;"
-                    f"font-family:monospace;line-height:1.5'>"
-                    f"<span style='color:#aaa'>{e.get('ts','')}</span>&nbsp;"
-                    f"<span style='background:{pc};color:#fff;padding:0 5px;"
-                    f"border-radius:2px;font-size:9px'>{phase}</span>&nbsp;"
-                    f"{e.get('msg','')} "
-                    f"<span style='color:#999'>{e.get('detail','')}</span></div>",
-                    unsafe_allow_html=True,
-                )
-
-    tgt.download_button(
-        "⬇️ Download full diagnostic log",
-        data="\n".join(plain_lines),
-        file_name=f"extraction_diag_{datetime.now():%Y%m%d_%H%M%S}.txt",
-        mime="text/plain",
-        key=f"dl_diag_{int(time.time())}",
-    )
-
-
-# ---------------------------------------------------------------------------
-# Page class
-# ---------------------------------------------------------------------------
 
 class GenerateManualWorkflowsPage:
 
@@ -200,22 +58,16 @@ class GenerateManualWorkflowsPage:
     def clear_logs(self):
         st.session_state.generation_logs = []
 
-    # ------------------------------------------------------------------
-    # Main render
-    # ------------------------------------------------------------------
-
     def render(self):
-        st.title("⚙️ Generate Manual Workflows")
-
+        st.title("🤖 AI Survey Answerer")
+        
         st.markdown("""
         <div style='background:#1e3a5f;padding:18px;border-radius:10px;margin-bottom:18px;'>
-        <h3 style='color:white;margin:0;'>Manual Workflow Generator</h3>
+        <h3 style='color:white;margin:0;'>AI-Powered Survey Answering</h3>
         <p style='color:#a0c4ff;margin:8px 0 0;'>
-        🔍 <b>Extract</b> — extract screener questions from all surveys on the dashboard.<br>
-        📝 <b>Answer</b> — Gemini AI answers questions per survey using your persona prompt.<br>
-        ⚙️ <b>Create</b> — build a continuous-loop Automa workflow per survey.<br>
-        📤 <b>Upload</b> — inject workflow directly into the running Chrome session.<br>
-        🏆 <b>Results</b> — track pass/fail per survey.
+        🤖 <b>AI Agent</b> — Uses browser-use to automatically navigate and answer surveys.<br>
+        📝 <b>LLM</b> — Generates answers based on your persona prompt.<br>
+        🏆 <b>Results</b> — Track pass/fail per survey attempt.
         </p>
         </div>""", unsafe_allow_html=True)
 
@@ -240,12 +92,6 @@ class GenerateManualWorkflowsPage:
                     st.warning(f"Has extractor but NO creator: {ext_only}")
                 if cre_only:
                     st.warning(f"Has creator but NO extractor: {cre_only}")
-                from pathlib import Path
-                base = Path(__file__).parent
-                st.write("**Extractor dir:**", str(base / "extractors"), "— Exists:", (base / "extractors").exists())
-                st.write("**Creator dir:**",   str(base / "workflow_creators"), "— Exists:", (base / "workflow_creators").exists())
-                if st.button("🔄 Reload modules", key="reload_modules"):
-                    self.orchestrator._load_modules(); st.rerun()
             return
 
         if not accounts:
@@ -265,13 +111,15 @@ class GenerateManualWorkflowsPage:
             acct_prompt = next((p for p in prompts if p["account_id"] == acct["account_id"]), None)
             if acct_prompt:
                 st.success(f"✅ Prompt: {acct_prompt['prompt_name']}")
+                with st.expander("👁️ View persona prompt", expanded=False):
+                    st.code(acct_prompt["content"], language=None)
             else:
                 st.warning("⚠️ No prompt — create one in Prompts page")
             debug_port = get_debug_port_for_account(st.session_state, acct["account_id"])
             if debug_port:
                 st.success(f"🟢 Chrome active (port {debug_port})")
             else:
-                st.info("⚪ No Chrome session")
+                st.info("⚪ No Chrome session - will start one automatically")
 
         with col2:
             st.subheader("🌐 Survey Site")
@@ -286,18 +134,8 @@ class GenerateManualWorkflowsPage:
 
         st.markdown("---")
 
-        t1, t2, t3, t4, t5 = st.tabs([
-            "🔍 Extract Questions",
-            "📝 Answer Questions",
-            "⚙️ Create Workflows",
-            "📤 Upload to Chrome",
-            "🏆 Screening Results",
-        ])
-        with t1: self._tab_extract(acct, site, acct_prompt)
-        with t2: self._tab_answer(acct, site, acct_prompt)
-        with t3: self._tab_create(acct, site, acct_prompt)
-        with t4: self._tab_upload(acct, site)
-        with t5: self._tab_screening_results(acct, site)
+        # Direct AI answering tab
+        self._tab_answer_direct(acct, site, acct_prompt)
 
         if st.session_state.generation_logs:
             st.markdown("---")
@@ -317,700 +155,291 @@ class GenerateManualWorkflowsPage:
         if st.session_state.generation_results:
             st.markdown("---")
             self._render_results(st.session_state.generation_results)
+            
+        # Screening results tab
+        st.markdown("---")
+        self._tab_screening_results(acct, site)
 
     # ======================================================================
-    # TAB 1 — EXTRACT
+    # Direct AI Answering with browser-use
     # ======================================================================
 
-    def _tab_extract(self, acct, site, prompt):
-        st.subheader("🔍 Extract Questions from Survey Site")
-
-        ei = {}
-        if site["site_name"] in self.orchestrator.extractors:
-            ei = self.orchestrator.extractors[site["site_name"]].get_site_info()
-
-        debug_port = get_debug_port_for_account(st.session_state, acct["account_id"])
-
-        st.info(
-            f"**Account:** {acct['username']}  \n"
-            f"**Site:** {site['site_name']}  \n"
-            f"**Extractor:** v{ei.get('version','?')}  \n"
-            f"**Chrome:** {'🟢 Port ' + str(debug_port) + ' — live extraction' if debug_port else '🔴 No Chrome session — cannot extract'}  \n"
-            f"**Prompt:** {prompt['prompt_name'] if prompt else '—'}"
-        )
-
+    def _tab_answer_direct(self, acct, site, prompt):
+        st.subheader("🤖 AI Survey Answerer")
+        
         if not prompt:
-            st.error("❌ Account has no prompt"); return
-        if not debug_port:
-            st.error("❌ No active Chrome session. Start one from Accounts → Local Chrome first."); return
+            st.error("❌ No prompt — create one in the Prompts page first.")
+            return
 
+        import os
+        
+        # Check for LLM API keys
+        has_openai = bool(os.environ.get("OPENAI_API_KEY"))
+        has_anthropic = bool(os.environ.get("ANTHROPIC_API_KEY"))
+        has_gemini = bool(os.environ.get("GEMINI_API_KEY"))
+        
+        if not (has_openai or has_anthropic or has_gemini):
+            st.error("❌ No LLM API key found. Add OPENAI_API_KEY, ANTHROPIC_API_KEY, or GEMINI_API_KEY to .env")
+            return
+
+        # Get URLs for this account/site
         urls = self._get_urls(acct["account_id"], site["site_id"])
         if not urls:
-            st.warning("⚠️ No URLs configured for this account/site."); return
+            st.warning("⚠️ No URLs configured for this account/site.")
+            return
 
         url_map = {}
         for u in urls:
             star = "⭐ " if u.get("is_default") else ""
             used = " [used]" if u.get("is_used") else ""
             url_map[f"{star}{u['url']}{used}"] = u
-        sel_url = url_map[st.selectbox("Dashboard / Listing URL:", list(url_map), key="ext_url")]
-
-        raw_url = sel_url["url"].strip()
-        if raw_url and not raw_url.startswith(("http://", "https://")):
-            st.warning(f"⚠️ URL **`{raw_url}`** has no scheme — `https://` will be prepended automatically.")
-        if sel_url.get("is_used"):
-            st.warning("⚠️ URL already marked used — you can still proceed.")
-
-        st.markdown("---")
-        st.caption("Finds every available survey on the dashboard and extracts all screener questions from each. DQ/unavailable surveys are skipped automatically.")
-
+            
+        selected_url = st.selectbox(
+            "Dashboard / Survey URL to start from:",
+            list(url_map),
+            key="answer_url"
+        )
+        survey_url = url_map[selected_url]["url"].strip()
+        
+        # Ensure URL has scheme
+        if survey_url and not survey_url.startswith(("http://", "https://")):
+            survey_url = "https://" + survey_url
+            st.info(f"URL normalized to: {survey_url}")
+            
+        # Number of surveys to answer
+        num_surveys = st.number_input(
+            "Number of surveys to answer:",
+            min_value=1,
+            max_value=50,
+            value=5,
+            key="num_surveys"
+        )
+        
+        # Model selection
+        model_options = []
+        if has_openai:
+            model_options.append("openai (GPT-4o)")
+        if has_anthropic:
+            model_options.append("anthropic (Claude)")
+        if has_gemini:
+            model_options.append("gemini (Gemini)")
+            
+        model_choice = st.selectbox(
+            "AI Model:",
+            model_options,
+            key="model_choice"
+        )
+        
+        st.info(
+            f"**Account:** {acct['username']}  \n"
+            f"**Site:** {site['site_name']}  \n"
+            f"**Starting URL:** {survey_url}  \n"
+            f"**Surveys to attempt:** {num_surveys}  \n"
+            f"**Model:** {model_choice}  \n"
+            f"**Prompt:** {prompt['prompt_name']}"
+        )
+        
+        # Advanced options
+        with st.expander("⚙️ Advanced Options"):
+            headless = st.checkbox("Run headless (no visible browser)", value=False, key="headless")
+            use_cloud = st.checkbox("Use Browser-Use Cloud (stealth mode)", value=False, key="use_cloud")
+            max_steps = st.number_input("Max steps per survey:", min_value=10, max_value=200, value=50, key="max_steps")
+            
+        # Answer button
         if st.button(
-            "🚀 Extract All Surveys", type="primary", use_container_width=True,
-            key="ext_btn_all",
+            f"🚀 Answer {num_surveys} Survey(s) with AI Agent",
+            type="primary",
+            use_container_width=True,
+            key="answer_btn",
             disabled=st.session_state.get("generation_in_progress", False),
         ):
-            self._do_extract_all(acct, site, prompt, sel_url)
-
-    def _do_extract_all(self, acct, site, prompt, url_info):
-        self.log(f"Extract ALL surveys: {acct['username']} / {site['site_name']}")
+            self._do_direct_answering(
+                acct, site, prompt, survey_url, num_surveys,
+                model_choice, headless, use_cloud, max_steps
+            )
+            
+    def _do_direct_answering(
+        self, acct, site, prompt, start_url, num_surveys,
+        model_choice, headless, use_cloud, max_steps
+    ):
+        """Execute direct survey answering using browser-use agent"""
+        self.log(f"Starting AI answering: {acct['username']} / {site['site_name']}")
         st.session_state.generation_in_progress = True
-
-        progress_bar     = st.progress(0)
-        status_text      = st.empty()
-        survey_log       = st.empty()
-        diag_placeholder = st.empty()   # filled after run completes
-
-        def on_progress(current, total, msg):
-            progress_bar.progress(int(current / total * 100) if total else 0)
-            status_text.markdown(
-                f"<div style='font-size:13px;padding:4px 0'>"
-                f"<span style='color:#888'>[{current}/{total}]</span>&nbsp;{msg}</div>",
-                unsafe_allow_html=True,
-            )
-            self.log(msg)
-
+        
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        # Build persona instruction for the agent
+        persona = self._build_persona_instruction(prompt, acct)
+        
+        # Build task instruction
+        task = f"""
+        You are a survey participant with the following persona:
+        {persona}
+        
+        Your task:
+        1. Go to {start_url}
+        2. Find and click on available surveys (up to {num_surveys} surveys)
+        3. For each survey, answer all questions truthfully according to your persona
+        4. Handle any disqualification (DQ) pages appropriately
+        5. Submit each survey and continue to the next one
+        6. Track which surveys you completed successfully
+        
+        Important:
+        - Be patient and wait for pages to load
+        - If you see a survey that asks for information inconsistent with your persona, still answer truthfully
+        - If you get disqualified, note that and move to the next survey
+        - Complete the survey fully before moving on
+        """
+        
         try:
-            from src.streamlit.ui.pages.accounts.chrome_session_manager import ChromeSessionManager
-            profile_path = ChromeSessionManager(self.db_manager).get_profile_path(acct["username"])
-            debug_port   = get_debug_port_for_account(st.session_state, acct["account_id"])
-
-            result = self.orchestrator.extract_all_questions(
-                account_id=acct["account_id"],
-                site_id=site["site_id"],
-                listing_url=url_info["url"],
-                profile_path=profile_path,
-                site_name=site["site_name"],
-                debug_port=debug_port,
-                progress_callback=on_progress,
+            # Setup browser
+            browser = Browser(
+                headless=headless,
+                use_cloud=use_cloud,
             )
-
+            
+            # Setup LLM based on choice
+            if "openai" in model_choice.lower():
+                llm = ChatOpenAI(model='gpt-4o')
+            elif "anthropic" in model_choice.lower() or "claude" in model_choice.lower():
+                llm = ChatAnthropic(model='claude-3-5-sonnet-20241022')
+            else:  # gemini
+                llm = ChatGoogle(model='gemini-2.0-flash-exp')
+            
+            # Create agent
+            agent = Agent(
+                task=task,
+                llm=llm,
+                browser=browser,
+                max_steps_per_attempt=max_steps,
+            )
+            
+            # Run the agent
+            status_text.info("🤖 AI Agent is starting...")
+            
+            # Run async in a synchronous context
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            result = loop.run_until_complete(agent.run())
+            loop.close()
+            
             progress_bar.progress(100)
             status_text.empty()
-
-            diag_events = result.get("diag_events", [])
-
-            # Always render the diagnostic panel immediately after extraction
-            if diag_events:
-                with diag_placeholder.container():
-                    st.markdown("### 🔬 Extraction Diagnostics")
-                    _render_diag_panel(diag_events)
-
-            if result.get("success"):
-                self._mark_url_used(url_info["url_id"])
-                self.log(
-                    f"Done: {result.get('surveys_successful',0)} surveys ok, "
-                    f"{result['questions_found']} questions, {result['inserted']} inserted | "
-                    f"source={result.get('discovery_source','?')} | "
-                    f"api_calls={result.get('network_api_calls',0)}"
+            
+            # Process result
+            success = result.is_successful() if hasattr(result, 'is_successful') else bool(result)
+            
+            if success:
+                self.log(f"✅ Agent completed {num_surveys} survey attempts")
+                st.success("🎉 AI Agent completed its task!")
+                
+                # Save screening result
+                self._upsert_screening_result(
+                    account_id=acct["account_id"],
+                    site_id=site["site_id"],
+                    survey_name="AI_Answered",
+                    batch_id=f"ai_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                    screener_answers=num_surveys,
+                    status="complete"
                 )
-
-                survey_results = result.get("survey_results", [])
-                if survey_results:
-                    icons = {"success": "✅", "dq": "❌", "error": "⚠️", "skip": "⏭️"}
-                    rows  = []
-                    for r in survey_results:
-                        icon   = icons.get(r["status"], "❓")
-                        name   = r.get("survey_name") or r.get("survey_label", "?")
-                        qs     = r.get("questions", 0)
-                        ins    = r.get("inserted", 0)
-                        prov   = r.get("provider", "—")
-                        reason = f"  _{r['reason']}_" if r.get("reason") else ""
-                        rows.append(
-                            f"{icon} **{name}** — `{r['status']}` — "
-                            f"{qs} Qs / {ins} inserted — `{prov}`{reason}"
-                        )
-                    survey_log.markdown("\n\n".join(rows))
-
+                
+                # Mark URL as used
+                self._mark_url_used_by_url(site["site_id"], start_url)
+                
                 st.session_state.generation_results = {
-                    "action":              "extract_all_surveys",
-                    "status":              "success",
-                    "timestamp":           datetime.now().isoformat(),
-                    "account":             {"id": acct["account_id"], "username": acct["username"]},
-                    "site":                {"id": site["site_id"],    "name": site["site_name"]},
-                    "url":                 {"url": url_info["url"]},
-                    "questions_extracted": result["questions_found"],
-                    "inserted":            result["inserted"],
-                    "surveys_found":       result.get("surveys_found", 0),
-                    "surveys_processed":   result.get("surveys_processed", 0),
-                    "surveys_successful":  result.get("surveys_successful", 0),
-                    "surveys_failed":      result.get("surveys_failed", 0),
-                    "survey_results":      survey_results,
-                    "batch_id":            result.get("batch_id", ""),
-                    "discovery_source":    result.get("discovery_source", "?"),
-                    "network_api_calls":   result.get("network_api_calls", 0),
-                    "execution_time_seconds": result.get("execution_time_seconds", 0),
-                    "diag_events":         diag_events,
+                    "action": "direct_answering",
+                    "status": "success",
+                    "timestamp": datetime.now().isoformat(),
+                    "account": {"id": acct["account_id"], "username": acct["username"]},
+                    "site": {"id": site["site_id"], "name": site["site_name"]},
+                    "start_url": start_url,
+                    "surveys_attempted": num_surveys,
+                    "result": str(result),
                 }
             else:
-                self.log(f"Failed: {result.get('error')}", "ERROR")
+                self.log(f"❌ Agent failed", "ERROR")
+                st.error("AI Agent encountered an error")
                 st.session_state.generation_results = {
-                    "action":    "extract_all_surveys",
-                    "status":    "failed",
-                    "error":     result.get("error", "Unknown"),
-                    "account":   {"id": acct["account_id"], "username": acct["username"]},
-                    "site":      {"id": site["site_id"],    "name": site["site_name"]},
+                    "action": "direct_answering",
+                    "status": "failed",
+                    "error": str(result) if not isinstance(result, bool) else "Unknown error",
+                    "account": {"id": acct["account_id"], "username": acct["username"]},
+                    "site": {"id": site["site_id"], "name": site["site_name"]},
                     "timestamp": datetime.now().isoformat(),
-                    "diag_events": diag_events,
                 }
-
+                
         except Exception as exc:
             progress_bar.empty()
             status_text.empty()
             self.log(str(exc), "ERROR")
+            st.error(f"❌ Error: {exc}")
             st.session_state.generation_results = {
-                "action":    "extract_all_surveys",
-                "status":    "failed",
-                "error":     str(exc),
-                "account":   {"id": acct["account_id"], "username": acct["username"]},
-                "site":      {"id": site["site_id"],    "name": site["site_name"]},
+                "action": "direct_answering",
+                "status": "failed",
+                "error": str(exc),
+                "account": {"id": acct["account_id"], "username": acct["username"]},
+                "site": {"id": site["site_id"], "name": site["site_name"]},
                 "timestamp": datetime.now().isoformat(),
             }
         finally:
             st.session_state.generation_in_progress = False
             st.rerun()
-
-    def _do_extract(self, acct, site, prompt, url_info, use_chrome):
-        self.log(f"Extraction start: {acct['username']} / {site['site_name']}")
-        st.session_state.generation_in_progress = True
-        try:
-            from src.streamlit.ui.pages.accounts.chrome_session_manager import ChromeSessionManager
-            profile_path = ChromeSessionManager(self.db_manager).get_profile_path(acct["username"])
-            debug_port   = get_debug_port_for_account(st.session_state, acct["account_id"])
-            if use_chrome and not debug_port:
-                ok         = ensure_chrome_running(profile_path)
-                debug_port = get_debug_port_for_account(st.session_state, acct["account_id"]) if ok else None
-                self.log(f"Chrome: {'port ' + str(debug_port) if debug_port else 'failed → simulation'}")
-
-            result = self.orchestrator.extract_questions(
-                account_id=acct["account_id"], site_id=site["site_id"],
-                url=url_info["url"], profile_path=profile_path,
-                site_name=site["site_name"], debug_port=debug_port,
-            )
-            if result.get("success"):
-                self._mark_url_used(url_info["url_id"])
-                survey_name = result.get("survey_name", "Unknown Survey")
-                self.log(f"Done: {result['questions_found']} found, {result['inserted']} inserted, survey='{survey_name}'")
-                st.session_state.generation_results = {
-                    "action": "extract_questions", "status": "success",
-                    "timestamp": datetime.now().isoformat(),
-                    "account": {"id": acct["account_id"], "username": acct["username"]},
-                    "site":    {"id": site["site_id"],    "name": site["site_name"]},
-                    "url":     {"url": url_info["url"]},
-                    "questions_extracted": result["questions_found"],
-                    "inserted":  result["inserted"],
-                    "batch_id":  result["batch_id"],
-                    "survey_name": survey_name,
-                    "execution_time_seconds": result.get("execution_time_seconds", 0),
-                }
-            else:
-                self.log(f"Failed: {result.get('error')}", "ERROR")
-                st.session_state.generation_results = {
-                    "action": "extract_questions", "status": "failed",
-                    "error": result.get("error", "Unknown"),
-                    "account": {"id": acct["account_id"], "username": acct["username"]},
-                    "site":    {"id": site["site_id"],    "name": site["site_name"]},
-                    "timestamp": datetime.now().isoformat(),
-                }
-        except Exception as exc:
-            self.log(str(exc), "ERROR")
-            st.session_state.generation_results = {
-                "action": "extract_questions", "status": "failed", "error": str(exc),
-                "account": {"id": acct["account_id"], "username": acct["username"]},
-                "site":    {"id": site["site_id"],    "name": site["site_name"]},
-                "timestamp": datetime.now().isoformat(),
-            }
-        finally:
-            st.session_state.generation_in_progress = False
-            st.rerun()
-
-    # ======================================================================
-    # TAB 2 — ANSWER
-    # ======================================================================
-
-    def _tab_answer(self, acct, site, prompt):
-        st.subheader("📝 Answer Questions with Gemini AI")
-
-        if not prompt:
-            st.error("❌ No prompt — create one in the Prompts page first."); return
-
-        import os
-        if not os.environ.get("GEMINI_API_KEY", ""):
-            st.error("❌ GEMINI_API_KEY not found in environment."); return
-
-        survey_names = self._get_survey_names(acct["account_id"], site["site_id"])
-        if not survey_names:
-            st.info("ℹ️ No unused questions found — run **Extract Questions** first."); return
-
-        selected_survey = st.selectbox(
-            "📋 Select Survey to Answer:",
-            options=["— All surveys —"] + survey_names,
-            key="ans_survey_select",
-        )
-
-        qs = (
-            self._unused_questions(acct["account_id"], site["site_id"], survey_name=selected_survey)
-            if selected_survey and selected_survey != "— All surveys —"
-            else self._unused_questions(acct["account_id"], site["site_id"])
-        )
-
-        if not qs:
-            st.info("ℹ️ No unused questions for this selection."); return
-
-        st.info(
-            f"**Account:** {acct['username']}  \n**Site:** {site['site_name']}  \n"
-            f"**Survey:** {selected_survey}  \n**Prompt:** {prompt['prompt_name']}  \n"
-            f"**Questions to answer:** {len(qs)}  \n**Gemini API:** ✅ Key found"
-        )
-
-        with st.expander("👁️ View persona prompt", expanded=False):
-            st.code(prompt["content"], language=None)
-
-        with st.expander(f"📋 Preview questions ({len(qs)} total)", expanded=True):
-            for i, q in enumerate(qs):
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    st.markdown(f"**Q{i+1}.** {q['question_text']}")
-                    st.caption(f"Type: `{q['question_type']}` | Category: `{q.get('question_category') or '—'}` | Survey: `{q.get('survey_name') or '—'}`")
-                    options = q.get("options") or []
-                    if isinstance(options, str):
-                        try:    options = json.loads(options)
-                        except: options = []
-                    if options:
-                        st.caption(f"Options: {', '.join(str(o) for o in options[:5])}" + (" …" if len(options) > 5 else ""))
-                with col2:
-                    st.caption("→ Gemini")
-                st.divider()
-
-        if st.button(
-            f"🚀 Answer All {len(qs)} Questions with Gemini",
-            type="primary", use_container_width=True, key="ans_btn",
-            disabled=st.session_state.get("generation_in_progress", False),
-        ):
-            self._do_answer(acct, site, prompt, qs, selected_survey)
-
-    def _do_answer(self, acct, site, prompt, questions, survey_name=""):
-        self.log(f"Gemini: {acct['username']} / {len(questions)} Qs / survey='{survey_name}'")
-        st.session_state.generation_in_progress = True
-        progress_bar = st.progress(0)
-        status_text  = st.empty()
-
-        def on_progress(current, total, msg):
-            progress_bar.progress(int(current / total * 100))
-            status_text.text(f"[{current}/{total}] {msg}")
-            self.log(msg)
-
-        enriched_prompt = dict(prompt)
-        enriched_prompt["username"] = acct["username"]
-
-        try:
-            result = generate_answers_with_gemini(
-                questions=questions, prompt=enriched_prompt,
-                account_id=acct["account_id"], site_id=site["site_id"],
-                progress_callback=on_progress,
-            )
-            progress_bar.progress(100)
-            status_text.empty()
-            self.log(f"Done: {result['answers_generated']} saved, {result['failed']} failed")
-
-            if result["success"]:
-                self._upsert_screening_result(
-                    account_id=acct["account_id"], site_id=site["site_id"],
-                    survey_name=survey_name if survey_name != "— All surveys —" else None,
-                    batch_id=result["batch_id"],
-                    screener_answers=result["answers_generated"],
-                    status="pending",
-                )
-
-            st.session_state.generation_results = {
-                "action": "answer_questions",
-                "status": "success" if result["success"] else "failed",
-                "timestamp": datetime.now().isoformat(),
-                "account": {"id": acct["account_id"], "username": acct["username"]},
-                "site":    {"id": site["site_id"],    "name": site["site_name"]},
-                "survey_name":       survey_name,
-                "answers_generated": result["answers_generated"],
-                "answers_failed":    result["failed"],
-                "batch_id":          result["batch_id"],
-                "details":           result["details"],
-                "execution_time_seconds": 0,
-                "error": result.get("error"),
-            }
-        except Exception as exc:
-            progress_bar.empty(); status_text.empty()
-            self.log(str(exc), "ERROR")
-            st.session_state.generation_results = {
-                "action": "answer_questions", "status": "failed", "error": str(exc),
-                "account": {"id": acct["account_id"], "username": acct["username"]},
-                "site":    {"id": site["site_id"],    "name": site["site_name"]},
-                "timestamp": datetime.now().isoformat(),
-            }
-        finally:
-            st.session_state.generation_in_progress = False
-            st.rerun()
-
-    # ======================================================================
-    # TAB 3 — CREATE WORKFLOWS
-    # ======================================================================
-
-    def _tab_create(self, acct, site, prompt):
-        st.subheader("⚙️ Create Automa Workflows")
-
-        ci = {}
-        if site["site_name"] in self.orchestrator.workflow_creators:
-            ci = self.orchestrator.workflow_creators[site["site_name"]].get_site_info()
-
-        urls       = self._get_urls(acct["account_id"], site["site_id"])
-        survey_url = urls[0]["url"] if urls else ""
-
-        survey_names = self._get_survey_names(acct["account_id"], site["site_id"])
-        if not survey_names:
-            st.info("ℹ️ No surveys with unused questions found.  \nRun **Extract Questions** (Tab 1) first.")
-            return
-
-        selected_survey = st.selectbox("📋 Survey:", options=survey_names, key="cr_survey_select")
-        if not selected_survey:
-            return
-
-        qs = self._unused_questions(acct["account_id"], site["site_id"], survey_name=selected_survey)
-
-        st.info(
-            f"**Account:** {acct['username']}  \n**Site:** {site['site_name']}  \n"
-            f"**Survey:** {selected_survey}  \n**Creator:** {ci.get('template_name','Standard')} v{ci.get('version','?')}  \n"
-            f"**Prompt:** {prompt['prompt_name'] if prompt else '— none'}"
-        )
-
-        if not qs:
-            st.warning(f"⚠️ No unused questions for **{selected_survey}**."); return
-
-        st.success(f"✅ {len(qs)} questions available")
-
-        with st.expander("Preview questions"):
-            for q in qs[:8]:
-                st.markdown(f"- {q['question_text'][:90]}… (`{q['question_type']}`)")
-            if len(qs) > 8:
-                st.caption(f"… and {len(qs) - 8} more")
-
-        c1, c2 = st.columns(2)
-        with c1:
-            n_wf = st.number_input("Workflows to create:", 1, min(10, len(qs)), 1, key="cr_n")
-        with st.expander("Advanced"):
-            inc_click = st.checkbox("Include click selectors", True, key="cr_click")
-            inc_input = st.checkbox("Include input selectors", True, key="cr_input")
-
-        if st.button(
-            f"🚀 Create Workflow for '{selected_survey}'",
-            type="primary", use_container_width=True, key="cr_btn",
-            disabled=st.session_state.get("generation_in_progress", False),
-        ):
-            self._do_create(acct, site, prompt, n_wf, qs, survey_url, inc_click, inc_input, selected_survey)
-
-    def _do_create(self, acct, site, prompt, n_wf, qs, survey_url,
-                   inc_click, inc_input, survey_name=None):
-        self.log(f"Creating {n_wf} workflow(s): {acct['username']} / {site['site_name']} / survey='{survey_name}'")
-        st.session_state.generation_in_progress = True
-
-        enriched = dict(prompt) if prompt else {}
-        for f in ("age","gender","city","education_level","job_status","income_range",
-                  "marital_status","has_children","household_size","username","email","phone"):
-            if acct.get(f) is not None:
-                enriched.setdefault(f, acct[f])
-
-        try:
-            result = self.orchestrator.create_workflows(
-                account_id=acct["account_id"], site_id=site["site_id"],
-                questions=qs, prompt=enriched, site_name=site["site_name"],
-                workflow_count=n_wf, survey_url=survey_url,
-                include_click_elements=inc_click, include_input_elements=inc_input,
-            )
-            if result.get("success"):
-                self.log(f"Created {result['workflows_created']} workflow(s)")
-                if survey_name:
-                    self._mark_survey_complete(acct["account_id"], site["site_id"], survey_name)
-                st.session_state.generation_results = {
-                    "action": "create_workflows", "status": "success",
-                    "timestamp": datetime.now().isoformat(),
-                    "account": {"id": acct["account_id"], "username": acct["username"]},
-                    "site":    {"id": site["site_id"],    "name": site["site_name"]},
-                    "survey_name":       survey_name,
-                    "workflows_created": result["workflows_created"],
-                    "workflows":         result["workflows"],
-                    "inserted":          result["inserted"],
-                    "batch_id":          result["batch_id"],
-                    "execution_time_seconds": result.get("execution_time_seconds", 0),
-                }
-            else:
-                self.log(result.get("error", "?"), "ERROR")
-                st.session_state.generation_results = {
-                    "action": "create_workflows", "status": "failed",
-                    "error": result.get("error", "Unknown"),
-                    "account": {"id": acct["account_id"], "username": acct["username"]},
-                    "site":    {"id": site["site_id"],    "name": site["site_name"]},
-                    "survey_name": survey_name, "timestamp": datetime.now().isoformat(),
-                }
-        except Exception as exc:
-            self.log(str(exc), "ERROR")
-            st.session_state.generation_results = {
-                "action": "create_workflows", "status": "failed", "error": str(exc),
-                "account": {"id": acct["account_id"], "username": acct["username"]},
-                "site":    {"id": site["site_id"],    "name": site["site_name"]},
-                "survey_name": survey_name, "timestamp": datetime.now().isoformat(),
-            }
-        finally:
-            st.session_state.generation_in_progress = False
-            st.rerun()
-
-    # ======================================================================
-    # TAB 4 — UPLOAD
-    # ======================================================================
-
-    def _tab_upload(self, acct, site):
-        st.subheader("📤 Upload Workflows to Chrome")
-
-        all_survey_names = self._get_all_survey_names_with_workflows(acct["account_id"], site["site_id"])
-        if not all_survey_names:
-            st.info("No workflows yet.  \nGo to **Create Workflows** (Tab 3) first."); return
-
-        col1, col2 = st.columns(2)
-        with col1:
-            selected_survey = st.selectbox("📋 Survey:", options=all_survey_names, key="ul_survey_select")
-        with col2:
-            st.caption(f"**Account:** {acct['username']}  \n**Site:** {site['site_name']}")
-
-        wfs = self._get_workflows_for_survey(acct["account_id"], site["site_id"], selected_survey)
-        if not wfs:
-            st.warning(f"No workflows found for **{selected_survey}**."); return
-
-        pending  = [w for w in wfs if not w.get("uploaded_to_chrome")]
-        uploaded = [w for w in wfs if w.get("uploaded_to_chrome")]
-        st.success(f"✅ **{len(wfs)}** workflow(s) — {len(pending)} pending, {len(uploaded)} uploaded")
-
-        debug_port = get_debug_port_for_account(st.session_state, acct["account_id"])
-        if debug_port:
-            st.success(f"🟢 Chrome session active on port {debug_port}")
-        else:
-            st.warning("⚪ No active Chrome session.")
-
-        st.markdown("---")
-        wf_options = {}
-        for w in wfs:
-            dt    = w["created_time"].strftime("%Y-%m-%d %H:%M") if w.get("created_time") else "?"
-            badge = " ✅" if w.get("uploaded_to_chrome") else ""
-            wf_options[f"{w['workflow_name']}{badge}  ({dt})"] = w
-
-        sel_wf = wf_options[st.selectbox("Select workflow:", list(wf_options), key="ul_sel")]
-
-        with st.expander("👁️ Preview workflow JSON", expanded=False):
-            d = sel_wf.get("workflow_data")
-            if isinstance(d, str):
-                try:    d = json.loads(d)
-                except: d = {}
-            st.json(d or {})
-
-        d = sel_wf.get("workflow_data")
-        if isinstance(d, str):
-            try:    d = json.loads(d)
-            except: d = {}
-        st.download_button("⬇️ Download workflow JSON", data=json.dumps(d, indent=2),
-                           file_name=f"{sel_wf['workflow_name']}.json",
-                           mime="application/json", key="dl_single")
-
-        st.markdown("---")
-        st.markdown("#### 🚀 Auto-upload to running Chrome session")
-        st.info("Injects the workflow directly into Automa's IndexedDB.")
-
-        if not debug_port:
-            st.button("Upload to Chrome  (start a session first)", disabled=True,
-                      use_container_width=True, key="ul_btn_disabled")
-        else:
-            col_opt1, col_opt2 = st.columns(2)
-            with col_opt1:
-                mark_uploaded = st.checkbox("Mark as uploaded after success", True, key="ul_mark")
-            with col_opt2:
-                auto_open = st.checkbox("Open Automa popup after upload", False, key="ul_open")
-
-            if st.button("📤 Upload to Chrome", type="primary", use_container_width=True,
-                         key="ul_btn",
-                         disabled=st.session_state.get("generation_in_progress", False)):
-                self._do_upload_workflow(sel_wf, debug_port, acct["account_id"],
-                                         mark_uploaded, auto_open)
-
-        if pending and debug_port:
-            st.markdown("---")
-            st.markdown("#### 📦 Bulk upload")
-            n = st.slider(f"Upload latest N pending (of {len(pending)}):",
-                          1, min(10, len(pending)), min(3, len(pending)), key="ul_bulk_n")
-            if st.button(f"📤 Upload {n} pending", use_container_width=True, key="ul_bulk_btn"):
-                self._do_bulk_upload(pending[:n], debug_port, acct["account_id"])
-
-    def _inject_workflow_js(self, workflow_data: dict) -> str:
-        wf_json = json.dumps(workflow_data)
-        return f"""
-(async () => {{
-    const wfData = {wf_json};
-    if (!wfData.id) wfData.id = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
-    wfData.createdAt = wfData.createdAt || Date.now();
-    wfData.updatedAt = Date.now();
-    wfData.isProtected = false;
-    return new Promise((resolve, reject) => {{
-        const req = indexedDB.open('automa-db', 1);
-        req.onsuccess = (event) => {{
-            const db = event.target.result;
-            const storeNames = Array.from(db.objectStoreNames);
-            const storeName  = storeNames.find(n => n.includes('workflow')) || storeNames[0];
-            if (!storeName) {{ reject('No workflow store found'); return; }}
-            const put = db.transaction([storeName], 'readwrite').objectStore(storeName).put(wfData);
-            put.onsuccess = () => resolve('✅ "' + wfData.name + '" uploaded');
-            put.onerror   = (e) => reject('put failed: ' + e.target.error);
-        }};
-        req.onerror          = (e) => reject('open failed: ' + e.target.error);
-        req.onupgradeneeded  = (e) => {{
-            if (!e.target.result.objectStoreNames.contains('user-workflows'))
-                e.target.result.createObjectStore('user-workflows', {{ keyPath: 'id' }});
-        }};
-    }});
-}})()
-"""
-
-    def _get_active_tab_via_cdp(self, debug_port: int) -> Optional[dict]:
-        import requests as _req
-        try:
-            tabs = _req.get(f"http://localhost:{debug_port}/json", timeout=5).json()
-            for tab in tabs:
-                if tab.get("type") == "page" and not tab.get("url","").startswith(("chrome://","devtools://")):
-                    return tab
-            return tabs[0] if tabs else None
-        except Exception as exc:
-            logger.error(f"_get_active_tab_via_cdp: {exc}"); return None
-
-    def _execute_js_in_tab(self, debug_port: int, tab_id: str, js: str) -> dict:
-        import requests as _req, websocket, json as _json
-        try:
-            tabs   = _req.get(f"http://localhost:{debug_port}/json", timeout=5).json()
-            tab    = next((t for t in tabs if t.get("id") == tab_id), None)
-            if not tab:
-                return {"success": False, "error": f"Tab {tab_id} not found"}
-            ws_url = tab.get("webSocketDebuggerUrl")
-            if not ws_url:
-                return {"success": False, "error": "No WebSocket URL"}
-            ws = websocket.create_connection(ws_url, timeout=15)
-            ws.send(_json.dumps({"id":1,"method":"Runtime.evaluate","params":{
-                "expression": js, "awaitPromise": True,
-                "returnByValue": True, "userGesture": True,
-            }}))
-            raw    = ws.recv(); ws.close()
-            result = _json.loads(raw)
-            if "error" in result:
-                return {"success": False, "error": str(result["error"])}
-            rv = result.get("result", {}).get("result", {})
-            if rv.get("subtype") == "error":
-                return {"success": False, "error": rv.get("description","JS error")}
-            return {"success": True, "value": rv.get("value","ok")}
-        except Exception as exc:
-            return {"success": False, "error": str(exc)}
-
-    def _do_upload_workflow(self, workflow, debug_port, account_id,
-                            mark_uploaded=True, auto_open_automa=False):
-        self.log(f"Uploading '{workflow['workflow_name']}' to port {debug_port}")
-        st.session_state.generation_in_progress = True
-        status = st.empty()
-        try:
-            d = workflow.get("workflow_data")
-            if isinstance(d, str):
-                try:    d = json.loads(d)
-                except: d = {}
-            if not d:
-                st.error("❌ Workflow has no data."); return
-
-            status.info("🔍 Connecting to Chrome…")
-            tab = self._get_active_tab_via_cdp(debug_port)
-            if not tab:
-                st.error("❌ Could not reach Chrome."); return
-
-            status.info("📤 Injecting workflow…")
-            result = self._execute_js_in_tab(debug_port, tab["id"], self._inject_workflow_js(d))
-            status.empty()
-
-            if result["success"]:
-                self.log(f"Upload success: {result.get('value','')}")
-                st.success(f"✅ **{workflow['workflow_name']}** uploaded!  \nOpen Automa popup → Execute.")
-                if mark_uploaded:
-                    self._mark_workflow_uploaded(workflow.get("workflow_id"))
-                if auto_open_automa:
-                    self._execute_js_in_tab(debug_port, tab["id"],
-                        "window.open('chrome-extension://infppggnoaenmfagbfknfkancpbljcca/newtab.html','_blank');")
-            else:
-                err = result.get("error","Unknown")
-                self.log(f"Upload failed: {err}", "ERROR")
-                st.error(f"❌ Upload failed: {err}  \n\nUse ⬇️ Download and import manually.")
-        except Exception as exc:
-            status.empty(); self.log(str(exc), "ERROR"); st.error(f"❌ {exc}")
-        finally:
-            st.session_state.generation_in_progress = False
-
-    def _do_bulk_upload(self, workflows, debug_port, account_id):
-        progress = st.progress(0)
-        ok = fail = 0
-        for idx, wf in enumerate(workflows):
-            progress.progress(int((idx+1)/len(workflows)*100))
-            d = wf.get("workflow_data")
-            if isinstance(d, str):
-                try:    d = json.loads(d)
-                except: d = {}
-            if not d:
-                fail += 1; continue
-            tab = self._get_active_tab_via_cdp(debug_port)
-            if not tab:
-                fail += 1; continue
-            result = self._execute_js_in_tab(debug_port, tab["id"], self._inject_workflow_js(d))
-            if result["success"]:
-                ok += 1; self._mark_workflow_uploaded(wf.get("workflow_id"))
-            else:
-                fail += 1; self.log(f"Bulk fail {wf['workflow_name']}: {result.get('error')}", "WARNING")
-        progress.progress(100)
-        if ok:
-            st.success(f"✅ {ok} uploaded." + (f" ❌ {fail} failed." if fail else ""))
-        else:
-            st.error("❌ All uploads failed.")
-
-    def _mark_workflow_uploaded(self, workflow_id: Optional[int]):
-        if not workflow_id: return
+            
+    def _build_persona_instruction(self, prompt: Dict, acct: Dict) -> str:
+        """Build a persona instruction string from prompt and account data"""
+        instruction_parts = []
+        
+        # Add account demographic info
+        if acct.get("age"):
+            instruction_parts.append(f"- Age: {acct['age']}")
+        if acct.get("gender"):
+            instruction_parts.append(f"- Gender: {acct['gender']}")
+        if acct.get("city"):
+            instruction_parts.append(f"- City: {acct['city']}")
+        if acct.get("education_level"):
+            instruction_parts.append(f"- Education: {acct['education_level']}")
+        if acct.get("job_status"):
+            instruction_parts.append(f"- Employment: {acct['job_status']}")
+        if acct.get("income_range"):
+            instruction_parts.append(f"- Income: {acct['income_range']}")
+        if acct.get("marital_status"):
+            instruction_parts.append(f"- Marital Status: {acct['marital_status']}")
+        if acct.get("has_children") is not None:
+            instruction_parts.append(f"- Has Children: {'Yes' if acct['has_children'] else 'No'}")
+        if acct.get("household_size"):
+            instruction_parts.append(f"- Household Size: {acct['household_size']}")
+            
+        # Add custom prompt content
+        if prompt and prompt.get("content"):
+            instruction_parts.append(f"\nAdditional instructions: {prompt['content']}")
+            
+        return "\n".join(instruction_parts) if instruction_parts else "A typical survey participant"
+        
+    def _mark_url_used_by_url(self, site_id: int, url: str):
+        """Mark URL as used by its URL string"""
         try:
             with self._pg() as conn:
                 with conn.cursor() as c:
-                    c.execute("UPDATE workflows SET uploaded_to_chrome=TRUE, uploaded_at=CURRENT_TIMESTAMP WHERE workflow_id=%s", (workflow_id,))
+                    c.execute(
+                        "UPDATE account_urls SET is_used=TRUE, used_at=CURRENT_TIMESTAMP "
+                        "WHERE site_id=%s AND url=%s",
+                        (site_id, url)
+                    )
                     conn.commit()
-        except Exception as exc:
-            logger.error(f"_mark_workflow_uploaded: {exc}")
+        except Exception as e:
+            logger.error(f"_mark_url_used_by_url: {e}")
 
     # ======================================================================
-    # TAB 5 — SCREENING RESULTS
+    # Screening Results Tab
     # ======================================================================
 
     def _tab_screening_results(self, acct, site):
         st.subheader("🏆 Screening Results")
         results = self._load_screening_results(acct["account_id"], site["site_id"])
         if not results:
-            st.info("No screening records yet."); return
+            st.info("No screening records yet.")
+            return
 
         total    = len(results)
         passed   = sum(1 for r in results if r["status"] == "passed")
@@ -1084,70 +513,39 @@ class GenerateManualWorkflowsPage:
     def _render_results(self, r: Dict):
         action = r.get("action", "?")
         titles = {
-            "extract_questions":   "Extract Results",
+            "direct_answering": "AI Survey Answering Results",
+            "extract_questions": "Extract Results",
             "extract_all_surveys": "Extract All Surveys Results",
-            "answer_questions":    "Answer Results (Gemini AI)",
-            "create_workflows":    "Workflow Creation Results",
+            "answer_questions": "Answer Results (Gemini AI)",
+            "create_workflows": "Workflow Creation Results",
         }
         st.subheader(f"✅ {titles.get(action, action)}")
 
         if r.get("status") == "failed":
             st.error(f"❌ {r.get('error', 'Unknown error')}")
-            diag = r.get("diag_events", [])
-            if diag:
-                with st.expander("🔬 Diagnostic log (failure details)", expanded=True):
-                    _render_diag_panel(diag)
             if st.button("Clear", key="clr_fail"):
                 st.session_state.generation_results = None; st.rerun()
             return
 
-        c1,c2,c3,c4 = st.columns(4)
-        with c1:
-            if action in ("extract_questions","extract_all_surveys"):
-                st.metric("Questions extracted", r.get("questions_extracted",0))
-            elif action == "answer_questions":
-                st.metric("✅ Answers saved", r.get("answers_generated",0))
-            elif action == "create_workflows":
-                st.metric("Workflows created", r.get("workflows_created",0))
-        with c2: st.metric("Account", r["account"]["username"])
-        with c3: st.metric("Site",    r["site"]["name"])
-        with c4: st.metric("Time",    f"{r.get('execution_time_seconds',0)}s")
-
-        if r.get("survey_name"):
-            st.info(f"📋 Survey: **{r['survey_name']}**")
-
-        if action == "extract_questions":
-            st.json({"batch_id": r.get("batch_id"), "inserted": r.get("inserted",0),
-                     "survey": r.get("survey_name",""), "url": r.get("url",{}).get("url","")})
-
-        elif action == "extract_all_surveys":
-            c_a,c_b,c_c,c_d,c_e = st.columns(5)
-            c_a.metric("Surveys found",     r.get("surveys_found",0))
-            c_b.metric("✅ Successful",      r.get("surveys_successful",0))
-            c_c.metric("❌ Failed/DQ",       r.get("surveys_failed",0))
-            c_d.metric("Qs inserted",        r.get("inserted",0))
-            c_e.metric("Source",             r.get("discovery_source","?").upper())
-            if r.get("network_api_calls"):
-                st.caption(f"Network API responses captured: {r['network_api_calls']}")
-
-            survey_results = r.get("survey_results",[])
-            if survey_results:
-                with st.expander("📋 Per-survey breakdown", expanded=True):
-                    for sr in survey_results:
-                        icon = {"success":"✅","dq":"❌","error":"⚠️","skip":"⏭️"}.get(sr["status"],"❓")
-                        st.markdown(
-                            f"{icon} **{sr.get('survey_name') or sr.get('survey_label','?')}** — "
-                            f"`{sr['status']}` — {sr.get('questions',0)} Qs, "
-                            f"{sr.get('inserted',0)} inserted — provider: `{sr.get('provider','?')}`"
-                        )
-                        if sr.get("reason"):
-                            st.caption(f"  Reason: {sr['reason']}")
-
-            diag = r.get("diag_events",[])
-            if diag:
-                with st.expander("🔬 Full diagnostic log", expanded=False):
-                    _render_diag_panel(diag)
-
+        if action == "direct_answering":
+            st.success(f"✅ Completed: {r.get('surveys_attempted', 0)} survey(s)")
+            st.json({
+                "account": r["account"]["username"],
+                "site": r["site"]["name"],
+                "start_url": r.get("start_url", ""),
+                "timestamp": r.get("timestamp", ""),
+            })
+            
+        elif action == "extract_questions":
+            c1,c2,c3,c4 = st.columns(4)
+            with c1: st.metric("Questions extracted", r.get("questions_extracted",0))
+            with c2: st.metric("Account", r["account"]["username"])
+            with c3: st.metric("Site",    r["site"]["name"])
+            with c4: st.metric("Time",    f"{r.get('execution_time_seconds',0)}s")
+            if r.get("survey_name"):
+                st.info(f"📋 Survey: **{r['survey_name']}**")
+            st.json({"batch_id": r.get("batch_id"), "inserted": r.get("inserted",0)})
+            
         elif action == "answer_questions":
             answered = r.get("answers_generated",0); failed = r.get("answers_failed",0)
             col_a,col_b,col_c = st.columns(3)
@@ -1156,26 +554,6 @@ class GenerateManualWorkflowsPage:
             with col_c:
                 total = answered + failed
                 st.metric("Success rate", f"{int(answered/total*100) if total else 0}%")
-            if r.get("batch_id"):
-                st.caption(f"Batch: `{r['batch_id']}`")
-            details = r.get("details",[])
-            if details:
-                with st.expander(f"📋 Answer details ({len(details)} questions)", expanded=True):
-                    for d in details:
-                        icon  = "✅" if d["status"] == "success" else "❌"
-                        badge = f"`{d.get('answer','—')}`" if d["status"] == "success" else f"*{d.get('error',d['status'])}*"
-                        st.markdown(f"{icon} **Q:** {d['question_text'][:90]}" + ("…" if len(d['question_text'])>90 else ""))
-                        st.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;→ {badge}")
-                        st.divider()
-
-        elif action == "create_workflows" and "workflows" in r:
-            for i, wf in enumerate(r["workflows"]):
-                with st.expander(f"📋 {wf.get('workflow_name',f'WF {i+1}')}", expanded=(i==0)):
-                    st.caption(f"Questions baked in: {wf.get('batch_size',0)} | Answers embedded: {wf.get('answers_baked',0)}")
-                    d = wf.get("workflow_data",{})
-                    st.download_button("⬇️ Download", data=json.dumps(d,indent=2),
-                                       file_name=f"{wf.get('workflow_name','workflow')}.json",
-                                       mime="application/json", key=f"dl_wf_{i}")
 
         if st.button("Clear results", key="clr_res"):
             st.session_state.generation_results = None; st.rerun()
@@ -1195,67 +573,6 @@ class GenerateManualWorkflowsPage:
                     return [dict(r) for r in c.fetchall()]
         except Exception as e:
             logger.error(f"_get_urls: {e}"); return []
-
-    def _mark_url_used(self, url_id):
-        try:
-            with self._pg() as conn:
-                with conn.cursor() as c:
-                    c.execute("UPDATE account_urls SET is_used=TRUE,used_at=CURRENT_TIMESTAMP WHERE url_id=%s",(url_id,)); conn.commit()
-        except Exception as e:
-            logger.error(f"_mark_url_used: {e}")
-
-    def _get_survey_names(self, account_id: int, site_id: int) -> List[str]:
-        try:
-            with self._pg() as conn:
-                with conn.cursor() as c:
-                    c.execute("SELECT DISTINCT survey_name FROM questions WHERE account_id=%s AND survey_site_id=%s AND (used_in_workflow IS NULL OR used_in_workflow=FALSE) AND is_active=TRUE AND survey_name IS NOT NULL ORDER BY survey_name",(account_id,site_id))
-                    return [row[0] for row in c.fetchall()]
-        except Exception as e:
-            logger.error(f"_get_survey_names: {e}"); return []
-
-    def _get_all_survey_names_with_workflows(self, account_id: int, site_id: int) -> List[str]:
-        try:
-            with self._pg() as conn:
-                with conn.cursor() as c:
-                    c.execute("SELECT DISTINCT q.survey_name FROM workflows w JOIN questions q ON w.question_id=q.question_id WHERE w.account_id=%s AND w.site_id=%s AND w.is_active=TRUE AND q.survey_name IS NOT NULL ORDER BY q.survey_name",(account_id,site_id))
-                    rows = [row[0] for row in c.fetchall()]
-                    if rows: return rows
-                    c.execute("SELECT DISTINCT workflow_name FROM workflows WHERE account_id=%s AND site_id=%s AND is_active=TRUE ORDER BY workflow_name",(account_id,site_id))
-                    return [row[0] for row in c.fetchall()]
-        except Exception as e:
-            logger.error(f"_get_all_survey_names_with_workflows: {e}"); return []
-
-    def _unused_questions(self, account_id: int, site_id: int, survey_name: Optional[str]=None) -> List[Dict]:
-        try:
-            with self._pg() as conn:
-                with conn.cursor(cursor_factory=RealDictCursor) as c:
-                    if survey_name:
-                        c.execute("SELECT question_id,question_text,question_type,click_element,options,required,question_category,input_element,submit_element,survey_name FROM questions WHERE account_id=%s AND survey_site_id=%s AND (used_in_workflow IS NULL OR used_in_workflow=FALSE) AND is_active=TRUE AND survey_name=%s ORDER BY order_index, extracted_at DESC",(account_id,site_id,survey_name))
-                    else:
-                        c.execute("SELECT question_id,question_text,question_type,click_element,options,required,question_category,input_element,submit_element,survey_name FROM questions WHERE account_id=%s AND survey_site_id=%s AND (used_in_workflow IS NULL OR used_in_workflow=FALSE) AND is_active=TRUE ORDER BY survey_name, order_index, extracted_at DESC",(account_id,site_id))
-                    return [dict(r) for r in c.fetchall()]
-        except Exception as e:
-            logger.error(f"_unused_questions: {e}"); return []
-
-    def _mark_survey_complete(self, account_id: int, site_id: int, survey_name: str):
-        try:
-            with self._pg() as conn:
-                with conn.cursor() as c:
-                    c.execute("UPDATE questions SET survey_complete=TRUE, survey_completed_at=CURRENT_TIMESTAMP WHERE account_id=%s AND survey_site_id=%s AND survey_name=%s",(account_id,site_id,survey_name)); conn.commit()
-        except Exception as e:
-            logger.error(f"_mark_survey_complete: {e}")
-
-    def _get_workflows_for_survey(self, account_id: int, site_id: int, survey_name: str) -> List[Dict]:
-        try:
-            with self._pg() as conn:
-                with conn.cursor(cursor_factory=RealDictCursor) as c:
-                    c.execute("SELECT w.workflow_id,w.workflow_name,w.workflow_data,w.created_time,w.question_id,w.uploaded_to_chrome FROM workflows w LEFT JOIN questions q ON w.question_id=q.question_id WHERE w.account_id=%s AND w.site_id=%s AND w.is_active=TRUE AND (q.survey_name=%s OR w.workflow_name ILIKE %s) ORDER BY w.created_time DESC",(account_id,site_id,survey_name,f"%{survey_name}%"))
-                    rows = [dict(r) for r in c.fetchall()]
-                    if rows: return rows
-                    c.execute("SELECT workflow_id,workflow_name,workflow_data,created_time,question_id,uploaded_to_chrome FROM workflows WHERE account_id=%s AND site_id=%s AND is_active=TRUE ORDER BY created_time DESC",(account_id,site_id))
-                    return [dict(r) for r in c.fetchall()]
-        except Exception as e:
-            logger.error(f"_get_workflows_for_survey: {e}"); return []
 
     def _upsert_screening_result(self, account_id, site_id, survey_name, batch_id, screener_answers, status="pending"):
         try:

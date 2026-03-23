@@ -46,3 +46,10 @@ alembic>=1.13.0
 # Gemini AI (official SDK — used for answering survey questions)
 google-generativeai>=0.7.0
 websocket-client>=1.6.0
+
+# Browser automation with AI - browser-use open source
+browser-use>=0.1.0
+
+# LLM providers for browser-use
+openai>=1.0.0
+anthropic>=0.18.0
