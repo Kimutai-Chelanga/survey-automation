@@ -71,14 +71,14 @@ class AnswersPage:
                     """
                     params = []
 
-                    if question_id:    query += " AND a.question_id = %s";           params.append(question_id)
-                    if account_id:     query += " AND a.account_id = %s";            params.append(account_id)
-                    if survey_site_id: query += " AND q.survey_site_id = %s";        params.append(survey_site_id)
-                    if survey_name:    query += " AND q.survey_name = %s";           params.append(survey_name)
-                    if start_date:     query += " AND a.submitted_at >= %s";         params.append(start_date)
-                    if end_date:       query += " AND a.submitted_at <= %s";         params.append(end_date)
-                    if batch_id:       query += " AND a.submission_batch_id = %s";   params.append(batch_id)
-                    if workflow_id:    query += " AND a.workflow_id = %s";           params.append(workflow_id)
+                    if question_id:    query += " AND a.question_id = %s";         params.append(question_id)
+                    if account_id:     query += " AND a.account_id = %s";          params.append(account_id)
+                    if survey_site_id: query += " AND q.survey_site_id = %s";      params.append(survey_site_id)
+                    if survey_name:    query += " AND q.survey_name = %s";         params.append(survey_name)
+                    if start_date:     query += " AND a.submitted_at >= %s";       params.append(start_date)
+                    if end_date:       query += " AND a.submitted_at <= %s";       params.append(end_date)
+                    if batch_id:       query += " AND a.submission_batch_id = %s"; params.append(batch_id)
+                    if workflow_id:    query += " AND a.workflow_id = %s";         params.append(workflow_id)
 
                     query += " ORDER BY a.submitted_at DESC LIMIT %s"
                     params.append(limit)
@@ -96,21 +96,72 @@ class AnswersPage:
             st.error(f"Database error: {e}")
             return []
 
-    def get_distinct_survey_names(self) -> List[str]:
+    def get_distinct_survey_names(
+        self,
+        survey_site_id: Optional[int] = None,
+    ) -> List[str]:
         """All distinct survey_name values from questions that have answers."""
         try:
             with get_postgres_connection() as conn:
                 with conn.cursor() as cursor:
-                    cursor.execute("""
+                    query = """
                         SELECT DISTINCT q.survey_name
                         FROM answers a
                         JOIN questions q ON a.question_id = q.question_id
                         WHERE q.survey_name IS NOT NULL
-                        ORDER BY q.survey_name
-                    """)
+                    """
+                    params = []
+                    if survey_site_id:
+                        query += " AND q.survey_site_id = %s"; params.append(survey_site_id)
+                    query += " ORDER BY q.survey_name"
+                    cursor.execute(query, params)
                     return [row[0] for row in cursor.fetchall()]
         except Exception as e:
             logger.error(f"get_distinct_survey_names: {e}")
+            return []
+
+    def get_survey_counts(
+        self,
+        survey_site_id: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Per-survey question and answer counts, for the summary metrics strip.
+        Only includes surveys that have at least one answer.
+        """
+        try:
+            with get_postgres_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    query = """
+                        SELECT
+                            q.survey_name,
+                            ss.site_name,
+                            COUNT(DISTINCT q.question_id)   AS total_questions,
+                            COUNT(DISTINCT a.answer_id)     AS total_answers,
+                            BOOL_AND(q.survey_complete)     AS all_complete
+                        FROM questions q
+                        LEFT JOIN survey_sites ss ON q.survey_site_id = ss.site_id
+                        LEFT JOIN answers       a  ON q.question_id   = a.question_id
+                        WHERE q.survey_name IS NOT NULL
+                          AND a.answer_id IS NOT NULL
+                    """
+                    params = []
+                    if survey_site_id:
+                        query += " AND q.survey_site_id = %s"; params.append(survey_site_id)
+                    query += " GROUP BY q.survey_name, ss.site_name ORDER BY ss.site_name, q.survey_name"
+                    cursor.execute(query, params)
+                    return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"get_survey_counts: {e}")
+            return []
+
+    def get_all_sites(self) -> List[Dict[str, Any]]:
+        try:
+            with get_postgres_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    cursor.execute("SELECT site_id, site_name FROM survey_sites ORDER BY site_name")
+                    return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"get_all_sites: {e}")
             return []
 
     def get_answer_statistics(self, question_id: int) -> Dict[str, Any]:
@@ -187,11 +238,10 @@ class AnswersPage:
                             FROM answers WHERE question_id=%s
                         """, (question_id,))
                         agg = cursor.fetchone()
-                        stats['total_answers']    = agg['total']           if agg else 0
-                        stats['unique_responses'] = agg['unique_responses']if agg else 0
+                        stats['total_answers']    = agg['total']            if agg else 0
+                        stats['unique_responses'] = agg['unique_responses'] if agg else 0
                         stats['avg_length']       = float(agg['avg_length']) if agg and agg['avg_length'] else 0
 
-                    # Time series
                     cursor.execute("""
                         SELECT DATE(submitted_at) AS date, COUNT(*) AS count
                         FROM answers WHERE question_id=%s
@@ -213,11 +263,11 @@ class AnswersPage:
                             ss.site_id,
                             ss.site_name             AS survey_site,
                             q.survey_name,
-                            COUNT(DISTINCT q.question_id)      AS total_questions,
-                            COUNT(DISTINCT a.answer_id)        AS total_answers,
-                            COUNT(DISTINCT a.account_id)       AS unique_respondents,
-                            MIN(a.submitted_at)                AS first_response,
-                            MAX(a.submitted_at)                AS latest_response,
+                            COUNT(DISTINCT q.question_id)         AS total_questions,
+                            COUNT(DISTINCT a.answer_id)           AS total_answers,
+                            COUNT(DISTINCT a.account_id)          AS unique_respondents,
+                            MIN(a.submitted_at)                   AS first_response,
+                            MAX(a.submitted_at)                   AS latest_response,
                             COUNT(DISTINCT a.submission_batch_id) AS submission_batches
                         FROM survey_sites ss
                         LEFT JOIN questions q ON ss.site_id = q.survey_site_id
@@ -227,7 +277,6 @@ class AnswersPage:
                     if survey_site_id:
                         query += " WHERE ss.site_id = %s"; params.append(survey_site_id)
                     query += " GROUP BY ss.site_id, ss.site_name, q.survey_name ORDER BY ss.site_name, q.survey_name"
-
                     cursor.execute(query, params)
                     return pd.DataFrame([dict(row) for row in cursor.fetchall()])
         except Exception as e:
@@ -240,13 +289,13 @@ class AnswersPage:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
                     cursor.execute("""
                         SELECT
-                            COUNT(DISTINCT a.question_id)          AS questions_answered,
-                            COUNT(a.answer_id)                     AS total_responses,
-                            COUNT(DISTINCT q.survey_site_id)       AS sites_participated,
-                            COUNT(DISTINCT q.survey_name)          AS surveys_answered,
-                            MIN(a.submitted_at)                    AS first_response,
-                            MAX(a.submitted_at)                    AS latest_response,
-                            COUNT(DISTINCT a.submission_batch_id)  AS batches
+                            COUNT(DISTINCT a.question_id)         AS questions_answered,
+                            COUNT(a.answer_id)                    AS total_responses,
+                            COUNT(DISTINCT q.survey_site_id)      AS sites_participated,
+                            COUNT(DISTINCT q.survey_name)         AS surveys_answered,
+                            MIN(a.submitted_at)                   AS first_response,
+                            MAX(a.submitted_at)                   AS latest_response,
+                            COUNT(DISTINCT a.submission_batch_id) AS batches
                         FROM answers a
                         LEFT JOIN questions q ON a.question_id = q.question_id
                         WHERE a.account_id = %s
@@ -271,7 +320,6 @@ class AnswersPage:
             return {'success': False, 'error': str(e)}
 
     def delete_answers_by_survey(self, survey_name: str) -> Dict[str, Any]:
-        """Delete all answers for a specific survey name."""
         try:
             with get_postgres_connection() as conn:
                 with conn.cursor() as cursor:
@@ -356,58 +404,51 @@ class AnswersPage:
     def _render_answers_list(self, accounts):
         st.subheader("📋 All Answers")
 
-        col1, col2, col3, col4, col5 = st.columns(5)
+        # ── Two filters only: Site and Survey Name ────────────────────
+        all_sites = self.get_all_sites()
+        site_opts = {s['site_name']: s['site_id'] for s in all_sites}
 
+        col1, col2 = st.columns(2)
         with col1:
-            account_options = ["All Accounts"] + [f"{a['username']} (ID: {a['account_id']})" for a in accounts]
-            selected_account = st.selectbox("Account:", account_options, key="ans_filter_account")
-
+            site_filter = st.selectbox("🌐 Site:", ["All"] + list(site_opts.keys()), key="ans_filter_site")
         with col2:
-            survey_names = self.get_distinct_survey_names()
-            selected_survey = st.selectbox("Survey:", ["All"] + survey_names, key="ans_filter_survey")
+            site_id_filter = site_opts.get(site_filter) if site_filter != "All" else None
+            survey_names   = self.get_distinct_survey_names(survey_site_id=site_id_filter)
+            survey_filter  = st.selectbox("📋 Survey Name:", ["All"] + survey_names, key="ans_filter_survey")
 
-        with col3:
-            date_range = st.date_input(
-                "Date Range:",
-                value=(datetime.now() - timedelta(days=30), datetime.now()),
-                key="ans_filter_date",
-            )
+        # ── Survey count summary metrics ──────────────────────────────
+        survey_counts    = self.get_survey_counts(survey_site_id=site_id_filter)
+        total_surveys    = len(survey_counts)
+        complete_surveys = sum(1 for s in survey_counts if s.get('all_complete'))
+        total_answers    = sum(s['total_answers'] for s in survey_counts)
 
-        with col4:
-            batch_id = st.text_input("Batch ID:", placeholder="Filter by batch…")
+        mc1, mc2, mc3 = st.columns(3)
+        mc1.metric("Surveys with Answers", total_surveys)
+        mc2.metric("✅ Completed",          complete_surveys)
+        mc3.metric("Total Answers",         total_answers)
 
-        with col5:
-            limit = st.number_input("Max Results:", min_value=10, max_value=5000, value=500, step=100)
+        # Per-survey detail strip when a specific survey is selected
+        if survey_filter != "All":
+            match = next((s for s in survey_counts if s['survey_name'] == survey_filter), None)
+            if match:
+                sc1, sc2, sc3 = st.columns(3)
+                sc1.metric("Questions", match['total_questions'])
+                sc2.metric("Answers",   match['total_answers'])
+                sc3.metric("Complete",  "🏁 Yes" if match.get('all_complete') else "⏳ No")
 
-        account_id = None
-        if selected_account != "All Accounts":
-            account_id = int(selected_account.split("ID: ")[1].rstrip(")"))
-
-        start_date = end_date = None
-        if len(date_range) == 2:
-            start_date = datetime.combine(date_range[0], datetime.min.time())
-            end_date   = datetime.combine(date_range[1], datetime.max.time())
+        st.markdown("---")
 
         answers = self.get_answers(
-            account_id  = account_id,
-            survey_name = selected_survey if selected_survey != "All" else None,
-            start_date  = start_date,
-            end_date    = end_date,
-            batch_id    = batch_id if batch_id else None,
-            limit       = int(limit),
+            survey_site_id=site_id_filter,
+            survey_name=survey_filter if survey_filter != "All" else None,
+            limit=1000,
         )
 
         if not answers:
             st.info("No answers found matching the filters.")
             return
 
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Total Answers",       len(answers))
-        c2.metric("Unique Questions",    len(set(a['question_id'] for a in answers if a['question_id'])))
-        c3.metric("Unique Surveys",      len(set(a['survey_name'] for a in answers if a.get('survey_name'))))
-        c4.metric("Submission Batches",  len(set(a['submission_batch_id'] for a in answers if a['submission_batch_id'])))
-
-        st.divider()
+        st.caption(f"Showing {len(answers)} answer(s)")
 
         df = pd.DataFrame([{
             'Answer ID':    a['answer_id'],
@@ -478,10 +519,17 @@ class AnswersPage:
     def _render_question_analytics(self):
         st.subheader("📊 Question Analytics")
 
-        survey_names = self.get_distinct_survey_names()
-        survey_filter = st.selectbox(
-            "Filter by survey:", ["All"] + survey_names, key="qa_survey_filter"
-        )
+        # ── Two filters only ──────────────────────────────────────────
+        all_sites = self.get_all_sites()
+        site_opts = {s['site_name']: s['site_id'] for s in all_sites}
+
+        col1, col2 = st.columns(2)
+        with col1:
+            site_filter   = st.selectbox("🌐 Site:", ["All"] + list(site_opts.keys()), key="qa_site_filter")
+        with col2:
+            site_id_filter = site_opts.get(site_filter) if site_filter != "All" else None
+            survey_names   = self.get_distinct_survey_names(survey_site_id=site_id_filter)
+            survey_filter  = st.selectbox("📋 Survey Name:", ["All"] + survey_names, key="qa_survey_filter")
 
         try:
             with get_postgres_connection() as conn:
@@ -500,6 +548,8 @@ class AnswersPage:
                         WHERE 1=1
                     """
                     params = []
+                    if site_id_filter:
+                        query += " AND q.survey_site_id = %s"; params.append(site_id_filter)
                     if survey_filter != "All":
                         query += " AND q.survey_name = %s"; params.append(survey_filter)
                     query += " GROUP BY q.question_id, q.question_text, q.question_type, q.survey_name, ss.site_name ORDER BY answer_count DESC LIMIT 100"
@@ -555,7 +605,6 @@ class AnswersPage:
                 fig = px.line(ts_df, x='date', y='count', title="Responses Over Time")
                 st.plotly_chart(fig, use_container_width=True)
 
-        # Raw answers
         st.divider()
         answers = self.get_answers(question_id=question_id, limit=100)
         if answers:
@@ -577,7 +626,13 @@ class AnswersPage:
     def _render_survey_summary(self):
         st.subheader("📈 Survey Summary")
 
-        summary_df = self.get_survey_summary()
+        # ── Two filters only ──────────────────────────────────────────
+        all_sites  = self.get_all_sites()
+        site_opts  = {s['site_name']: s['site_id'] for s in all_sites}
+        site_filter = st.selectbox("🌐 Site:", ["All"] + list(site_opts.keys()), key="ss_site_filter")
+        site_id_filter = site_opts.get(site_filter) if site_filter != "All" else None
+
+        summary_df = self.get_survey_summary(survey_site_id=site_id_filter)
         if summary_df.empty:
             st.info("No survey data available yet."); return
 
@@ -609,23 +664,31 @@ class AnswersPage:
 
     def _render_by_survey_name(self):
         st.subheader("🗂️ Answers by Survey Name")
-        st.caption("Drill into a specific survey to see all answers and manage them.")
 
-        survey_names = self.get_distinct_survey_names()
-        if not survey_names:
-            st.info("No survey names with answers yet."); return
+        # ── Two filters only ──────────────────────────────────────────
+        all_sites  = self.get_all_sites()
+        site_opts  = {s['site_name']: s['site_id'] for s in all_sites}
 
-        selected = st.selectbox("Select Survey:", survey_names, key="by_survey_name_select")
+        col1, col2 = st.columns(2)
+        with col1:
+            site_filter    = st.selectbox("🌐 Site:", ["All"] + list(site_opts.keys()), key="bsn_site_filter")
+        with col2:
+            site_id_filter = site_opts.get(site_filter) if site_filter != "All" else None
+            survey_names   = self.get_distinct_survey_names(survey_site_id=site_id_filter)
+            if not survey_names:
+                st.info("No survey names with answers yet."); return
+            selected = st.selectbox("📋 Survey Name:", survey_names, key="by_survey_name_select")
+
         if not selected: return
 
-        answers = self.get_answers(survey_name=selected, limit=500)
+        answers = self.get_answers(survey_name=selected, survey_site_id=site_id_filter, limit=500)
         if not answers:
             st.info(f"No answers found for survey **{selected}**."); return
 
         c1, c2, c3 = st.columns(3)
-        c1.metric("Total Answers",   len(answers))
-        c2.metric("Questions",       len(set(a['question_id'] for a in answers)))
-        c3.metric("Accounts",        len(set(a['account_id']  for a in answers if a.get('account_id'))))
+        c1.metric("Total Answers", len(answers))
+        c2.metric("Questions",     len(set(a['question_id'] for a in answers)))
+        c3.metric("Accounts",      len(set(a['account_id']  for a in answers if a.get('account_id'))))
 
         df = pd.DataFrame([{
             'Answer ID': a['answer_id'],
@@ -687,7 +750,6 @@ class AnswersPage:
             if survey_names:
                 sel_survey = st.selectbox("Survey:", survey_names, key="bulk_del_survey")
                 if sel_survey:
-                    survey_answers = self.get_answers(survey_name=sel_survey, limit=1)
                     st.info(f"This will delete all answers for survey **{sel_survey}**.")
                     if st.button(f"🗑️ Delete all answers for '{sel_survey}'", key="bulk_del_survey_btn", type="primary"):
                         r = self.delete_answers_by_survey(sel_survey)
@@ -733,15 +795,21 @@ class AnswersPage:
                 st.info("No submission batches found.")
 
         with st.expander("📥 Export All Answers", expanded=False):
+            all_sites  = self.get_all_sites()
+            site_opts  = {s['site_name']: s['site_id'] for s in all_sites}
             col1, col2 = st.columns(2)
             with col1:
-                survey_filter = st.selectbox("Filter by survey:", ["All"] + self.get_distinct_survey_names(), key="export_survey")
-                export_limit  = st.number_input("Max rows:", min_value=100, max_value=10000, value=1000, step=100)
+                export_site   = st.selectbox("Site:", ["All"] + list(site_opts.keys()), key="export_site")
+                export_site_id = site_opts.get(export_site) if export_site != "All" else None
+                export_surveys = self.get_distinct_survey_names(survey_site_id=export_site_id)
+                export_survey  = st.selectbox("Survey:", ["All"] + export_surveys, key="export_survey")
+                export_limit   = st.number_input("Max rows:", min_value=100, max_value=10000, value=1000, step=100)
             with col2:
                 if st.button("📥 Generate Export", use_container_width=True):
                     with st.spinner("Loading…"):
                         answers = self.get_answers(
-                            survey_name=survey_filter if survey_filter != "All" else None,
+                            survey_site_id=export_site_id,
+                            survey_name=export_survey if export_survey != "All" else None,
                             limit=int(export_limit),
                         )
                         if answers:

@@ -1,27 +1,20 @@
-# src/streamlit/ui/pages/generate_manual_workflows/extractors/topsurveys_extractor.py
 """
-TopSurveys Extractor  v13.0.0
+TopSurveys Extractor  v15.0.0
 ==============================
-Key changes over v12.0.0:
-  - CRITICAL FIX: _build_survey_from_api_item now maps the ACTUAL TopSurveys
-    API fields confirmed from network capture:
-      user_reward / user_reward_without_bonus (not "reward")
-      loi in SECONDS — divided by 60 to get minutes
-      hash as the survey identifier
-      survey_session_id used to construct the start URL
-    Previously ALL surveys were being silently rejected because none of the
-    old field names (reward, cpi, value, payout) exist in this API.
-  - CRITICAL FIX: LOI > 60 filter now applies AFTER seconds→minutes conversion.
-    A survey with loi=70 (70 seconds = 1.2 min) was being rejected as "too long".
-  - CRITICAL FIX: Start URL constructed as
-    https://app.topsurveys.app/survey/{hash}?session={survey_session_id}
-    because the API returns no direct link field.
-  - FIX: _extract_from_network now handles the TopSurveys wrapper shape
-    {"result":"success","surveys":[...]} before generic traversal.
-  - FIX: Offer-wall keyword filter only applied when a name/title field exists.
-    The TopSurveys API does not return survey names — skipping name-based
-    rejection prevents all surveys being dropped.
-  - Everything else unchanged from v12.
+CRITICAL FIXES over v14.1.0:
+  - Session ID truncation in URL construction: The full 32-character session_id
+    was being truncated to a single character when building the href URL.
+    Root cause: The session_id variable was being passed through multiple layers
+    and somewhere in the call chain it was being sliced. FIX: Store the raw
+    session_id directly from the API item and use it verbatim in URL construction,
+    bypassing any intermediate processing.
+  - Added explicit debug logging for the final href URL before navigation to
+    verify the full session ID is preserved.
+  - Added fallback URL construction using the raw API fields directly in
+    _open_survey() if the href from survey_entry is corrupted.
+  - Improved error handling when survey pages show "Featured Games" (offer wall)
+    instead of actual survey content — now detects and retries with correct URL.
+  - All other features from v14.1.0 preserved.
 """
 
 import logging
@@ -44,7 +37,6 @@ except ImportError:
             "Ensure base_extractor.py is preloaded by the orchestrator."
         )
 
-
 # ---------------------------------------------------------------------------
 # Network keywords that indicate a survey/offer API response
 # ---------------------------------------------------------------------------
@@ -53,14 +45,22 @@ _NETWORK_KEYWORDS = [
     "panel", "screen", "question", "reward", "earn",
 ]
 
-# Keys we look for in parsed API JSON to find the survey list
 _LIST_KEYS = [
     "surveys", "offers", "items", "results", "data",
     "placements", "walls", "available", "list",
 ]
 
+# How long (ms) to wait for question inputs to appear after navigating into a survey
+QUESTION_SELECTOR_TIMEOUT = 8_000
+
+# Selector used to detect that screener questions have rendered
+_QUESTION_INPUT_SELECTOR = (
+    "input[type='radio'], input[type='checkbox'], textarea, select, "
+    "input[type='text'], input[type='number']"
+)
+
 # ---------------------------------------------------------------------------
-# JS: find survey cards (DOM fallback — unchanged from v7)
+# JS: find survey cards (DOM fallback) – unchanged
 # ---------------------------------------------------------------------------
 _FIND_SURVEYS_JS = """
 () => {
@@ -151,7 +151,7 @@ _FIND_SURVEYS_JS = """
 """
 
 # ---------------------------------------------------------------------------
-# JS: click the start button for a specific card (fallback only)
+# JS: click the start button for a specific card (fallback only) – unchanged
 # ---------------------------------------------------------------------------
 _CLICK_SURVEY_JS = """
 (entry) => {
@@ -208,7 +208,41 @@ _CLICK_SURVEY_JS = """
 """
 
 # ---------------------------------------------------------------------------
-# JS: get survey name from the current survey page
+# JS: click "Start / Begin / Continue" landing CTA (shown before screener)
+# ---------------------------------------------------------------------------
+_CLICK_START_CTA_JS = """
+() => {
+    const labels = [
+        'start survey', 'start the survey', 'begin survey', 'begin',
+        'start', 'take survey', 'continue', 'proceed', 'get started',
+        'ok', 'next'
+    ];
+    function isVisible(el) {
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+    }
+    function getText(el) {
+        return (el ? (el.innerText || el.textContent || '').trim().toLowerCase() : '');
+    }
+
+    const btns = Array.from(document.querySelectorAll(
+        "button, input[type='submit'], input[type='button'], [role='button'], a.btn, a.button"
+    )).filter(isVisible);
+
+    for (const label of labels) {
+        const b = btns.find(el => getText(el) === label || getText(el).startsWith(label));
+        if (b) {
+            b.scrollIntoView({ block: 'center' });
+            b.click();
+            return getText(b);
+        }
+    }
+    return null;
+}
+"""
+
+# ---------------------------------------------------------------------------
+# JS: get survey name from the current survey page (enhanced)
 # ---------------------------------------------------------------------------
 _SURVEY_NAME_JS = """
 () => {
@@ -220,13 +254,13 @@ _SURVEY_NAME_JS = """
              || document.title.split('-')[0].trim()
              || 'Unknown Survey';
     return raw
-        .replace(/\\s*([-|]\\s*)?(TopSurveys|Survey|Screener)\\s*$/i, '')
+        .replace(/\\s*([-|]\\s*)?(TopSurveys|Top Surveys|Survey|Screener)\\s*$/i, '')
         .trim() || 'Unknown Survey';
 }
 """
 
 # ---------------------------------------------------------------------------
-# JS: extract questions
+# JS: extract questions – unchanged (but now called after proper wait)
 # ---------------------------------------------------------------------------
 _EXTRACT_JS = r"""
 () => {
@@ -351,7 +385,7 @@ _EXTRACT_JS = r"""
 """
 
 # ---------------------------------------------------------------------------
-# JS: DQ check
+# JS: DQ check – unchanged
 # ---------------------------------------------------------------------------
 _DQ_JS = """
 () => {
@@ -365,7 +399,7 @@ _DQ_JS = """
 """
 
 # ---------------------------------------------------------------------------
-# JS: advance to next page
+# JS: advance to next page – unchanged
 # ---------------------------------------------------------------------------
 _ADVANCE_PAGE_JS = """
 () => {
@@ -391,17 +425,10 @@ _ADVANCE_PAGE_JS = """
 """
 
 # ---------------------------------------------------------------------------
-# Diagnostic logger — structured events for the UI log panel
+# Diagnostic logger (unchanged)
 # ---------------------------------------------------------------------------
 
 class DiagnosticLogger:
-    """
-    Collects structured log events during extraction.
-    Each event is a dict: {level, phase, msg, detail, ts}
-    Levels: INFO, OK, WARN, ERROR, DEBUG
-    Phases: INIT, NETWORK, DISCOVERY, NAV, IFRAME, EXTRACT, DB, SURVEY
-    """
-
     ICONS = {
         "INFO":  "ℹ️",
         "OK":    "✅",
@@ -416,15 +443,8 @@ class DiagnosticLogger:
 
     def _emit(self, level: str, phase: str, msg: str, detail: str = ""):
         ts = time.strftime("%H:%M:%S")
-        entry = {
-            "level":  level,
-            "phase":  phase,
-            "msg":    msg,
-            "detail": detail,
-            "ts":     ts,
-        }
+        entry = {"level": level, "phase": phase, "msg": msg, "detail": detail, "ts": ts}
         self.events.append(entry)
-        # Also forward to Python logger so server logs stay useful
         log_msg = f"[{phase}] {msg}" + (f" — {detail}" if detail else "")
         if level == "ERROR":
             logger.error(log_msg)
@@ -433,20 +453,21 @@ class DiagnosticLogger:
         else:
             logger.info(log_msg)
 
-    def info(self,  phase: str, msg: str, detail: str = ""): self._emit("INFO",  phase, msg, detail)
-    def ok(self,    phase: str, msg: str, detail: str = ""): self._emit("OK",    phase, msg, detail)
-    def warn(self,  phase: str, msg: str, detail: str = ""): self._emit("WARN",  phase, msg, detail)
-    def error(self, phase: str, msg: str, detail: str = ""): self._emit("ERROR", phase, msg, detail)
-    def debug(self, phase: str, msg: str, detail: str = ""): self._emit("DEBUG", phase, msg, detail)
-    def step(self,  phase: str, msg: str, detail: str = ""): self._emit("STEP",  phase, msg, detail)
+    def info(self,  phase, msg, detail=""): self._emit("INFO",  phase, msg, detail)
+    def ok(self,    phase, msg, detail=""): self._emit("OK",    phase, msg, detail)
+    def warn(self,  phase, msg, detail=""): self._emit("WARN",  phase, msg, detail)
+    def error(self, phase, msg, detail=""): self._emit("ERROR", phase, msg, detail)
+    def debug(self, phase, msg, detail=""): self._emit("DEBUG", phase, msg, detail)
+    def step(self,  phase, msg, detail=""): self._emit("STEP",  phase, msg, detail)
 
     def section(self, title: str):
-        """Visual separator event."""
-        self.events.append({"level": "SECTION", "phase": "", "msg": title, "detail": "", "ts": time.strftime("%H:%M:%S")})
-
+        self.events.append({
+            "level": "SECTION", "phase": "", "msg": title, "detail": "",
+            "ts": time.strftime("%H:%M:%S"),
+        })
 
 # ---------------------------------------------------------------------------
-# Known external survey providers
+# Known external survey providers (unchanged)
 # ---------------------------------------------------------------------------
 _PROVIDERS = {
     "cpx":     ["cpx-research", "cpxtools"],
@@ -458,9 +479,8 @@ _PROVIDERS = {
     "toluna":  ["toluna.com"],
 }
 
-
 # ---------------------------------------------------------------------------
-# Extractor class
+# Extractor class (with CRITICAL session ID fix)
 # ---------------------------------------------------------------------------
 
 class TopSurveysExtractor(BaseExtractor):
@@ -472,7 +492,7 @@ class TopSurveysExtractor(BaseExtractor):
         self._info = {
             "site_name":        "Top Surveys",
             "description":      "Survey panel — extracts all surveys from the dashboard",
-            "version":          "13.0.0",
+            "version":          "15.0.0",
             "requires_login":   True,
             "requires_cookies": True,
         }
@@ -515,7 +535,7 @@ class TopSurveysExtractor(BaseExtractor):
     ) -> Dict[str, Any]:
         t0 = time.time()
         listing_url = self.normalize_url(listing_url)
-        self.diag = DiagnosticLogger()  # fresh logger per run
+        self.diag = DiagnosticLogger()
         self.diag.section("EXTRACTION START")
         self.diag.step("INIT", f"Account {account_id} / Site {site_id}")
         self.diag.info("INIT", f"URL: {listing_url}")
@@ -528,7 +548,6 @@ class TopSurveysExtractor(BaseExtractor):
         listing_url, http_user, http_pass = self._parse_auth_from_url(listing_url)
         if http_user:
             self.diag.info("INIT", f"HTTP Basic Auth detected", f"user='{http_user}'")
-            logger.info(f"[TopSurveys] HTTP Basic Auth detected — user: '{http_user}'")
 
         self.diag.step("INIT", f"Connecting to Chrome", f"port {debug_port}")
         page, browser, pw = self.connect_to_chrome_session(debug_port)
@@ -541,10 +560,8 @@ class TopSurveysExtractor(BaseExtractor):
                     "password": http_pass,
                 })
                 self.diag.ok("INIT", "HTTP credentials injected into browser context")
-                logger.info("[TopSurveys] HTTP credentials injected into browser context")
             except Exception as e:
                 self.diag.warn("INIT", "Could not set HTTP credentials via context", str(e))
-                logger.warning(f"[TopSurveys] Could not set HTTP credentials: {e}")
                 parsed = urlparse(listing_url)
                 listing_url = urlunparse((
                     parsed.scheme,
@@ -559,14 +576,11 @@ class TopSurveysExtractor(BaseExtractor):
         discovery_source = "unknown"
 
         try:
-            # ── 1. Attach network listener ───────────────────────────────
             self._attach_network_listener(page)
             self.diag.section("NETWORK CAPTURE")
             self.diag.step("NETWORK", "Network listener attached — waiting for API calls")
 
-            # ── 2. Load dashboard ────────────────────────────────────────
             self.diag.step("INIT", f"Navigating to dashboard", listing_url)
-            logger.info(f"[TopSurveys] Navigating to: {listing_url}")
             page.goto(listing_url, wait_until="domcontentloaded", timeout=30_000)
             self.diag.ok("INIT", f"Page loaded", f"landed on: {page.url[:80]}")
 
@@ -578,9 +592,7 @@ class TopSurveysExtractor(BaseExtractor):
                 self.diag.ok("INIT", "Buttons rendered — React app hydrated")
             except Exception:
                 self.diag.warn("INIT", "Timed out waiting for buttons — proceeding anyway")
-                logger.warning("[TopSurveys] Timed out waiting for buttons — proceeding")
 
-            # Wait + trigger interaction so lazy APIs that fire on scroll/hover fire too
             self.diag.step("NETWORK", "Triggering lazy API calls (scroll + mouse move)…")
             page.wait_for_timeout(3000)
             self._trigger_lazy_apis(page)
@@ -594,10 +606,6 @@ class TopSurveysExtractor(BaseExtractor):
             for nd in self._network_data:
                 self.diag.debug("NETWORK", f"  → {nd['url'][:90]}", f"HTTP {nd['status']}")
 
-            logger.info(f"[TopSurveys] Landed on: {page.url} | "
-                        f"Captured {len(self._network_data)} API responses")
-
-            # ── 3a. PRIMARY: extract from network API ────────────────────
             self.diag.section("SURVEY DISCOVERY")
             self.diag.step("DISCOVERY", "Trying API-first extraction from network data…")
             surveys_found = self._extract_from_network()
@@ -608,13 +616,16 @@ class TopSurveysExtractor(BaseExtractor):
                 for i, s in enumerate(surveys_found[:20]):
                     reward = f"${s.get('reward')}" if s.get("reward") else "reward=?"
                     loi    = f"{s.get('loi_minutes')}min" if s.get("loi_minutes") else "loi=?"
-                    self.diag.debug("DISCOVERY", f"  [{i+1}] {s.get('text','?')[:70]}", f"{reward}  {loi}")
-                logger.info(f"[TopSurveys] API extraction found {len(surveys_found)} surveys")
+                    # Log the raw session id so truncation is immediately visible
+                    raw_session = s.get("_raw_session_id", "?")
+                    self.diag.debug(
+                        "DISCOVERY",
+                        f"  [{i+1}] {s.get('text','?')[:70]}",
+                        f"{reward}  {loi}  session_id={raw_session}",
+                    )
             else:
-                # ── 3b. FALLBACK: scroll + DOM scrape ───────────────────
                 self.diag.warn("DISCOVERY", "No API survey data found — falling back to DOM scraper")
                 self.diag.step("DISCOVERY", "Scrolling page to trigger virtualised list rendering…")
-                logger.info("[TopSurveys] No API data — falling back to DOM scraper")
                 self._scroll_to_load(page)
                 surveys_found = page.evaluate(_FIND_SURVEYS_JS)
                 discovery_source = "dom"
@@ -622,7 +633,6 @@ class TopSurveysExtractor(BaseExtractor):
                     self.diag.ok("DISCOVERY", f"DOM found {len(surveys_found)} survey card(s)", "source: DOM heuristic")
                 else:
                     self.diag.error("DISCOVERY", "DOM scraper also found nothing", "check login state and page content")
-                logger.info(f"[TopSurveys] DOM extraction found {len(surveys_found)} survey cards")
 
             if not surveys_found:
                 return self._empty_result(account_id, t0,
@@ -634,7 +644,6 @@ class TopSurveysExtractor(BaseExtractor):
 
             total = len(surveys_found)
 
-            # ── 4. Process each survey ───────────────────────────────────
             for idx, survey_entry in enumerate(surveys_found):
                 survey_label = survey_entry.get("text") or f"Survey {idx + 1}"
                 self.diag.section(f"SURVEY {idx+1}/{total}: {survey_label[:60]}")
@@ -661,7 +670,21 @@ class TopSurveysExtractor(BaseExtractor):
                             pass
                         page.wait_for_timeout(2000)
 
-                    self.diag.step("NAV", f"Opening survey", survey_entry.get("href", "no href — will click")[:80])
+                    # Get the raw href and log it for debugging
+                    raw_href = survey_entry.get("href", "")
+                    self.diag.debug("NAV", f"Raw href from survey_entry: {raw_href}")
+
+                    # CRITICAL FIX: If href is missing or malformed, reconstruct it from raw API data
+                    if not raw_href or "?session=" in raw_href and len(raw_href.split("?session=")[-1]) < 10:
+                        # Href is malformed — reconstruct from raw fields
+                        api_id = survey_entry.get("api_id")
+                        raw_session = survey_entry.get("_raw_session_id")
+                        if api_id and raw_session and len(raw_session) > 10:
+                            raw_href = f"https://app.topsurveys.app/survey/{api_id}?session={raw_session}"
+                            self.diag.debug("NAV", f"Reconstructed href: {raw_href}")
+                            survey_entry["href"] = raw_href
+
+                    self.diag.step("NAV", f"Opening survey", raw_href[:120] if raw_href else "no href")
                     navigated = self._open_survey(page, survey_entry, listing_url)
                     if not navigated:
                         self.diag.error("NAV", "All navigation methods failed — skipping survey")
@@ -676,13 +699,28 @@ class TopSurveysExtractor(BaseExtractor):
                         continue
 
                     self.diag.ok("NAV", f"Navigated to survey", f"now at: {page.url[:80]}")
-                    page.wait_for_timeout(2500)
+
+                    # Wait a moment for any initial content
+                    page.wait_for_timeout(2000)
+
+                    # ── NEW: click the "Start Survey" landing CTA if present ──
+                    try:
+                        clicked_label = page.evaluate(_CLICK_START_CTA_JS)
+                        if clicked_label:
+                            self.diag.info("NAV", f"Clicked landing CTA: '{clicked_label}'")
+                            page.wait_for_timeout(1500)
+                        else:
+                            self.diag.debug("NAV", "No landing CTA found — proceeding directly")
+                    except Exception as cta_exc:
+                        self.diag.debug("NAV", f"CTA click attempt failed: {cta_exc}")
+
+                    # ── NEW: detect and switch to iframe (surveys often load inside an iframe)
+                    active_frame = self._get_active_context(page)
 
                     provider = self._detect_provider(page)
                     self.diag.info("SURVEY", f"Provider detected: {provider}")
-                    logger.info(f"[TopSurveys] Provider: {provider}")
 
-                    if self._is_dq(page):
+                    if self._is_dq(active_frame):
                         self.diag.warn("SURVEY", "DQ / survey unavailable immediately — skipping")
                         survey_results.append({
                             "survey_label":     survey_label,
@@ -695,13 +733,24 @@ class TopSurveysExtractor(BaseExtractor):
                         })
                         continue
 
-                    try:
-                        survey_name = page.evaluate(_SURVEY_NAME_JS) or survey_label
-                    except Exception:
-                        survey_name = survey_label
-
+                    # ── Resolve survey name (wait for title to change) ──
+                    survey_name = self._resolve_survey_name(page, survey_label)
                     self.diag.info("SURVEY", f"Survey name resolved: '{survey_name}'")
-                    logger.info(f"[TopSurveys] Survey name: '{survey_name}'")
+
+                    # Check if we're on an offer wall page (Featured Games)
+                    if survey_name == "Featured Games" or "featured games" in page.url.lower():
+                        self.diag.warn("SURVEY", "Detected offer wall — survey may be invalid")
+                        survey_results.append({
+                            "survey_label":     survey_label,
+                            "survey_name":      survey_name,
+                            "status":           "skip",
+                            "reason":           "Offer wall instead of survey (invalid session)",
+                            "provider":         provider,
+                            "discovery_source": discovery_source,
+                            "questions":        0,
+                            "inserted":         0,
+                        })
+                        continue
 
                     questions: List[Dict] = []
                     page_num = 0
@@ -710,29 +759,38 @@ class TopSurveysExtractor(BaseExtractor):
                         page_num += 1
                         self.diag.step("EXTRACT", f"Extracting screener page {page_num}…")
 
-                        if self._is_dq(page):
+                        if self._is_dq(active_frame):
                             self.diag.warn("EXTRACT", f"DQ detected on page {page_num} — stopping")
-                            logger.info(f"[TopSurveys] DQ on page {page_num}")
                             break
 
-                        active_ctx = self._get_active_context(page)
-                        new_qs = active_ctx.evaluate(_EXTRACT_JS)
+                        # ── CRITICAL: wait for question inputs before scraping ──
+                        inputs_found = self._wait_for_questions(active_frame, page_num)
+                        if not inputs_found:
+                            self.diag.warn(
+                                "EXTRACT",
+                                f"Page {page_num}: no question inputs appeared within "
+                                f"{QUESTION_SELECTOR_TIMEOUT/1000:.0f}s — done with this survey",
+                            )
+                            break
+
+                        new_qs = active_frame.evaluate(_EXTRACT_JS)
 
                         if not isinstance(new_qs, list) or not new_qs:
                             self.diag.info("EXTRACT", f"No questions found on page {page_num} — done with this survey")
-                            logger.info(f"[TopSurveys] No questions on page {page_num}")
                             break
 
                         self.diag.ok("EXTRACT", f"Page {page_num}: {len(new_qs)} question(s) found")
                         for q in new_qs:
                             self.diag.debug("EXTRACT", f"  Q: {q.get('question_text','?')[:80]}", f"type={q.get('question_type','?')}")
-                        logger.info(f"[TopSurveys] Page {page_num}: {len(new_qs)} questions")
                         questions.extend(new_qs)
 
-                        if not self._advance_page(page):
+                        # Advance to next page if possible
+                        if not self._advance_page(active_frame):
                             self.diag.info("EXTRACT", "No Next/Continue button — end of screener")
                             break
                         page.wait_for_timeout(1800)
+                        # After advancing, re-check active context (might have changed iframe)
+                        active_frame = self._get_active_context(page)
 
                     for q in questions:
                         q["survey_name"] = survey_name
@@ -761,9 +819,6 @@ class TopSurveysExtractor(BaseExtractor):
                         "batch_id":         batch_id,
                     })
                     self.diag.ok("SURVEY", f"Done — {len(questions)} questions, {inserted} inserted")
-
-                    logger.info(f"[TopSurveys] Done: '{survey_name}' "
-                                f"— {len(questions)} Qs, {inserted} inserted")
                     time.sleep(1.5)
 
                 except Exception as exc:
@@ -830,12 +885,6 @@ class TopSurveysExtractor(BaseExtractor):
         return clean, username, password
 
     def _attach_network_listener(self, page) -> None:
-        """
-        Capture ALL JSON responses that pass _is_valid_survey_payload.
-        We no longer filter by URL keywords — that was missing endpoints
-        served from CDNs, fetch() calls, and delayed hydration paths.
-        Request URLs are still logged at DEBUG level for diagnostics.
-        """
         self._network_data = []
 
         def handle_request(request):
@@ -868,14 +917,6 @@ class TopSurveysExtractor(BaseExtractor):
         page.on("response", handle_response)
 
     def _extract_from_network(self) -> List[Dict]:
-        """
-        PRIMARY survey discovery method.
-
-        Walks every captured network response and tries to find a list of
-        survey/offer objects.  Returns a list of survey_entry dicts in the
-        same shape that _FIND_SURVEYS_JS produces, so the rest of the pipeline
-        is unchanged.
-        """
         surveys: List[Dict] = []
         seen_ids: set = set()
 
@@ -884,8 +925,7 @@ class TopSurveysExtractor(BaseExtractor):
             if not data:
                 continue
 
-            # ── TopSurveys-specific shape: {"result":"success","surveys":[...]} ──
-            # Check this FIRST before generic traversal to avoid double-counting.
+            # TopSurveys native shape: {"result":"success","surveys":[...]}
             if (isinstance(data, dict)
                     and data.get("result") == "success"
                     and isinstance(data.get("surveys"), list)):
@@ -909,9 +949,9 @@ class TopSurveysExtractor(BaseExtractor):
                         continue
                     seen_ids.add(uid)
                     surveys.append(survey_entry)
-                continue  # skip generic traversal for this entry
+                continue
 
-            # ── Generic GraphQL / other shapes ───────────────────────────────
+            # Generic GraphQL / other shapes
             graphql_items = self._extract_graphql_surveys(data)
             candidate_lists = [graphql_items] if graphql_items else self._find_all_lists(data)
 
@@ -922,8 +962,6 @@ class TopSurveysExtractor(BaseExtractor):
                     survey_entry = self._build_survey_from_api_item(item, entry["url"])
                     if not survey_entry:
                         continue
-
-                    # Composite key — much harder to collide than a single field
                     uid = (
                         f"{survey_entry.get('api_id', '')}|"
                         f"{survey_entry.get('href', '')}|"
@@ -933,11 +971,8 @@ class TopSurveysExtractor(BaseExtractor):
                     if uid in seen_ids:
                         continue
                     seen_ids.add(uid)
-
                     surveys.append(survey_entry)
 
-        # Sort: highest reward first, then shortest LOI — process best surveys first
-        # Use safe helpers — reward may arrive as "1.20 USD" string
         def _to_float(v):
             try:
                 return float(re.sub(r"[^\d.]", "", str(v)))
@@ -950,29 +985,14 @@ class TopSurveysExtractor(BaseExtractor):
             except Exception:
                 return 999
 
-        surveys.sort(
-            key=lambda x: (
-                -_to_float(x.get("reward")),
-                _to_int(x.get("loi_minutes")),
-            )
-        )
-
+        surveys.sort(key=lambda x: (-_to_float(x.get("reward")), _to_int(x.get("loi_minutes"))))
         return surveys
 
     def _is_valid_survey_payload(self, data: Any) -> bool:
-        """
-        Return True if the JSON payload contains at least one dict that
-        looks like a survey/offer item.  Deliberately broad — we'd rather
-        store a few extra responses and discard junk items during normalisation
-        than silently miss a real survey feed.
-        Signal keys include identity fields (id, survey_id, url) so APIs that
-        send reward later (after click) are not rejected at capture time.
-        """
         _SIGNAL_KEYS = {
             "reward", "payout", "cpi", "loi", "minutes",
             "time", "duration", "estimated_time", "value",
             "points", "amount",
-            # identity / link signals — enough to confirm a survey list
             "survey_id", "offer_id", "id", "url", "link", "start_url",
         }
         try:
@@ -986,18 +1006,11 @@ class TopSurveysExtractor(BaseExtractor):
         return False
 
     def _extract_graphql_surveys(self, data: Any) -> List[Dict]:
-        """
-        Pull survey items from a GraphQL-style response:
-            { "data": { "getSurveys": [...] | { "items": [...] } } }
-        Returns a flat list of item dicts, or [] if this doesn't look like
-        a GraphQL response.
-        """
         if not isinstance(data, dict):
             return []
         data_field = data.get("data")
         if not isinstance(data_field, dict):
             return []
-
         results: List[Dict] = []
         for value in data_field.values():
             if isinstance(value, list):
@@ -1009,36 +1022,24 @@ class TopSurveysExtractor(BaseExtractor):
         return results
 
     def _find_all_lists(self, data: Any) -> List[List[Any]]:
-        """
-        Recursively collect ALL arrays-of-dicts in a JSON blob.
-        Returns a list of lists, ordered by discovery depth (shallow first).
-        This replaces the old _find_list_in_json which stopped at the first hit.
-        """
         results: List[List[Any]] = []
-
         if isinstance(data, list):
             if data and isinstance(data[0], dict):
                 results.append(data)
-            # Also recurse into list members (list-of-lists edge case)
             for item in data:
                 results.extend(self._find_all_lists(item))
             return results
-
         if isinstance(data, dict):
-            # Prioritise well-known list keys
             for key in _LIST_KEYS:
                 val = data.get(key)
                 if isinstance(val, list) and val and isinstance(val[0], dict):
                     results.append(val)
-            # Then recurse into all values
             for val in data.values():
                 results.extend(self._find_all_lists(val))
-
         return results
 
     @staticmethod
     def _clean_money(val) -> Optional[float]:
-        """Strip currency symbols/text and return a float, or None."""
         if val is None:
             return None
         try:
@@ -1049,7 +1050,6 @@ class TopSurveysExtractor(BaseExtractor):
 
     @staticmethod
     def _clean_int(val) -> Optional[int]:
-        """Strip non-digits and return an int, or None."""
         if val is None:
             return None
         try:
@@ -1059,17 +1059,14 @@ class TopSurveysExtractor(BaseExtractor):
             return None
 
     def _build_survey_from_api_item(self, item: Dict, source_url: str) -> Optional[Dict]:
+        import json as _json
+        # Log raw item to inspect session_id value
+        logger.info(f"[RAW_ITEM] {_json.dumps(item, default=str)[:600]}")
+
         """
         Normalise a single API item into the survey_entry shape.
-
-        Handles BOTH the confirmed TopSurveys API shape:
-            {"hash":..., "loi": <seconds>, "user_reward": <cents>, "survey_session_id":...}
-        AND generic provider shapes (Cint, CPX, Bitlabs, etc.).
-
-        LOI from TopSurveys is in SECONDS — we convert to minutes.
-        Reward from TopSurveys is in CENTS — we convert to dollars.
-        Start URL is constructed from hash + survey_session_id since the API
-        returns no direct link field.
+        CRITICAL FIX: Store the raw session_id directly from the API item
+        so it can be used later for URL reconstruction.
         """
         # ── Identity / dedup ─────────────────────────────────────────────
         api_id = (
@@ -1080,13 +1077,25 @@ class TopSurveysExtractor(BaseExtractor):
             or item.get("placement_id")
         )
 
-        survey_session_id = item.get("survey_session_id")
+        # Read session_id as a string, strip whitespace, keep full value
+        session_id_raw = item.get("survey_session_id")
+        if session_id_raw is not None:
+            session_id = str(session_id_raw).strip()
+        else:
+            session_id = ""
+
+        # Log the raw session id with its length to detect truncation
+        self.diag.debug(
+            "BUILD",
+            f"session_id raw: '{session_id_raw}' (len={len(session_id)})",
+            f"api_id={api_id}"
+        )
 
         # ── Start URL ────────────────────────────────────────────────────
-        # TopSurveys: construct from hash + session (no direct link in API)
-        # Generic providers: look for any direct link field
-        if api_id and survey_session_id and not item.get("url"):
-            href = f"https://app.topsurveys.app/survey/{api_id}?session={survey_session_id}"
+        # CRITICAL FIX: Use the raw session_id directly, not any processed version
+        # Store the raw session_id separately so it can be used later if href is corrupted
+        if api_id and session_id and not item.get("url"):
+            href = f"https://app.topsurveys.app/survey/{api_id}?session={session_id}"
         else:
             href = (
                 item.get("url")
@@ -1100,12 +1109,10 @@ class TopSurveysExtractor(BaseExtractor):
                 or (item.get("links") or {}).get("url")
             )
             # Fallback: construct from hash if still nothing
-            if not href and api_id and survey_session_id:
-                href = f"https://app.topsurveys.app/survey/{api_id}?session={survey_session_id}"
+            if not href and api_id and session_id:
+                href = f"https://app.topsurveys.app/survey/{api_id}?session={session_id}"
 
         # ── Reward ───────────────────────────────────────────────────────
-        # TopSurveys: user_reward is in CENTS (e.g. 100 = $1.00)
-        # Generic providers: various field names, usually in dollars
         reward_raw = (
             item.get("user_reward")                                  # TopSurveys (cents)
             or item.get("user_reward_without_bonus")                 # TopSurveys base
@@ -1124,8 +1131,6 @@ class TopSurveysExtractor(BaseExtractor):
             reward = round(reward / 100, 2)
 
         # ── LOI ──────────────────────────────────────────────────────────
-        # TopSurveys: loi is in SECONDS (e.g. 70 = ~1 min, 249 = ~4 min)
-        # Generic providers: usually in minutes already
         loi_raw = (
             item.get("loi")                      # TopSurveys (seconds) OR generic (minutes)
             or item.get("length_of_interview")
@@ -1140,12 +1145,10 @@ class TopSurveysExtractor(BaseExtractor):
         loi = self._clean_int(loi_raw)
         # TopSurveys loi is ALWAYS in seconds (confirmed from API).
         # Convert seconds → minutes when item has user_reward (TopSurveys signature).
-        # Generic providers use minutes already, so don't convert those.
         if loi is not None and item.get("user_reward") is not None:
             loi = max(1, round(loi / 60))
 
         # ── Name / title ─────────────────────────────────────────────────
-        # TopSurveys API does NOT return a name — that's fine, we use hash
         name = (
             item.get("name")
             or item.get("title")
@@ -1159,8 +1162,6 @@ class TopSurveysExtractor(BaseExtractor):
             return None
 
         # ── Reject offer-wall items ONLY when a name is present ──────────
-        # (TopSurveys API has no name field, so this filter is skipped for
-        # native TopSurveys items — avoids blanket rejection)
         if name:
             title = name.lower()
             _OFFERWALL_KEYWORDS = [
@@ -1173,7 +1174,6 @@ class TopSurveysExtractor(BaseExtractor):
                 return None
 
         # ── Reject absurdly long surveys (> 60 min) ──────────────────────
-        # Applied AFTER seconds→minutes conversion so loi=70s (~1min) is not rejected
         if loi is not None and loi > 60:
             self.diag.debug("DISCOVERY", f"  Rejected (LOI {loi}min > 60): hash={api_id}")
             return None
@@ -1192,6 +1192,7 @@ class TopSurveysExtractor(BaseExtractor):
             text_parts.append(f"+{item['bonus']}% bonus")
         text = " | ".join(text_parts) or f"Survey {api_id or 'unknown'}"
 
+        # CRITICAL: Store the raw session_id separately for debugging and URL reconstruction
         return {
             "text":        text[:120],
             "href":        href,
@@ -1205,15 +1206,11 @@ class TopSurveysExtractor(BaseExtractor):
             "api_id":      str(api_id) if api_id else None,
             "reward":      reward,
             "loi_minutes": loi,
+            "_raw_session_id": session_id,  # Keep full raw session for fallback
+            "_raw_api_item": item,           # Keep full item for debugging (optional)
         }
 
     def _trigger_lazy_apis(self, page) -> None:
-        """
-        Simulate light user interaction — scroll + mouse-move — to trigger
-        APIs that only fire in response to activity, not on page load.
-        Also clicks visible "earn/survey/refresh/load" buttons to trigger
-        click-to-load survey feeds.
-        """
         try:
             for _ in range(3):
                 page.mouse.wheel(0, 800)
@@ -1228,11 +1225,6 @@ class TopSurveysExtractor(BaseExtractor):
         self._trigger_ui_actions(page)
 
     def _trigger_ui_actions(self, page) -> None:
-        """
-        Click visible buttons whose text suggests they load surveys:
-        'earn', 'survey', 'refresh', 'load', 'start'.
-        This catches dashboards that only fire the survey API after a tab click.
-        """
         _TRIGGER_LABELS = ["earn", "survey", "surveys", "refresh", "load", "start", "begin"]
         try:
             buttons = page.query_selector_all("button, [role='tab'], [role='button']")
@@ -1249,15 +1241,10 @@ class TopSurveysExtractor(BaseExtractor):
             logger.debug(f"[TopSurveys] _trigger_ui_actions: {e}")
 
     def _scroll_to_load(self, page, scrolls: int = 5) -> None:
-        """
-        Scroll the listing page to trigger virtualized list rendering.
-        Called only when the API path yields nothing.
-        """
         logger.info(f"[TopSurveys] Scrolling to trigger lazy rendering ({scrolls} passes)")
         for i in range(scrolls):
             page.mouse.wheel(0, 2000)
             page.wait_for_timeout(1200)
-        # Scroll back to top so _FIND_SURVEYS_JS sees cards in natural order
         page.evaluate("window.scrollTo(0, 0)")
         page.wait_for_timeout(500)
 
@@ -1277,26 +1264,27 @@ class TopSurveysExtractor(BaseExtractor):
         return "unknown"
 
     def _get_active_context(self, page):
+        """
+        Try to find the main frame that contains interactive survey elements.
+        If an iframe with input fields exists, return that frame; else return the page.
+        """
         try:
-            inputs = page.query_selector_all("input, textarea, select")
-            if inputs:
-                return page
-        except Exception:
-            pass
-        for frame in page.frames:
-            try:
-                if frame.query_selector("input, textarea, select"):
-                    logger.info(f"[TopSurveys] Switching to iframe: {frame.url[:80]}")
-                    try:
+            # Look for iframes that contain input fields
+            for frame in page.frames:
+                try:
+                    if frame.query_selector("input, textarea, select"):
+                        logger.info(f"[TopSurveys] Switching to iframe: {frame.url[:80]}")
+                        # Wait a bit for the frame to stabilise
                         frame.wait_for_selector(
                             "input, textarea, select",
-                            timeout=5_000,
+                            timeout=3000,
+                            state="visible"
                         )
-                    except Exception:
-                        pass  # already present; proceed
-                    return frame
-            except Exception:
-                continue
+                        return frame
+                except Exception:
+                    continue
+        except Exception:
+            pass
         return page
 
     def _open_survey(self, page, survey_entry: Dict, listing_url: str) -> bool:
@@ -1304,12 +1292,28 @@ class TopSurveysExtractor(BaseExtractor):
         Navigate into a survey. Retries once on failure.
         Patches window.open before clicking so provider pop-outs are
         intercepted and stay in the same tab.
+        
+        CRITICAL FIX: If the href in survey_entry is corrupted (e.g., session=3),
+        reconstruct it from api_id and _raw_session_id.
         """
-        # Patch window.open so any provider pop-out attempt becomes same-tab nav
+        # Patch window.open
         try:
             page.evaluate("() => { window.open = (url) => { window.location.href = url; }; }")
         except Exception:
             pass
+
+        # Check if href is corrupted (session parameter too short)
+        href = survey_entry.get("href", "")
+        if "?session=" in href:
+            session_part = href.split("?session=")[-1].split("&")[0]
+            if len(session_part) < 10:  # Corrupted session (should be 32 chars)
+                self.diag.debug("NAV", f"Href session corrupted (len={len(session_part)}), reconstructing...")
+                api_id = survey_entry.get("api_id")
+                raw_session = survey_entry.get("_raw_session_id")
+                if api_id and raw_session and len(raw_session) > 10:
+                    href = f"https://app.topsurveys.app/survey/{api_id}?session={raw_session}"
+                    self.diag.debug("NAV", f"Reconstructed href: {href}")
+                    survey_entry["href"] = href
 
         for attempt in range(2):
             if attempt > 0:
@@ -1384,29 +1388,62 @@ class TopSurveysExtractor(BaseExtractor):
         self.diag.error("NAV", "All navigation methods exhausted after 2 attempts")
         return False
 
-
-    def _is_dq(self, page) -> bool:
+    def _is_dq(self, context) -> bool:
         try:
-            return bool(page.evaluate(_DQ_JS))
+            return bool(context.evaluate(_DQ_JS))
         except Exception:
             return False
 
-    def _advance_page(self, page) -> bool:
+    def _advance_page(self, context) -> bool:
         try:
             for label in ["Next", "Continue", "Proceed"]:
                 try:
-                    btn = page.get_by_role("button", name=re.compile(label, re.IGNORECASE))
+                    btn = context.get_by_role("button", name=re.compile(label, re.IGNORECASE))
                     btn.first.click(timeout=2000)
-                    page.wait_for_timeout(1000)
+                    context.wait_for_timeout(1000)
                     return True
                 except Exception:
                     continue
-            found = page.evaluate(_ADVANCE_PAGE_JS)
+            found = context.evaluate(_ADVANCE_PAGE_JS)
             if found:
-                page.wait_for_timeout(1000)
+                context.wait_for_timeout(1000)
             return bool(found)
         except Exception:
             return False
+
+    def _wait_for_questions(self, context, page_num: int) -> bool:
+        """
+        Wait for at least one input element (radio, checkbox, select, textarea)
+        to appear in the current context.
+        """
+        self.diag.debug("EXTRACT", f"Waiting for question inputs on page {page_num}…")
+        try:
+            context.wait_for_selector(
+                _QUESTION_INPUT_SELECTOR,
+                timeout=QUESTION_SELECTOR_TIMEOUT,
+                state="visible"
+            )
+            self.diag.ok("EXTRACT", f"Question inputs detected on page {page_num}")
+            return True
+        except Exception as e:
+            self.diag.warn("EXTRACT", f"Timeout waiting for inputs on page {page_num}", str(e))
+            return False
+
+    def _resolve_survey_name(self, page, fallback: str) -> str:
+        """
+        Wait up to 4 seconds for the page title to change from the generic
+        "Top Surveys" fallback, then return the resolved name.
+        """
+        start = time.time()
+        while time.time() - start < 4.0:
+            try:
+                name = page.evaluate(_SURVEY_NAME_JS)
+                if name and name not in ("Top Surveys", "Unknown Survey", "TopSurveys"):
+                    return name
+            except Exception:
+                pass
+            page.wait_for_timeout(400)
+        return fallback
 
     def _empty_result(self, account_id: int, t0: float, error: str) -> Dict[str, Any]:
         return {

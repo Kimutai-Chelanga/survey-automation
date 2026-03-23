@@ -267,13 +267,19 @@ class ChromeSessionManager:
         session_id: str,
         profile_path: str,
         username: str,
-        survey_url: str = "https://example-survey.com",
+        survey_url: str = None,
         show_terminal: bool = True,
     ) -> Dict[str, Any]:
         """
         Start Chrome with a single tab pointing to survey_url.
-        Xvfb/VNC/fluxbox are already running from start.sh — do NOT restart them.
+        Uses a unique debug port for each session.
+        Default URL is https://mylocation.org/ if none provided.
         """
+        # Set default URL if none provided
+        if not survey_url or survey_url.strip() == "":
+            survey_url = "https://mylocation.org/"
+            logger.info(f"No URL provided, using default: {survey_url}")
+        
         # Stop any existing sessions first
         for sid in list(self.active_processes.keys()):
             self.stop_session(sid)
@@ -286,6 +292,10 @@ class ChromeSessionManager:
 
         time.sleep(2)
 
+        # Get a unique debug port for this session
+        debug_port = self._get_next_available_port(9222, 9322)
+        logger.info(f"Allocated debug port {debug_port} for session {session_id}")
+
         safe_username = "".join(c for c in username if c.isalnum() or c in "-_")
         account_cookie_script = f"/app/cookie_scripts/copy_cookies_{safe_username}.sh"
 
@@ -293,6 +303,7 @@ class ChromeSessionManager:
 
     CHROME_PROFILE_DIR="{profile_path}"
     SURVEY_URL="{survey_url}"
+    DEBUG_PORT={debug_port}
 
     # Use the already-running display from start.sh
     export DISPLAY=:99
@@ -301,6 +312,7 @@ class ChromeSessionManager:
     echo "Profile : $CHROME_PROFILE_DIR"
     echo "URL     : $SURVEY_URL"
     echo "Display : $DISPLAY"
+    echo "Debug   : $DEBUG_PORT"
     echo "==============================="
 
     # Remove stale lock files
@@ -323,12 +335,12 @@ class ChromeSessionManager:
     pkill -f "chrome.*$CHROME_PROFILE_DIR" 2>/dev/null || true
     sleep 2
 
-    # Start Chrome
+    # Start Chrome with unique debug port
     google-chrome-stable \\
     --no-sandbox \\
     --disable-setuid-sandbox \\
     --user-data-dir="$CHROME_PROFILE_DIR" \\
-    --remote-debugging-port=9222 \\
+    --remote-debugging-port=$DEBUG_PORT \\
     --remote-debugging-address=0.0.0.0 \\
     --remote-allow-origins=* \\
     --no-first-run \\
@@ -349,6 +361,7 @@ class ChromeSessionManager:
     echo "Chrome PID : $CHROME_PID"
     echo "VNC        : http://localhost:6080/vnc.html"
     echo "Password   : secret"
+    echo "Debug Port : $DEBUG_PORT"
 
     wait $CHROME_PID
 
@@ -381,8 +394,9 @@ class ChromeSessionManager:
             "account_cookie_script": account_cookie_script,
             "started_at": datetime.now(),
             "has_terminal": show_terminal,
-            "debug_port": 9222,
+            "debug_port": debug_port,
             "startup_urls": [survey_url],
+            "session_url": survey_url,  # Store the URL for reference
         }
 
         # Give Chrome time to start
@@ -392,19 +406,21 @@ class ChromeSessionManager:
         logger.info(f"  URL     : {survey_url}")
         logger.info(f"  Profile : {profile_path}")
         logger.info(f"  VNC     : http://localhost:6080/vnc.html")
-        logger.info(f"  Debug   : localhost:9222")
+        logger.info(f"  Debug   : localhost:{debug_port}")
 
         return {
             "success": True,
             "session_id": session_id,
             "vnc_url": "http://localhost:6080/vnc.html",
-            "debug_port": 9222,
+            "debug_port": debug_port,
             "profile_path": profile_path,
             "account_cookie_script": account_cookie_script,
             "has_terminal": show_terminal,
             "startup_urls": [survey_url],
             "message": f"Chrome started — URL: {survey_url} — VNC: http://localhost:6080/vnc.html (password: secret)",
         }
+
+    
     def stop_session(self, session_id: str) -> Dict[str, Any]:
         """
         Stop a Chrome session and ensure ALL windows/tabs are closed and

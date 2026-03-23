@@ -1,0 +1,1669 @@
+/app/start.sh: line 10: warning: setlocale: LC_ALL: cannot change locale (en_KE.UTF-8): No such file or directory
+[0;34m╔═══════════════════════════════════════════════════════════╗[0m
+[0;34m║   STREAMLIT + VNC + CHROME (HP ELITEBOOK MODE)            ║[0m
+[0;34m╚═══════════════════════════════════════════════════════════╝[0m
+
+[0;34m[1/10][0m Setting up directories...
+[0;32m✓[0m Directories ready
+[0;34mℹ[0m Chrome profile: /workspace/chrome_profiles/default
+[0;34m[2/10][0m Cleaning old X locks...
+[0;32m✓[0m Old X locks removed
+[0;34m[3/10][0m Starting Xvfb...
+[0;32m✓[0m Xvfb running (PID: 12)
+[0;34m[4/10][0m Setting up XDG runtime...
+[0;32m✓[0m D-Bus started
+[0;34m[5/10][0m Starting Fluxbox...
+[0;32m✓[0m Fluxbox running (PID: 24)
+[0;34m[6/10][0m Starting Google Chrome...
+[0;32m✓[0m Chrome started (PID: 38)
+[0;34m[7/10][0m Setting VNC password...
+[0;32m✓[0m VNC password ready
+[0;34m[8/10][0m Starting x11vnc...
+[0;32m✓[0m x11vnc running (PID: 183)
+[0;34m[9/10][0m Starting noVNC...
+[0;32m✓[0m noVNC running (PID: 197)
+
+[0;32m╔═══════════════════════════════════════════════════════════╗[0m
+[0;32m║   HP ELITEBOOK x360 1030 G2 – 1:1 DISPLAY ACTIVE          ║[0m
+[0;32m╚═══════════════════════════════════════════════════════════╝[0m
+
+🖥️  Resolution: 1280x720 @ 96 DPI
+🌍 Locale:     English (Kenya)
+🕒 Timezone:   Africa/Nairobi
+🌐 Chrome:     Visible, real window
+🔐 VNC:        localhost:5900
+🌐 noVNC:      http://localhost:6080/vnc.html
+🚀 Streamlit:  http://localhost:8501
+
+
+Collecting usage statistics. To deactivate, set browser.gatherUsageStats to false.
+
+
+  You can now view your Streamlit app in your browser.
+
+  Local URL: http://localhost:8501
+  Network URL: http://172.18.0.4:8501
+  External URL: http://41.90.172.103:8501
+
+/usr/local/lib/python3.10/site-packages/google/api_core/_python_version_support.py:275: FutureWarning: You are using a Python version (3.10.20) which Google will stop supporting in new releases of google.api_core once it reaches its end of life (2026-10-04). Please upgrade to the latest Python version, or at least Python 3.11, to continue receiving updates for google.api_core past that date.
+  warnings.warn(message, FutureWarning)
+/app/src/streamlit/ui/pages/generate_manual_workflows/gemini_answer_service.py:16: FutureWarning: 
+
+All support for the `google.generativeai` package has ended. It will no longer be receiving 
+updates or bug fixes. Please switch to the `google.genai` package as soon as possible.
+See README for more details:
+
+https://github.com/google-gemini/deprecated-generative-ai-python/blob/main/README.md
+
+  import google.generativeai as genai
+2026-03-23 15:30:08,182 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-03-23 15:30:08,182 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-03-23 15:30:08,183 - core.database_manager - INFO - Starting database initialization...
+2026-03-23 15:30:08,184 - core.database_manager - INFO - Connecting to MongoDB...
+2026-03-23 15:30:08,239 - src.core.database.mongodb.connection - INFO - MongoDB connected successfully to mongodb:27017
+2026-03-23 15:30:08,239 - src.core.database.mongodb.connection - INFO - MongoDB connected successfully to mongodb:27017
+2026-03-23 15:30:08,239 - core.database_manager - INFO - Connecting to PostgreSQL...
+2026-03-23 15:30:08,272 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool initialized
+2026-03-23 15:30:08,272 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool initialized
+2026-03-23 15:30:08,272 - core.database_manager - INFO - PostgreSQL connection pool initialized successfully.
+2026-03-23 15:30:08,272 - core.database_manager - INFO - Ensuring database schema...
+2026-03-23 15:30:08,274 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:30:08,274 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:30:08,274 - src.core.database.postgres.schema - INFO - Creating SURVEY AUTOMATION schema...
+2026-03-23 15:30:08,276 - src.core.database.postgres.schema - INFO - ✓ accounts table ready (with demographic fields)
+2026-03-23 15:30:08,277 - src.core.database.postgres.schema - INFO - ✓ account_cookies table ready
+2026-03-23 15:30:08,277 - src.core.database.postgres.schema - INFO - ✓ survey_sites table ready (by name)
+2026-03-23 15:30:08,278 - src.core.database.postgres.schema - INFO - ✓ account_urls table ready (with usage tracking)
+2026-03-23 15:30:08,278 - src.core.database.postgres.schema - INFO - ✓ prompts table ready (one per user)
+2026-03-23 15:30:08,279 - src.core.database.postgres.schema - INFO - ✓ prompt_backups table ready
+2026-03-23 15:30:08,280 - src.core.database.postgres.schema - INFO - ✓ workflows table ready (with upload tracking)
+2026-03-23 15:30:08,281 - src.core.database.postgres.schema - INFO - ✓ questions table ready (with click elements, categories, and survey tracking)
+2026-03-23 15:30:08,282 - src.core.database.postgres.schema - INFO - ✓ answers table ready
+2026-03-23 15:30:08,283 - src.core.database.postgres.schema - INFO - ✓ extraction_state table ready
+2026-03-23 15:30:08,284 - src.core.database.postgres.schema - INFO - ✓ workflow_generation_log table ready
+2026-03-23 15:30:08,285 - src.core.database.postgres.schema - INFO - ✓ screening_results table ready
+2026-03-23 15:30:08,304 - src.core.database.postgres.schema - INFO - ✓ questions.workflow_id foreign key ready
+2026-03-23 15:30:08,304 - src.core.database.postgres.schema - INFO - Creating indexes...
+2026-03-23 15:30:08,318 - src.core.database.postgres.schema - INFO - ✓ All indexes ready
+2026-03-23 15:30:08,318 - src.core.database.postgres.schema - INFO - Dropping existing functions to avoid signature conflicts...
+2026-03-23 15:30:08,327 - src.core.database.postgres.schema - INFO - ✓ Existing functions dropped
+2026-03-23 15:30:08,327 - src.core.database.postgres.schema - INFO - Creating helper functions...
+2026-03-23 15:30:08,334 - src.core.database.postgres.schema - INFO - ✓ Helper functions ready (7 functions)
+2026-03-23 15:30:08,335 - src.core.database.postgres.schema - INFO - Creating trigger functions...
+2026-03-23 15:30:08,338 - src.core.database.postgres.schema - INFO - ✓ Trigger functions ready
+2026-03-23 15:30:08,338 - src.core.database.postgres.schema - INFO - Creating triggers...
+2026-03-23 15:30:08,344 - src.core.database.postgres.schema - INFO - ✓ Triggers ready — created: 0, existing: 8
+2026-03-23 15:30:08,344 - src.core.database.postgres.schema - INFO - Creating views...
+2026-03-23 15:30:08,354 - src.core.database.postgres.schema - INFO -   ↳ Dropped/refreshed 9 views
+2026-03-23 15:30:08,381 - src.core.database.postgres.schema - INFO - ✓ All views ready (9 views)
+2026-03-23 15:30:08,381 - src.core.database.postgres.schema - INFO - Inserting default data...
+2026-03-23 15:30:08,383 - src.core.database.postgres.schema - INFO - ✓ Default survey sites inserted
+2026-03-23 15:30:08,386 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:30:08,386 - src.core.database.postgres.schema - INFO - ✅ POSTGRESQL SCHEMA FULLY INITIALIZED
+2026-03-23 15:30:08,386 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:30:08,386 - src.core.database.postgres.schema - INFO - 📊 Schema summary:
+2026-03-23 15:30:08,386 - src.core.database.postgres.schema - INFO -   • 12 tables
+2026-03-23 15:30:08,387 - src.core.database.postgres.schema - INFO -   • 7 helper functions
+2026-03-23 15:30:08,387 - src.core.database.postgres.schema - INFO -   • 9 views
+2026-03-23 15:30:08,387 - src.core.database.postgres.schema - INFO -   • 8 triggers
+2026-03-23 15:30:08,387 - src.core.database.postgres.schema - INFO -   • ~45 indexes
+2026-03-23 15:30:08,387 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:30:08,387 - core.database_manager - INFO - Database schema ensured successfully.
+2026-03-23 15:30:09,063 - src.streamlit.ui.pages.accounts.chrome_session_manager - INFO - ChromeSessionManager initialized with profile dir: /workspace/chrome_profiles
+2026-03-23 15:30:09,084 - ui.pages.accounts.accounts - INFO - ✅ Ensured survey_sites table exists with site_name
+2026-03-23 15:30:09,148 - ui.pages.accounts.accounts - INFO - ✅ Ensured account_urls table exists
+2026-03-23 15:30:09,176 - ui.pages.generate_manual_workflows.orchestrator - INFO - Pre-loaded: extraction.base_extractor (base_extractor.py)
+2026-03-23 15:30:09,178 - ui.pages.generate_manual_workflows.orchestrator - INFO - Pre-loaded: genmw.base_extractor (base_extractor.py)
+2026-03-23 15:30:09,180 - ui.pages.generate_manual_workflows.orchestrator - INFO - Pre-loaded: extraction.base_workflow_creator (base_workflow_creator.py)
+2026-03-23 15:30:09,182 - ui.pages.generate_manual_workflows.orchestrator - INFO - Pre-loaded: genmw.base_workflow_creator (base_workflow_creator.py)
+2026-03-23 15:30:09,206 - ui.pages.generate_manual_workflows.orchestrator - INFO -   ✓ Extractor: 'Top Surveys' (topsurveys_extractor.py)
+2026-03-23 15:30:09,212 - ui.pages.generate_manual_workflows.orchestrator - INFO -   ✓ WorkflowCreator: 'Top Surveys' (topsurveys_workflow.py)
+2026-03-23 15:30:09,212 - ui.pages.generate_manual_workflows.orchestrator - INFO - Orchestrator loaded — extractors: ['Top Surveys'] | creators:   ['Top Surveys']
+2026-03-23 15:30:09,218 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:30:09,218 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:30:09,236 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:30:09,236 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:30:09,240 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:30:09,240 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:30:09.259 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-03-23 15:30:09.402 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-03-23 15:30:14,998 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-03-23 15:30:14,998 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-03-23 15:30:14,999 - core.database_manager - INFO - Starting database initialization...
+2026-03-23 15:30:15,002 - core.database_manager - INFO - Connecting to MongoDB...
+2026-03-23 15:30:15,004 - core.database_manager - INFO - Connecting to PostgreSQL...
+2026-03-23 15:30:15,006 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool is active
+2026-03-23 15:30:15,006 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool is active
+2026-03-23 15:30:15,007 - core.database_manager - INFO - PostgreSQL connection pool initialized successfully.
+2026-03-23 15:30:15,007 - core.database_manager - INFO - Ensuring database schema...
+2026-03-23 15:30:15,008 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:30:15,008 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:30:15,008 - src.core.database.postgres.schema - INFO - Creating SURVEY AUTOMATION schema...
+2026-03-23 15:30:15,009 - src.core.database.postgres.schema - INFO - ✓ accounts table ready (with demographic fields)
+2026-03-23 15:30:15,010 - src.core.database.postgres.schema - INFO - ✓ account_cookies table ready
+2026-03-23 15:30:15,010 - src.core.database.postgres.schema - INFO - ✓ survey_sites table ready (by name)
+2026-03-23 15:30:15,011 - src.core.database.postgres.schema - INFO - ✓ account_urls table ready (with usage tracking)
+2026-03-23 15:30:15,012 - src.core.database.postgres.schema - INFO - ✓ prompts table ready (one per user)
+2026-03-23 15:30:15,016 - src.core.database.postgres.schema - INFO - ✓ prompt_backups table ready
+2026-03-23 15:30:15,017 - src.core.database.postgres.schema - INFO - ✓ workflows table ready (with upload tracking)
+2026-03-23 15:30:15,018 - src.core.database.postgres.schema - INFO - ✓ questions table ready (with click elements, categories, and survey tracking)
+2026-03-23 15:30:15,019 - src.core.database.postgres.schema - INFO - ✓ answers table ready
+2026-03-23 15:30:15,020 - src.core.database.postgres.schema - INFO - ✓ extraction_state table ready
+2026-03-23 15:30:15,021 - src.core.database.postgres.schema - INFO - ✓ workflow_generation_log table ready
+2026-03-23 15:30:15,022 - src.core.database.postgres.schema - INFO - ✓ screening_results table ready
+2026-03-23 15:30:15,026 - src.core.database.postgres.schema - INFO - ✓ questions.workflow_id foreign key ready
+2026-03-23 15:30:15,027 - src.core.database.postgres.schema - INFO - Creating indexes...
+2026-03-23 15:30:15,063 - src.core.database.postgres.schema - INFO - ✓ All indexes ready
+2026-03-23 15:30:15,064 - src.core.database.postgres.schema - INFO - Dropping existing functions to avoid signature conflicts...
+2026-03-23 15:30:15,090 - src.core.database.postgres.schema - INFO - ✓ Existing functions dropped
+2026-03-23 15:30:15,090 - src.core.database.postgres.schema - INFO - Creating helper functions...
+2026-03-23 15:30:15,099 - src.core.database.postgres.schema - INFO - ✓ Helper functions ready (7 functions)
+2026-03-23 15:30:15,099 - src.core.database.postgres.schema - INFO - Creating trigger functions...
+2026-03-23 15:30:15,102 - src.core.database.postgres.schema - INFO - ✓ Trigger functions ready
+2026-03-23 15:30:15,102 - src.core.database.postgres.schema - INFO - Creating triggers...
+2026-03-23 15:30:15,109 - src.core.database.postgres.schema - INFO - ✓ Triggers ready — created: 0, existing: 8
+2026-03-23 15:30:15,109 - src.core.database.postgres.schema - INFO - Creating views...
+2026-03-23 15:30:15,118 - src.core.database.postgres.schema - INFO -   ↳ Dropped/refreshed 9 views
+2026-03-23 15:30:15,140 - src.core.database.postgres.schema - INFO - ✓ All views ready (9 views)
+2026-03-23 15:30:15,141 - src.core.database.postgres.schema - INFO - Inserting default data...
+2026-03-23 15:30:15,141 - src.core.database.postgres.schema - INFO - ✓ Default survey sites inserted
+2026-03-23 15:30:15,147 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:30:15,147 - src.core.database.postgres.schema - INFO - ✅ POSTGRESQL SCHEMA FULLY INITIALIZED
+2026-03-23 15:30:15,147 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:30:15,147 - src.core.database.postgres.schema - INFO - 📊 Schema summary:
+2026-03-23 15:30:15,147 - src.core.database.postgres.schema - INFO -   • 12 tables
+2026-03-23 15:30:15,147 - src.core.database.postgres.schema - INFO -   • 7 helper functions
+2026-03-23 15:30:15,147 - src.core.database.postgres.schema - INFO -   • 9 views
+2026-03-23 15:30:15,147 - src.core.database.postgres.schema - INFO -   • 8 triggers
+2026-03-23 15:30:15,147 - src.core.database.postgres.schema - INFO -   • ~45 indexes
+2026-03-23 15:30:15,147 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:30:15,148 - core.database_manager - INFO - Database schema ensured successfully.
+2026-03-23 15:30:15,156 - src.streamlit.ui.pages.accounts.chrome_session_manager - INFO - ChromeSessionManager initialized with profile dir: /workspace/chrome_profiles
+2026-03-23 15:30:15,171 - ui.pages.accounts.accounts - INFO - ✅ Ensured survey_sites table exists with site_name
+2026-03-23 15:30:15,223 - ui.pages.accounts.accounts - INFO - ✅ Ensured account_urls table exists
+2026-03-23 15:30:15,271 - ui.pages.generate_manual_workflows.orchestrator - INFO -   ✓ Extractor: 'Top Surveys' (topsurveys_extractor.py)
+2026-03-23 15:30:15,282 - ui.pages.generate_manual_workflows.orchestrator - INFO -   ✓ WorkflowCreator: 'Top Surveys' (topsurveys_workflow.py)
+2026-03-23 15:30:15,282 - ui.pages.generate_manual_workflows.orchestrator - INFO - Orchestrator loaded — extractors: ['Top Surveys'] | creators:   ['Top Surveys']
+2026-03-23 15:30:15.327 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-03-23 15:30:15.350 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-03-23 15:30:15.389 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-03-23 15:30:15.464 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-03-23 15:30:25,387 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-03-23 15:30:25,387 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-03-23 15:30:25,388 - core.database_manager - INFO - Starting database initialization...
+2026-03-23 15:30:25,390 - core.database_manager - INFO - Connecting to MongoDB...
+2026-03-23 15:30:25,394 - core.database_manager - INFO - Connecting to PostgreSQL...
+2026-03-23 15:30:25,396 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool is active
+2026-03-23 15:30:25,396 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool is active
+2026-03-23 15:30:25,397 - core.database_manager - INFO - PostgreSQL connection pool initialized successfully.
+2026-03-23 15:30:25,397 - core.database_manager - INFO - Ensuring database schema...
+2026-03-23 15:30:25,398 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:30:25,398 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:30:25,399 - src.core.database.postgres.schema - INFO - Creating SURVEY AUTOMATION schema...
+2026-03-23 15:30:25,401 - src.core.database.postgres.schema - INFO - ✓ accounts table ready (with demographic fields)
+2026-03-23 15:30:25,403 - src.core.database.postgres.schema - INFO - ✓ account_cookies table ready
+2026-03-23 15:30:25,404 - src.core.database.postgres.schema - INFO - ✓ survey_sites table ready (by name)
+2026-03-23 15:30:25,406 - src.core.database.postgres.schema - INFO - ✓ account_urls table ready (with usage tracking)
+2026-03-23 15:30:25,407 - src.core.database.postgres.schema - INFO - ✓ prompts table ready (one per user)
+2026-03-23 15:30:25,408 - src.core.database.postgres.schema - INFO - ✓ prompt_backups table ready
+2026-03-23 15:30:25,410 - src.core.database.postgres.schema - INFO - ✓ workflows table ready (with upload tracking)
+2026-03-23 15:30:25,411 - src.core.database.postgres.schema - INFO - ✓ questions table ready (with click elements, categories, and survey tracking)
+2026-03-23 15:30:25,413 - src.core.database.postgres.schema - INFO - ✓ answers table ready
+2026-03-23 15:30:25,414 - src.core.database.postgres.schema - INFO - ✓ extraction_state table ready
+2026-03-23 15:30:25,415 - src.core.database.postgres.schema - INFO - ✓ workflow_generation_log table ready
+2026-03-23 15:30:25,416 - src.core.database.postgres.schema - INFO - ✓ screening_results table ready
+2026-03-23 15:30:25,422 - src.core.database.postgres.schema - INFO - ✓ questions.workflow_id foreign key ready
+2026-03-23 15:30:25,423 - src.core.database.postgres.schema - INFO - Creating indexes...
+2026-03-23 15:30:25,453 - src.core.database.postgres.schema - INFO - ✓ All indexes ready
+2026-03-23 15:30:25,453 - src.core.database.postgres.schema - INFO - Dropping existing functions to avoid signature conflicts...
+2026-03-23 15:30:25,473 - src.core.database.postgres.schema - INFO - ✓ Existing functions dropped
+2026-03-23 15:30:25,473 - src.core.database.postgres.schema - INFO - Creating helper functions...
+2026-03-23 15:30:25,478 - src.core.database.postgres.schema - INFO - ✓ Helper functions ready (7 functions)
+2026-03-23 15:30:25,479 - src.core.database.postgres.schema - INFO - Creating trigger functions...
+2026-03-23 15:30:25,481 - src.core.database.postgres.schema - INFO - ✓ Trigger functions ready
+2026-03-23 15:30:25,481 - src.core.database.postgres.schema - INFO - Creating triggers...
+2026-03-23 15:30:25,489 - src.core.database.postgres.schema - INFO - ✓ Triggers ready — created: 0, existing: 8
+2026-03-23 15:30:25,489 - src.core.database.postgres.schema - INFO - Creating views...
+2026-03-23 15:30:25,498 - src.core.database.postgres.schema - INFO -   ↳ Dropped/refreshed 9 views
+2026-03-23 15:30:25,519 - src.core.database.postgres.schema - INFO - ✓ All views ready (9 views)
+2026-03-23 15:30:25,519 - src.core.database.postgres.schema - INFO - Inserting default data...
+2026-03-23 15:30:25,520 - src.core.database.postgres.schema - INFO - ✓ Default survey sites inserted
+2026-03-23 15:30:25,524 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:30:25,524 - src.core.database.postgres.schema - INFO - ✅ POSTGRESQL SCHEMA FULLY INITIALIZED
+2026-03-23 15:30:25,524 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:30:25,524 - src.core.database.postgres.schema - INFO - 📊 Schema summary:
+2026-03-23 15:30:25,524 - src.core.database.postgres.schema - INFO -   • 12 tables
+2026-03-23 15:30:25,524 - src.core.database.postgres.schema - INFO -   • 7 helper functions
+2026-03-23 15:30:25,524 - src.core.database.postgres.schema - INFO -   • 9 views
+2026-03-23 15:30:25,524 - src.core.database.postgres.schema - INFO -   • 8 triggers
+2026-03-23 15:30:25,524 - src.core.database.postgres.schema - INFO -   • ~45 indexes
+2026-03-23 15:30:25,524 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:30:25,524 - core.database_manager - INFO - Database schema ensured successfully.
+2026-03-23 15:30:25,532 - src.streamlit.ui.pages.accounts.chrome_session_manager - INFO - ChromeSessionManager initialized with profile dir: /workspace/chrome_profiles
+2026-03-23 15:30:25,553 - ui.pages.accounts.accounts - INFO - ✅ Ensured survey_sites table exists with site_name
+2026-03-23 15:30:25,622 - ui.pages.accounts.accounts - INFO - ✅ Ensured account_urls table exists
+2026-03-23 15:30:25,656 - ui.pages.generate_manual_workflows.orchestrator - INFO -   ✓ Extractor: 'Top Surveys' (topsurveys_extractor.py)
+2026-03-23 15:30:25,667 - ui.pages.generate_manual_workflows.orchestrator - INFO -   ✓ WorkflowCreator: 'Top Surveys' (topsurveys_workflow.py)
+2026-03-23 15:30:25,668 - ui.pages.generate_manual_workflows.orchestrator - INFO - Orchestrator loaded — extractors: ['Top Surveys'] | creators:   ['Top Surveys']
+2026-03-23 15:30:25.696 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-03-23 15:30:25,714 - core.database_manager - ERROR - Error executing query: can't adapt type 'numpy.int64'
+2026-03-23 15:30:25,714 - ui.pages.accounts.accounts - ERROR - Error getting account URLs: can't adapt type 'numpy.int64'
+2026-03-23 15:30:25.731 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-03-23 15:30:25.765 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-03-23 15:30:25.807 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-03-23 15:30:28,946 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-03-23 15:30:28,946 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-03-23 15:30:28,947 - core.database_manager - INFO - Starting database initialization...
+2026-03-23 15:30:28,948 - core.database_manager - INFO - Connecting to MongoDB...
+2026-03-23 15:30:28,952 - core.database_manager - INFO - Connecting to PostgreSQL...
+2026-03-23 15:30:28,955 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool is active
+2026-03-23 15:30:28,955 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool is active
+2026-03-23 15:30:28,955 - core.database_manager - INFO - PostgreSQL connection pool initialized successfully.
+2026-03-23 15:30:28,955 - core.database_manager - INFO - Ensuring database schema...
+2026-03-23 15:30:28,956 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:30:28,956 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:30:28,956 - src.core.database.postgres.schema - INFO - Creating SURVEY AUTOMATION schema...
+2026-03-23 15:30:28,957 - src.core.database.postgres.schema - INFO - ✓ accounts table ready (with demographic fields)
+2026-03-23 15:30:28,957 - src.core.database.postgres.schema - INFO - ✓ account_cookies table ready
+2026-03-23 15:30:28,958 - src.core.database.postgres.schema - INFO - ✓ survey_sites table ready (by name)
+2026-03-23 15:30:28,958 - src.core.database.postgres.schema - INFO - ✓ account_urls table ready (with usage tracking)
+2026-03-23 15:30:28,959 - src.core.database.postgres.schema - INFO - ✓ prompts table ready (one per user)
+2026-03-23 15:30:28,960 - src.core.database.postgres.schema - INFO - ✓ prompt_backups table ready
+2026-03-23 15:30:28,961 - src.core.database.postgres.schema - INFO - ✓ workflows table ready (with upload tracking)
+2026-03-23 15:30:28,961 - src.core.database.postgres.schema - INFO - ✓ questions table ready (with click elements, categories, and survey tracking)
+2026-03-23 15:30:28,962 - src.core.database.postgres.schema - INFO - ✓ answers table ready
+2026-03-23 15:30:28,962 - src.core.database.postgres.schema - INFO - ✓ extraction_state table ready
+2026-03-23 15:30:28,963 - src.core.database.postgres.schema - INFO - ✓ workflow_generation_log table ready
+2026-03-23 15:30:28,963 - src.core.database.postgres.schema - INFO - ✓ screening_results table ready
+2026-03-23 15:30:28,967 - src.core.database.postgres.schema - INFO - ✓ questions.workflow_id foreign key ready
+2026-03-23 15:30:28,967 - src.core.database.postgres.schema - INFO - Creating indexes...
+2026-03-23 15:30:28,991 - src.core.database.postgres.schema - INFO - ✓ All indexes ready
+2026-03-23 15:30:28,991 - src.core.database.postgres.schema - INFO - Dropping existing functions to avoid signature conflicts...
+2026-03-23 15:30:29,014 - src.core.database.postgres.schema - INFO - ✓ Existing functions dropped
+2026-03-23 15:30:29,015 - src.core.database.postgres.schema - INFO - Creating helper functions...
+2026-03-23 15:30:29,022 - src.core.database.postgres.schema - INFO - ✓ Helper functions ready (7 functions)
+2026-03-23 15:30:29,022 - src.core.database.postgres.schema - INFO - Creating trigger functions...
+2026-03-23 15:30:29,025 - src.core.database.postgres.schema - INFO - ✓ Trigger functions ready
+2026-03-23 15:30:29,025 - src.core.database.postgres.schema - INFO - Creating triggers...
+2026-03-23 15:30:29,032 - src.core.database.postgres.schema - INFO - ✓ Triggers ready — created: 0, existing: 8
+2026-03-23 15:30:29,032 - src.core.database.postgres.schema - INFO - Creating views...
+2026-03-23 15:30:29,043 - src.core.database.postgres.schema - INFO -   ↳ Dropped/refreshed 9 views
+2026-03-23 15:30:29,069 - src.core.database.postgres.schema - INFO - ✓ All views ready (9 views)
+2026-03-23 15:30:29,069 - src.core.database.postgres.schema - INFO - Inserting default data...
+2026-03-23 15:30:29,070 - src.core.database.postgres.schema - INFO - ✓ Default survey sites inserted
+2026-03-23 15:30:29,083 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:30:29,083 - src.core.database.postgres.schema - INFO - ✅ POSTGRESQL SCHEMA FULLY INITIALIZED
+2026-03-23 15:30:29,083 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:30:29,083 - src.core.database.postgres.schema - INFO - 📊 Schema summary:
+2026-03-23 15:30:29,083 - src.core.database.postgres.schema - INFO -   • 12 tables
+2026-03-23 15:30:29,083 - src.core.database.postgres.schema - INFO -   • 7 helper functions
+2026-03-23 15:30:29,084 - src.core.database.postgres.schema - INFO -   • 9 views
+2026-03-23 15:30:29,084 - src.core.database.postgres.schema - INFO -   • 8 triggers
+2026-03-23 15:30:29,084 - src.core.database.postgres.schema - INFO -   • ~45 indexes
+2026-03-23 15:30:29,084 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:30:29,084 - core.database_manager - INFO - Database schema ensured successfully.
+2026-03-23 15:30:29,097 - src.streamlit.ui.pages.accounts.chrome_session_manager - INFO - ChromeSessionManager initialized with profile dir: /workspace/chrome_profiles
+2026-03-23 15:30:29,121 - ui.pages.accounts.accounts - INFO - ✅ Ensured survey_sites table exists with site_name
+2026-03-23 15:30:29,188 - ui.pages.accounts.accounts - INFO - ✅ Ensured account_urls table exists
+2026-03-23 15:30:29,225 - ui.pages.generate_manual_workflows.orchestrator - INFO -   ✓ Extractor: 'Top Surveys' (topsurveys_extractor.py)
+2026-03-23 15:30:29,237 - ui.pages.generate_manual_workflows.orchestrator - INFO -   ✓ WorkflowCreator: 'Top Surveys' (topsurveys_workflow.py)
+2026-03-23 15:30:29,239 - ui.pages.generate_manual_workflows.orchestrator - INFO - Orchestrator loaded — extractors: ['Top Surveys'] | creators:   ['Top Surveys']
+2026-03-23 15:30:29.274 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-03-23 15:30:29,294 - core.database_manager - ERROR - Error executing query: can't adapt type 'numpy.int64'
+2026-03-23 15:30:29,295 - ui.pages.accounts.accounts - ERROR - Error getting account URLs: can't adapt type 'numpy.int64'
+2026-03-23 15:30:29.312 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-03-23 15:30:29.362 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-03-23 15:30:29.416 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-03-23 15:30:42,941 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-03-23 15:30:42,941 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-03-23 15:30:42,943 - core.database_manager - INFO - Starting database initialization...
+2026-03-23 15:30:42,943 - core.database_manager - INFO - Connecting to MongoDB...
+2026-03-23 15:30:42,950 - core.database_manager - INFO - Connecting to PostgreSQL...
+2026-03-23 15:30:42,952 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool is active
+2026-03-23 15:30:42,952 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool is active
+2026-03-23 15:30:42,953 - core.database_manager - INFO - PostgreSQL connection pool initialized successfully.
+2026-03-23 15:30:42,953 - core.database_manager - INFO - Ensuring database schema...
+2026-03-23 15:30:42,955 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:30:42,955 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:30:42,955 - src.core.database.postgres.schema - INFO - Creating SURVEY AUTOMATION schema...
+2026-03-23 15:30:42,957 - src.core.database.postgres.schema - INFO - ✓ accounts table ready (with demographic fields)
+2026-03-23 15:30:42,958 - src.core.database.postgres.schema - INFO - ✓ account_cookies table ready
+2026-03-23 15:30:42,959 - src.core.database.postgres.schema - INFO - ✓ survey_sites table ready (by name)
+2026-03-23 15:30:42,960 - src.core.database.postgres.schema - INFO - ✓ account_urls table ready (with usage tracking)
+2026-03-23 15:30:42,961 - src.core.database.postgres.schema - INFO - ✓ prompts table ready (one per user)
+2026-03-23 15:30:42,963 - src.core.database.postgres.schema - INFO - ✓ prompt_backups table ready
+2026-03-23 15:30:42,963 - src.core.database.postgres.schema - INFO - ✓ workflows table ready (with upload tracking)
+2026-03-23 15:30:42,965 - src.core.database.postgres.schema - INFO - ✓ questions table ready (with click elements, categories, and survey tracking)
+2026-03-23 15:30:42,966 - src.core.database.postgres.schema - INFO - ✓ answers table ready
+2026-03-23 15:30:42,967 - src.core.database.postgres.schema - INFO - ✓ extraction_state table ready
+2026-03-23 15:30:42,968 - src.core.database.postgres.schema - INFO - ✓ workflow_generation_log table ready
+2026-03-23 15:30:42,969 - src.core.database.postgres.schema - INFO - ✓ screening_results table ready
+2026-03-23 15:30:42,976 - src.core.database.postgres.schema - INFO - ✓ questions.workflow_id foreign key ready
+2026-03-23 15:30:42,977 - src.core.database.postgres.schema - INFO - Creating indexes...
+2026-03-23 15:30:43,006 - src.core.database.postgres.schema - INFO - ✓ All indexes ready
+2026-03-23 15:30:43,006 - src.core.database.postgres.schema - INFO - Dropping existing functions to avoid signature conflicts...
+2026-03-23 15:30:43,027 - src.core.database.postgres.schema - INFO - ✓ Existing functions dropped
+2026-03-23 15:30:43,027 - src.core.database.postgres.schema - INFO - Creating helper functions...
+2026-03-23 15:30:43,033 - src.core.database.postgres.schema - INFO - ✓ Helper functions ready (7 functions)
+2026-03-23 15:30:43,033 - src.core.database.postgres.schema - INFO - Creating trigger functions...
+2026-03-23 15:30:43,035 - src.core.database.postgres.schema - INFO - ✓ Trigger functions ready
+2026-03-23 15:30:43,035 - src.core.database.postgres.schema - INFO - Creating triggers...
+2026-03-23 15:30:43,042 - src.core.database.postgres.schema - INFO - ✓ Triggers ready — created: 0, existing: 8
+2026-03-23 15:30:43,042 - src.core.database.postgres.schema - INFO - Creating views...
+2026-03-23 15:30:43,051 - src.core.database.postgres.schema - INFO -   ↳ Dropped/refreshed 9 views
+2026-03-23 15:30:43,070 - src.core.database.postgres.schema - INFO - ✓ All views ready (9 views)
+2026-03-23 15:30:43,070 - src.core.database.postgres.schema - INFO - Inserting default data...
+2026-03-23 15:30:43,071 - src.core.database.postgres.schema - INFO - ✓ Default survey sites inserted
+2026-03-23 15:30:43,077 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:30:43,077 - src.core.database.postgres.schema - INFO - ✅ POSTGRESQL SCHEMA FULLY INITIALIZED
+2026-03-23 15:30:43,077 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:30:43,077 - src.core.database.postgres.schema - INFO - 📊 Schema summary:
+2026-03-23 15:30:43,077 - src.core.database.postgres.schema - INFO -   • 12 tables
+2026-03-23 15:30:43,077 - src.core.database.postgres.schema - INFO -   • 7 helper functions
+2026-03-23 15:30:43,077 - src.core.database.postgres.schema - INFO -   • 9 views
+2026-03-23 15:30:43,077 - src.core.database.postgres.schema - INFO -   • 8 triggers
+2026-03-23 15:30:43,077 - src.core.database.postgres.schema - INFO -   • ~45 indexes
+2026-03-23 15:30:43,077 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:30:43,077 - core.database_manager - INFO - Database schema ensured successfully.
+2026-03-23 15:30:43,092 - src.streamlit.ui.pages.accounts.chrome_session_manager - INFO - ChromeSessionManager initialized with profile dir: /workspace/chrome_profiles
+2026-03-23 15:30:43,122 - ui.pages.accounts.accounts - INFO - ✅ Ensured survey_sites table exists with site_name
+2026-03-23 15:30:43,181 - ui.pages.accounts.accounts - INFO - ✅ Ensured account_urls table exists
+2026-03-23 15:30:43,275 - ui.pages.generate_manual_workflows.orchestrator - INFO -   ✓ Extractor: 'Top Surveys' (topsurveys_extractor.py)
+2026-03-23 15:30:43,287 - ui.pages.generate_manual_workflows.orchestrator - INFO -   ✓ WorkflowCreator: 'Top Surveys' (topsurveys_workflow.py)
+2026-03-23 15:30:43,287 - ui.pages.generate_manual_workflows.orchestrator - INFO - Orchestrator loaded — extractors: ['Top Surveys'] | creators:   ['Top Surveys']
+2026-03-23 15:30:43.321 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-03-23 15:30:43,343 - core.database_manager - ERROR - Error executing query: can't adapt type 'numpy.int64'
+2026-03-23 15:30:43,344 - ui.pages.accounts.accounts - ERROR - Error getting account URLs: can't adapt type 'numpy.int64'
+2026-03-23 15:30:43.359 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-03-23 15:30:43.408 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-03-23 15:30:43.452 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-03-23 15:30:44,102 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-03-23 15:30:44,102 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-03-23 15:30:44,103 - core.database_manager - INFO - Starting database initialization...
+2026-03-23 15:30:44,103 - core.database_manager - INFO - Connecting to MongoDB...
+2026-03-23 15:30:44,107 - core.database_manager - INFO - Connecting to PostgreSQL...
+2026-03-23 15:30:44,109 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool is active
+2026-03-23 15:30:44,109 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool is active
+2026-03-23 15:30:44,109 - core.database_manager - INFO - PostgreSQL connection pool initialized successfully.
+2026-03-23 15:30:44,109 - core.database_manager - INFO - Ensuring database schema...
+2026-03-23 15:30:44,110 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:30:44,110 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:30:44,110 - src.core.database.postgres.schema - INFO - Creating SURVEY AUTOMATION schema...
+2026-03-23 15:30:44,111 - src.core.database.postgres.schema - INFO - ✓ accounts table ready (with demographic fields)
+2026-03-23 15:30:44,111 - src.core.database.postgres.schema - INFO - ✓ account_cookies table ready
+2026-03-23 15:30:44,112 - src.core.database.postgres.schema - INFO - ✓ survey_sites table ready (by name)
+2026-03-23 15:30:44,113 - src.core.database.postgres.schema - INFO - ✓ account_urls table ready (with usage tracking)
+2026-03-23 15:30:44,114 - src.core.database.postgres.schema - INFO - ✓ prompts table ready (one per user)
+2026-03-23 15:30:44,115 - src.core.database.postgres.schema - INFO - ✓ prompt_backups table ready
+2026-03-23 15:30:44,116 - src.core.database.postgres.schema - INFO - ✓ workflows table ready (with upload tracking)
+2026-03-23 15:30:44,117 - src.core.database.postgres.schema - INFO - ✓ questions table ready (with click elements, categories, and survey tracking)
+2026-03-23 15:30:44,118 - src.core.database.postgres.schema - INFO - ✓ answers table ready
+2026-03-23 15:30:44,120 - src.core.database.postgres.schema - INFO - ✓ extraction_state table ready
+2026-03-23 15:30:44,121 - src.core.database.postgres.schema - INFO - ✓ workflow_generation_log table ready
+2026-03-23 15:30:44,122 - src.core.database.postgres.schema - INFO - ✓ screening_results table ready
+2026-03-23 15:30:44,128 - src.core.database.postgres.schema - INFO - ✓ questions.workflow_id foreign key ready
+2026-03-23 15:30:44,128 - src.core.database.postgres.schema - INFO - Creating indexes...
+2026-03-23 15:30:44,160 - src.core.database.postgres.schema - INFO - ✓ All indexes ready
+2026-03-23 15:30:44,160 - src.core.database.postgres.schema - INFO - Dropping existing functions to avoid signature conflicts...
+2026-03-23 15:30:44,190 - src.core.database.postgres.schema - INFO - ✓ Existing functions dropped
+2026-03-23 15:30:44,190 - src.core.database.postgres.schema - INFO - Creating helper functions...
+2026-03-23 15:30:44,199 - src.core.database.postgres.schema - INFO - ✓ Helper functions ready (7 functions)
+2026-03-23 15:30:44,199 - src.core.database.postgres.schema - INFO - Creating trigger functions...
+2026-03-23 15:30:44,204 - src.core.database.postgres.schema - INFO - ✓ Trigger functions ready
+2026-03-23 15:30:44,204 - src.core.database.postgres.schema - INFO - Creating triggers...
+2026-03-23 15:30:44,212 - src.core.database.postgres.schema - INFO - ✓ Triggers ready — created: 0, existing: 8
+2026-03-23 15:30:44,212 - src.core.database.postgres.schema - INFO - Creating views...
+2026-03-23 15:30:44,220 - src.core.database.postgres.schema - INFO -   ↳ Dropped/refreshed 9 views
+2026-03-23 15:30:44,243 - src.core.database.postgres.schema - INFO - ✓ All views ready (9 views)
+2026-03-23 15:30:44,243 - src.core.database.postgres.schema - INFO - Inserting default data...
+2026-03-23 15:30:44,244 - src.core.database.postgres.schema - INFO - ✓ Default survey sites inserted
+2026-03-23 15:30:44,276 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:30:44,276 - src.core.database.postgres.schema - INFO - ✅ POSTGRESQL SCHEMA FULLY INITIALIZED
+2026-03-23 15:30:44,276 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:30:44,276 - src.core.database.postgres.schema - INFO - 📊 Schema summary:
+2026-03-23 15:30:44,276 - src.core.database.postgres.schema - INFO -   • 12 tables
+2026-03-23 15:30:44,276 - src.core.database.postgres.schema - INFO -   • 7 helper functions
+2026-03-23 15:30:44,276 - src.core.database.postgres.schema - INFO -   • 9 views
+2026-03-23 15:30:44,277 - src.core.database.postgres.schema - INFO -   • 8 triggers
+2026-03-23 15:30:44,277 - src.core.database.postgres.schema - INFO -   • ~45 indexes
+2026-03-23 15:30:44,277 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:30:44,277 - core.database_manager - INFO - Database schema ensured successfully.
+2026-03-23 15:30:44,295 - src.streamlit.ui.pages.accounts.chrome_session_manager - INFO - ChromeSessionManager initialized with profile dir: /workspace/chrome_profiles
+2026-03-23 15:30:44,321 - ui.pages.accounts.accounts - INFO - ✅ Ensured survey_sites table exists with site_name
+2026-03-23 15:30:44,388 - ui.pages.accounts.accounts - INFO - ✅ Ensured account_urls table exists
+2026-03-23 15:30:44,461 - ui.pages.generate_manual_workflows.orchestrator - INFO -   ✓ Extractor: 'Top Surveys' (topsurveys_extractor.py)
+2026-03-23 15:30:44,473 - ui.pages.generate_manual_workflows.orchestrator - INFO -   ✓ WorkflowCreator: 'Top Surveys' (topsurveys_workflow.py)
+2026-03-23 15:30:44,473 - ui.pages.generate_manual_workflows.orchestrator - INFO - Orchestrator loaded — extractors: ['Top Surveys'] | creators:   ['Top Surveys']
+2026-03-23 15:30:44.506 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-03-23 15:30:44,521 - core.database_manager - ERROR - Error executing query: can't adapt type 'numpy.int64'
+2026-03-23 15:30:44,522 - ui.pages.accounts.accounts - ERROR - Error getting account URLs: can't adapt type 'numpy.int64'
+2026-03-23 15:30:44,528 - ui.pages.accounts.accounts - INFO - Starting LOCAL Chrome session for: tina
+2026-03-23 15:30:44,528 - ui.pages.accounts.accounts - INFO - Start URL: https://mylocation.org/
+2026-03-23 15:30:44,529 - ui.pages.accounts.accounts - INFO - Session ID: local_tina_1774269044
+2026-03-23 15:30:44,530 - ui.pages.accounts.accounts - WARNING - ⚠️ Account tina has no cookies stored yet
+2026-03-23 15:30:44,675 - src.streamlit.ui.pages.accounts.chrome_session_manager - INFO - Singleton lock cleanup: no lock files found
+2026-03-23 15:30:51,736 - src.streamlit.ui.pages.accounts.chrome_session_manager - INFO - Chrome session started : local_tina_1774269044
+2026-03-23 15:30:51,736 - src.streamlit.ui.pages.accounts.chrome_session_manager - INFO -   URL     : https://mylocation.org/
+2026-03-23 15:30:51,736 - src.streamlit.ui.pages.accounts.chrome_session_manager - INFO -   Profile : /workspace/chrome_profiles/account_tina
+2026-03-23 15:30:51,737 - src.streamlit.ui.pages.accounts.chrome_session_manager - INFO -   VNC     : http://localhost:6080/vnc.html
+2026-03-23 15:30:51,737 - src.streamlit.ui.pages.accounts.chrome_session_manager - INFO -   Debug   : localhost:9222
+2026-03-23 15:30:51,739 - ui.pages.accounts.accounts - INFO - ✓ Chrome process started with 3 tabs
+2026-03-23 15:30:51,739 - ui.pages.accounts.accounts - INFO -   Tab 1: Automa Extension
+2026-03-23 15:30:51,739 - ui.pages.accounts.accounts - INFO -   Tab 2: EditThisCookie Extension
+2026-03-23 15:30:51,740 - ui.pages.accounts.accounts - INFO -   Tab 3: Custom URL: https://mylocation.org/
+2026-03-23 15:30:51,740 - ui.pages.accounts.accounts - INFO - ✓ Chrome visible at: http://localhost:6080/vnc.html
+2026-03-23 15:30:51,767 - ui.pages.accounts.accounts - INFO - ✓ Stored in MongoDB
+2026-03-23 15:30:51,767 - ui.pages.accounts.accounts - INFO - ✓ Session stored in local_chrome_sessions
+2026-03-23 15:30:52,981 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-03-23 15:30:52,981 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-03-23 15:30:52,984 - core.database_manager - INFO - Starting database initialization...
+2026-03-23 15:30:52,984 - core.database_manager - INFO - Connecting to MongoDB...
+2026-03-23 15:30:52,989 - core.database_manager - INFO - Connecting to PostgreSQL...
+2026-03-23 15:30:52,993 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool is active
+2026-03-23 15:30:52,993 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool is active
+2026-03-23 15:30:52,993 - core.database_manager - INFO - PostgreSQL connection pool initialized successfully.
+2026-03-23 15:30:52,993 - core.database_manager - INFO - Ensuring database schema...
+2026-03-23 15:30:52,994 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:30:52,994 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:30:52,995 - src.core.database.postgres.schema - INFO - Creating SURVEY AUTOMATION schema...
+2026-03-23 15:30:52,996 - src.core.database.postgres.schema - INFO - ✓ accounts table ready (with demographic fields)
+2026-03-23 15:30:52,996 - src.core.database.postgres.schema - INFO - ✓ account_cookies table ready
+2026-03-23 15:30:52,997 - src.core.database.postgres.schema - INFO - ✓ survey_sites table ready (by name)
+2026-03-23 15:30:52,997 - src.core.database.postgres.schema - INFO - ✓ account_urls table ready (with usage tracking)
+2026-03-23 15:30:52,998 - src.core.database.postgres.schema - INFO - ✓ prompts table ready (one per user)
+2026-03-23 15:30:52,998 - src.core.database.postgres.schema - INFO - ✓ prompt_backups table ready
+2026-03-23 15:30:52,999 - src.core.database.postgres.schema - INFO - ✓ workflows table ready (with upload tracking)
+2026-03-23 15:30:52,999 - src.core.database.postgres.schema - INFO - ✓ questions table ready (with click elements, categories, and survey tracking)
+2026-03-23 15:30:53,000 - src.core.database.postgres.schema - INFO - ✓ answers table ready
+2026-03-23 15:30:53,000 - src.core.database.postgres.schema - INFO - ✓ extraction_state table ready
+2026-03-23 15:30:53,001 - src.core.database.postgres.schema - INFO - ✓ workflow_generation_log table ready
+2026-03-23 15:30:53,001 - src.core.database.postgres.schema - INFO - ✓ screening_results table ready
+2026-03-23 15:30:53,007 - src.core.database.postgres.schema - INFO - ✓ questions.workflow_id foreign key ready
+2026-03-23 15:30:53,007 - src.core.database.postgres.schema - INFO - Creating indexes...
+2026-03-23 15:30:53,023 - src.core.database.postgres.schema - INFO - ✓ All indexes ready
+2026-03-23 15:30:53,023 - src.core.database.postgres.schema - INFO - Dropping existing functions to avoid signature conflicts...
+2026-03-23 15:30:53,036 - src.core.database.postgres.schema - INFO - ✓ Existing functions dropped
+2026-03-23 15:30:53,036 - src.core.database.postgres.schema - INFO - Creating helper functions...
+2026-03-23 15:30:53,043 - src.core.database.postgres.schema - INFO - ✓ Helper functions ready (7 functions)
+2026-03-23 15:30:53,043 - src.core.database.postgres.schema - INFO - Creating trigger functions...
+2026-03-23 15:30:53,049 - src.core.database.postgres.schema - INFO - ✓ Trigger functions ready
+2026-03-23 15:30:53,050 - src.core.database.postgres.schema - INFO - Creating triggers...
+2026-03-23 15:30:53,060 - src.core.database.postgres.schema - INFO - ✓ Triggers ready — created: 0, existing: 8
+2026-03-23 15:30:53,060 - src.core.database.postgres.schema - INFO - Creating views...
+2026-03-23 15:30:53,080 - src.core.database.postgres.schema - INFO -   ↳ Dropped/refreshed 9 views
+2026-03-23 15:30:53,105 - src.core.database.postgres.schema - INFO - ✓ All views ready (9 views)
+2026-03-23 15:30:53,105 - src.core.database.postgres.schema - INFO - Inserting default data...
+2026-03-23 15:30:53,106 - src.core.database.postgres.schema - INFO - ✓ Default survey sites inserted
+2026-03-23 15:30:53,114 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:30:53,114 - src.core.database.postgres.schema - INFO - ✅ POSTGRESQL SCHEMA FULLY INITIALIZED
+2026-03-23 15:30:53,114 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:30:53,114 - src.core.database.postgres.schema - INFO - 📊 Schema summary:
+2026-03-23 15:30:53,115 - src.core.database.postgres.schema - INFO -   • 12 tables
+2026-03-23 15:30:53,115 - src.core.database.postgres.schema - INFO -   • 7 helper functions
+2026-03-23 15:30:53,115 - src.core.database.postgres.schema - INFO -   • 9 views
+2026-03-23 15:30:53,115 - src.core.database.postgres.schema - INFO -   • 8 triggers
+2026-03-23 15:30:53,115 - src.core.database.postgres.schema - INFO -   • ~45 indexes
+2026-03-23 15:30:53,115 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:30:53,115 - core.database_manager - INFO - Database schema ensured successfully.
+2026-03-23 15:30:53,129 - src.streamlit.ui.pages.accounts.chrome_session_manager - INFO - ChromeSessionManager initialized with profile dir: /workspace/chrome_profiles
+2026-03-23 15:30:53,153 - ui.pages.accounts.accounts - INFO - ✅ Ensured survey_sites table exists with site_name
+2026-03-23 15:30:53,223 - ui.pages.accounts.accounts - INFO - ✅ Ensured account_urls table exists
+2026-03-23 15:30:53,274 - ui.pages.generate_manual_workflows.orchestrator - INFO -   ✓ Extractor: 'Top Surveys' (topsurveys_extractor.py)
+2026-03-23 15:30:53,286 - ui.pages.generate_manual_workflows.orchestrator - INFO -   ✓ WorkflowCreator: 'Top Surveys' (topsurveys_workflow.py)
+2026-03-23 15:30:53,287 - ui.pages.generate_manual_workflows.orchestrator - INFO - Orchestrator loaded — extractors: ['Top Surveys'] | creators:   ['Top Surveys']
+2026-03-23 15:30:53.314 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-03-23 15:30:53,333 - core.database_manager - ERROR - Error executing query: can't adapt type 'numpy.int64'
+2026-03-23 15:30:53,333 - ui.pages.accounts.accounts - ERROR - Error getting account URLs: can't adapt type 'numpy.int64'
+2026-03-23 15:30:53.346 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-03-23 15:30:53.389 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-03-23 15:30:53.430 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-03-23 15:31:48,247 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-03-23 15:31:48,247 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-03-23 15:31:48,258 - core.database_manager - INFO - Starting database initialization...
+2026-03-23 15:31:48,258 - core.database_manager - INFO - Connecting to MongoDB...
+2026-03-23 15:31:48,264 - core.database_manager - INFO - Connecting to PostgreSQL...
+2026-03-23 15:31:48,268 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool is active
+2026-03-23 15:31:48,268 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool is active
+2026-03-23 15:31:48,268 - core.database_manager - INFO - PostgreSQL connection pool initialized successfully.
+2026-03-23 15:31:48,268 - core.database_manager - INFO - Ensuring database schema...
+2026-03-23 15:31:48,269 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:31:48,269 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:31:48,269 - src.core.database.postgres.schema - INFO - Creating SURVEY AUTOMATION schema...
+2026-03-23 15:31:48,270 - src.core.database.postgres.schema - INFO - ✓ accounts table ready (with demographic fields)
+2026-03-23 15:31:48,273 - src.core.database.postgres.schema - INFO - ✓ account_cookies table ready
+2026-03-23 15:31:48,273 - src.core.database.postgres.schema - INFO - ✓ survey_sites table ready (by name)
+2026-03-23 15:31:48,274 - src.core.database.postgres.schema - INFO - ✓ account_urls table ready (with usage tracking)
+2026-03-23 15:31:48,275 - src.core.database.postgres.schema - INFO - ✓ prompts table ready (one per user)
+2026-03-23 15:31:48,276 - src.core.database.postgres.schema - INFO - ✓ prompt_backups table ready
+2026-03-23 15:31:48,276 - src.core.database.postgres.schema - INFO - ✓ workflows table ready (with upload tracking)
+2026-03-23 15:31:48,277 - src.core.database.postgres.schema - INFO - ✓ questions table ready (with click elements, categories, and survey tracking)
+2026-03-23 15:31:48,277 - src.core.database.postgres.schema - INFO - ✓ answers table ready
+2026-03-23 15:31:48,278 - src.core.database.postgres.schema - INFO - ✓ extraction_state table ready
+2026-03-23 15:31:48,279 - src.core.database.postgres.schema - INFO - ✓ workflow_generation_log table ready
+2026-03-23 15:31:48,279 - src.core.database.postgres.schema - INFO - ✓ screening_results table ready
+2026-03-23 15:31:48,286 - src.core.database.postgres.schema - INFO - ✓ questions.workflow_id foreign key ready
+2026-03-23 15:31:48,286 - src.core.database.postgres.schema - INFO - Creating indexes...
+2026-03-23 15:31:48,306 - src.core.database.postgres.schema - INFO - ✓ All indexes ready
+2026-03-23 15:31:48,306 - src.core.database.postgres.schema - INFO - Dropping existing functions to avoid signature conflicts...
+2026-03-23 15:31:48,322 - src.core.database.postgres.schema - INFO - ✓ Existing functions dropped
+2026-03-23 15:31:48,322 - src.core.database.postgres.schema - INFO - Creating helper functions...
+2026-03-23 15:31:48,327 - src.core.database.postgres.schema - INFO - ✓ Helper functions ready (7 functions)
+2026-03-23 15:31:48,327 - src.core.database.postgres.schema - INFO - Creating trigger functions...
+2026-03-23 15:31:48,329 - src.core.database.postgres.schema - INFO - ✓ Trigger functions ready
+2026-03-23 15:31:48,329 - src.core.database.postgres.schema - INFO - Creating triggers...
+2026-03-23 15:31:48,337 - src.core.database.postgres.schema - INFO - ✓ Triggers ready — created: 0, existing: 8
+2026-03-23 15:31:48,337 - src.core.database.postgres.schema - INFO - Creating views...
+2026-03-23 15:31:48,347 - src.core.database.postgres.schema - INFO -   ↳ Dropped/refreshed 9 views
+2026-03-23 15:31:48,377 - src.core.database.postgres.schema - INFO - ✓ All views ready (9 views)
+2026-03-23 15:31:48,378 - src.core.database.postgres.schema - INFO - Inserting default data...
+2026-03-23 15:31:48,379 - src.core.database.postgres.schema - INFO - ✓ Default survey sites inserted
+2026-03-23 15:31:48,386 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:31:48,386 - src.core.database.postgres.schema - INFO - ✅ POSTGRESQL SCHEMA FULLY INITIALIZED
+2026-03-23 15:31:48,386 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:31:48,386 - src.core.database.postgres.schema - INFO - 📊 Schema summary:
+2026-03-23 15:31:48,386 - src.core.database.postgres.schema - INFO -   • 12 tables
+2026-03-23 15:31:48,386 - src.core.database.postgres.schema - INFO -   • 7 helper functions
+2026-03-23 15:31:48,387 - src.core.database.postgres.schema - INFO -   • 9 views
+2026-03-23 15:31:48,387 - src.core.database.postgres.schema - INFO -   • 8 triggers
+2026-03-23 15:31:48,387 - src.core.database.postgres.schema - INFO -   • ~45 indexes
+2026-03-23 15:31:48,387 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:31:48,387 - core.database_manager - INFO - Database schema ensured successfully.
+2026-03-23 15:31:48,402 - src.streamlit.ui.pages.accounts.chrome_session_manager - INFO - ChromeSessionManager initialized with profile dir: /workspace/chrome_profiles
+2026-03-23 15:31:48,417 - ui.pages.accounts.accounts - INFO - ✅ Ensured survey_sites table exists with site_name
+2026-03-23 15:31:48,505 - ui.pages.accounts.accounts - INFO - ✅ Ensured account_urls table exists
+2026-03-23 15:31:48,541 - ui.pages.generate_manual_workflows.orchestrator - INFO -   ✓ Extractor: 'Top Surveys' (topsurveys_extractor.py)
+2026-03-23 15:31:48,556 - ui.pages.generate_manual_workflows.orchestrator - INFO -   ✓ WorkflowCreator: 'Top Surveys' (topsurveys_workflow.py)
+2026-03-23 15:31:48,557 - ui.pages.generate_manual_workflows.orchestrator - INFO - Orchestrator loaded — extractors: ['Top Surveys'] | creators:   ['Top Surveys']
+2026-03-23 15:31:48,562 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:31:48,562 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:31:48,564 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:31:48,564 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:31:48,565 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:31:48,565 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:31:48,583 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:31:48,583 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:31:48,591 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:31:48,591 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:31:48,595 - src.core.database.postgres.connection - ERROR - Connection error: 0
+2026-03-23 15:31:48,595 - src.core.database.postgres.connection - ERROR - Connection error: 0
+2026-03-23 15:31:48,595 - ui.pages.generate_manual_workflows.generate_manual_workflows - ERROR - _get_survey_names: 0
+2026-03-23 15:31:48,598 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:31:48,598 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:31:48,600 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:31:48,600 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:31:48,601 - src.core.database.postgres.connection - ERROR - Connection error: 0
+2026-03-23 15:31:48,601 - src.core.database.postgres.connection - ERROR - Connection error: 0
+2026-03-23 15:31:48,602 - ui.pages.generate_manual_workflows.generate_manual_workflows - ERROR - _get_survey_names: 0
+2026-03-23 15:31:48,604 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:31:48,604 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:31:48,608 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:31:48,608 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:31:50,450 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-03-23 15:31:50,450 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-03-23 15:31:50,456 - core.database_manager - INFO - Starting database initialization...
+2026-03-23 15:31:50,456 - core.database_manager - INFO - Connecting to MongoDB...
+2026-03-23 15:31:50,459 - core.database_manager - INFO - Connecting to PostgreSQL...
+2026-03-23 15:31:50,462 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool is active
+2026-03-23 15:31:50,462 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool is active
+2026-03-23 15:31:50,462 - core.database_manager - INFO - PostgreSQL connection pool initialized successfully.
+2026-03-23 15:31:50,462 - core.database_manager - INFO - Ensuring database schema...
+2026-03-23 15:31:50,463 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:31:50,463 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:31:50,463 - src.core.database.postgres.schema - INFO - Creating SURVEY AUTOMATION schema...
+2026-03-23 15:31:50,464 - src.core.database.postgres.schema - INFO - ✓ accounts table ready (with demographic fields)
+2026-03-23 15:31:50,465 - src.core.database.postgres.schema - INFO - ✓ account_cookies table ready
+2026-03-23 15:31:50,465 - src.core.database.postgres.schema - INFO - ✓ survey_sites table ready (by name)
+2026-03-23 15:31:50,466 - src.core.database.postgres.schema - INFO - ✓ account_urls table ready (with usage tracking)
+2026-03-23 15:31:50,466 - src.core.database.postgres.schema - INFO - ✓ prompts table ready (one per user)
+2026-03-23 15:31:50,467 - src.core.database.postgres.schema - INFO - ✓ prompt_backups table ready
+2026-03-23 15:31:50,467 - src.core.database.postgres.schema - INFO - ✓ workflows table ready (with upload tracking)
+2026-03-23 15:31:50,468 - src.core.database.postgres.schema - INFO - ✓ questions table ready (with click elements, categories, and survey tracking)
+2026-03-23 15:31:50,469 - src.core.database.postgres.schema - INFO - ✓ answers table ready
+2026-03-23 15:31:50,470 - src.core.database.postgres.schema - INFO - ✓ extraction_state table ready
+2026-03-23 15:31:50,471 - src.core.database.postgres.schema - INFO - ✓ workflow_generation_log table ready
+2026-03-23 15:31:50,471 - src.core.database.postgres.schema - INFO - ✓ screening_results table ready
+2026-03-23 15:31:50,475 - src.core.database.postgres.schema - INFO - ✓ questions.workflow_id foreign key ready
+2026-03-23 15:31:50,475 - src.core.database.postgres.schema - INFO - Creating indexes...
+2026-03-23 15:31:50,498 - src.core.database.postgres.schema - INFO - ✓ All indexes ready
+2026-03-23 15:31:50,499 - src.core.database.postgres.schema - INFO - Dropping existing functions to avoid signature conflicts...
+2026-03-23 15:31:50,529 - src.core.database.postgres.schema - INFO - ✓ Existing functions dropped
+2026-03-23 15:31:50,530 - src.core.database.postgres.schema - INFO - Creating helper functions...
+2026-03-23 15:31:50,535 - src.core.database.postgres.schema - INFO - ✓ Helper functions ready (7 functions)
+2026-03-23 15:31:50,535 - src.core.database.postgres.schema - INFO - Creating trigger functions...
+2026-03-23 15:31:50,538 - src.core.database.postgres.schema - INFO - ✓ Trigger functions ready
+2026-03-23 15:31:50,538 - src.core.database.postgres.schema - INFO - Creating triggers...
+2026-03-23 15:31:50,545 - src.core.database.postgres.schema - INFO - ✓ Triggers ready — created: 0, existing: 8
+2026-03-23 15:31:50,546 - src.core.database.postgres.schema - INFO - Creating views...
+2026-03-23 15:31:50,557 - src.core.database.postgres.schema - INFO -   ↳ Dropped/refreshed 9 views
+2026-03-23 15:31:50,590 - src.core.database.postgres.schema - INFO - ✓ All views ready (9 views)
+2026-03-23 15:31:50,590 - src.core.database.postgres.schema - INFO - Inserting default data...
+2026-03-23 15:31:50,591 - src.core.database.postgres.schema - INFO - ✓ Default survey sites inserted
+2026-03-23 15:31:50,601 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:31:50,602 - src.core.database.postgres.schema - INFO - ✅ POSTGRESQL SCHEMA FULLY INITIALIZED
+2026-03-23 15:31:50,602 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:31:50,602 - src.core.database.postgres.schema - INFO - 📊 Schema summary:
+2026-03-23 15:31:50,602 - src.core.database.postgres.schema - INFO -   • 12 tables
+2026-03-23 15:31:50,602 - src.core.database.postgres.schema - INFO -   • 7 helper functions
+2026-03-23 15:31:50,602 - src.core.database.postgres.schema - INFO -   • 9 views
+2026-03-23 15:31:50,602 - src.core.database.postgres.schema - INFO -   • 8 triggers
+2026-03-23 15:31:50,603 - src.core.database.postgres.schema - INFO -   • ~45 indexes
+2026-03-23 15:31:50,603 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:31:50,603 - core.database_manager - INFO - Database schema ensured successfully.
+2026-03-23 15:31:50,613 - src.streamlit.ui.pages.accounts.chrome_session_manager - INFO - ChromeSessionManager initialized with profile dir: /workspace/chrome_profiles
+2026-03-23 15:31:50,627 - ui.pages.accounts.accounts - INFO - ✅ Ensured survey_sites table exists with site_name
+2026-03-23 15:31:50,729 - ui.pages.accounts.accounts - INFO - ✅ Ensured account_urls table exists
+2026-03-23 15:31:50,773 - ui.pages.generate_manual_workflows.orchestrator - INFO -   ✓ Extractor: 'Top Surveys' (topsurveys_extractor.py)
+2026-03-23 15:31:50,790 - ui.pages.generate_manual_workflows.orchestrator - INFO -   ✓ WorkflowCreator: 'Top Surveys' (topsurveys_workflow.py)
+2026-03-23 15:31:50,790 - ui.pages.generate_manual_workflows.orchestrator - INFO - Orchestrator loaded — extractors: ['Top Surveys'] | creators:   ['Top Surveys']
+2026-03-23 15:31:50,794 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:31:50,794 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:31:50,797 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:31:50,797 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:31:50,799 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:31:50,799 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:31:50,821 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:31:50,821 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:31:50,834 - src.streamlit.ui.pages.accounts.chrome_session_manager - INFO - ChromeSessionManager initialized with profile dir: /workspace/chrome_profiles
+2026-03-23 15:31:50,835 - _genmw_topsurveys_extractor - INFO - [INIT] Account 1 / Site 1
+2026-03-23 15:31:50,835 - _genmw_topsurveys_extractor - INFO - [INIT] URL: https://app.topsurveys.app/surveys
+2026-03-23 15:31:50,838 - _genmw_topsurveys_extractor - INFO - [INIT] Connecting to Chrome — port 9222
+(node:714) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+2026-03-23 15:31:52,475 - extraction.base_extractor - INFO - Connected to Chrome CDP port 9222
+2026-03-23 15:31:52,476 - _genmw_topsurveys_extractor - INFO - [INIT] Chrome connected — port 9222
+2026-03-23 15:31:52,478 - _genmw_topsurveys_extractor - INFO - [NETWORK] Network listener attached — waiting for API calls
+2026-03-23 15:31:52,478 - _genmw_topsurveys_extractor - INFO - [INIT] Navigating to dashboard — https://app.topsurveys.app/surveys
+2026-03-23 15:31:52,478 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Navigating to: https://app.topsurveys.app/surveys
+2026-03-23 15:31:54,909 - _genmw_topsurveys_extractor - INFO - [INIT] Page loaded — landed on: https://app.topsurveys.app/surveys
+2026-03-23 15:32:09,937 - _genmw_topsurveys_extractor - WARNING - [INIT] Timed out waiting for buttons — proceeding anyway
+2026-03-23 15:32:09,937 - _genmw_topsurveys_extractor - WARNING - [TopSurveys] Timed out waiting for buttons — proceeding
+2026-03-23 15:32:09,938 - _genmw_topsurveys_extractor - INFO - [NETWORK] Triggering lazy API calls (scroll + mouse move)…
+2026-03-23 15:32:20,152 - _genmw_topsurveys_extractor - INFO - [NETWORK] Capture complete — 1 valid API response(s) stored — URL: https://app.topsurveys.app/surveys
+2026-03-23 15:32:20,152 - _genmw_topsurveys_extractor - INFO - [NETWORK]   → https://api.primesurveys.com/surveys — HTTP 200
+2026-03-23 15:32:20,152 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Landed on: https://app.topsurveys.app/surveys | Captured 1 API responses
+2026-03-23 15:32:20,152 - _genmw_topsurveys_extractor - INFO - [DISCOVERY] Trying API-first extraction from network data…
+2026-03-23 15:32:20,152 - _genmw_topsurveys_extractor - INFO - [DISCOVERY] TopSurveys native API shape detected — 50 survey(s) — https://api.primesurveys.com/surveys
+2026-03-23 15:32:20,153 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "8fe02890-b3ca-4c91-bb66-6e022376d77b", "loi": 70, "user_reward_without_bonus": 80, "user_reward": 100, "user_rating_avg": 5, "user_rating_ct": 110, "feature": false, "external_id": "1", "survey_session_id": "7ca86be84908b19a458ff52918349d96", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": true, "rd_sy_nr": "1", "rd_destination_platform_survey_number": "1", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 1, "rd_duplication_checked": true, "ignore_rd": true}
+2026-03-23 15:32:20,154 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "3d9391d5-eba5-4901-b3aa-a6fc0922156a", "loi": 400, "user_reward_without_bonus": 91, "user_reward": 114, "user_rating_avg": 5, "user_rating_ct": 155, "feature": false, "external_id": "12f07ea1c43036abd1af7e32ba3c12e3", "survey_session_id": "6733ef78d7c01844f35685196773cd32", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "12f07ea1c43036abd1af7e32ba3c12e3", "rd_destination_platform_survey_number": "12f07ea1c43036abd1af7e32ba3c12e3", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 2, "rd_duplication_checked": true, "ignore_
+2026-03-23 15:32:20,154 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "78410b03-018f-4cd5-8b32-61796e89b27b", "loi": 401, "user_reward_without_bonus": 106, "user_reward": 132, "user_rating_avg": 5, "user_rating_ct": 110, "feature": false, "external_id": "4de1483794069b55657a93278d86b3f5", "survey_session_id": "612a2afb44d06f11f00a79c979f9a2d8", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "4de1483794069b55657a93278d86b3f5", "rd_destination_platform_survey_number": "4de1483794069b55657a93278d86b3f5", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 3, "rd_duplication_checked": true, "ignore
+2026-03-23 15:32:20,155 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "1ecd480f-7805-4010-85ed-8327ef81665a", "loi": 290, "user_reward_without_bonus": 166, "user_reward": 207, "user_rating_avg": 5, "user_rating_ct": 23, "feature": false, "external_id": "75613131", "survey_session_id": "856b905d6e4660fb6eb6d202092e4ade", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "75613131", "rd_destination_platform_survey_number": "75613131", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 4, "rd_duplication_checked": true, "ignore_rd": true}
+2026-03-23 15:32:20,155 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "acab939f-e185-477f-9ebc-11bb7a4d9615", "loi": 184, "user_reward_without_bonus": 46, "user_reward": 58, "user_rating_avg": 5, "user_rating_ct": 110, "feature": false, "external_id": "a3a98855b6b942804a2ad01ebf12e903", "survey_session_id": "7e6b4757dbc734139216b7e5c5b8c113", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "a3a98855b6b942804a2ad01ebf12e903", "rd_destination_platform_survey_number": "a3a98855b6b942804a2ad01ebf12e903", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 5, "rd_duplication_checked": true, "ignore_r
+2026-03-23 15:32:20,155 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "dc4a98f9-c817-40d3-980c-abfd04a84153", "loi": 351, "user_reward_without_bonus": 116, "user_reward": 145, "user_rating_avg": 5, "user_rating_ct": 110, "feature": false, "external_id": "8c5f6c33307205fe57b4fe2df045aa7c", "survey_session_id": "c88774fa957ac3ef94f4c8918ae4e502", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "8c5f6c33307205fe57b4fe2df045aa7c", "rd_destination_platform_survey_number": "8c5f6c33307205fe57b4fe2df045aa7c", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 6, "rd_duplication_checked": true, "ignore
+2026-03-23 15:32:20,155 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "55713daa-321c-4874-b62e-ddbfee0ea287", "loi": 710, "user_reward_without_bonus": 86, "user_reward": 107, "user_rating_avg": 5, "user_rating_ct": 12, "feature": false, "external_id": "598281", "survey_session_id": "70c53dce49003cab8fba5f4a3ce35a0b", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "20dc744a-485b-41a4-b6e2-e5518c747f1a", "rd_destination_platform_survey_number": "20dc744a-485b-41a4-b6e2-e5518c747f1a", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 7, "rd_duplication_checked": true, "ignore_rd": true}
+2026-03-23 15:32:20,155 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "d78109f8-9a14-44e6-913e-3ad23fdbe0ea", "loi": 1013, "user_reward_without_bonus": 170, "user_reward": 212, "user_rating_avg": 3.5, "user_rating_ct": 43, "feature": false, "external_id": "598380", "survey_session_id": "4a152deda2cb053475a92848cdc9d00b", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "237915fa-78f6-4f02-b545-f89163e43041", "rd_destination_platform_survey_number": "237915fa-78f6-4f02-b545-f89163e43041", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 8, "rd_duplication_checked": true, "ignore_rd": true}
+2026-03-23 15:32:20,156 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "3284650f-caf7-4c4b-a1c4-75eb9add4c3f", "loi": 288, "user_reward_without_bonus": 37, "user_reward": 46, "user_rating_avg": 5, "user_rating_ct": 256, "feature": false, "external_id": "4c10c4a4c172fe8c171a1bbd0e3f8056", "survey_session_id": "8e469cc81e8f5d6d4569a77fa3e48dbe", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "4c10c4a4c172fe8c171a1bbd0e3f8056", "rd_destination_platform_survey_number": "4c10c4a4c172fe8c171a1bbd0e3f8056", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 9, "rd_duplication_checked": true, "ignore_r
+2026-03-23 15:32:20,156 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "4cc66fee-30b3-401d-9031-ab2184a42d5a", "loi": 287, "user_reward_without_bonus": 37, "user_reward": 46, "user_rating_avg": 5, "user_rating_ct": 110, "feature": false, "external_id": "40538abe80360431c54eabcacd76d1a1", "survey_session_id": "c5bbeb4d44a05adb7e711bc246a56519", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "40538abe80360431c54eabcacd76d1a1", "rd_destination_platform_survey_number": "40538abe80360431c54eabcacd76d1a1", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 10, "rd_duplication_checked": true, "ignore_
+2026-03-23 15:32:20,156 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "6e3aee3c-6cea-4038-99ca-680e438f8ead", "loi": 368, "user_reward_without_bonus": 138, "user_reward": 172, "user_rating_avg": 5, "user_rating_ct": 110, "feature": false, "external_id": "dec3de1d60b50bc16703296840d10b7c", "survey_session_id": "01cb01d06657c354363c7f66c5996913", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "dec3de1d60b50bc16703296840d10b7c", "rd_destination_platform_survey_number": "dec3de1d60b50bc16703296840d10b7c", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 11, "rd_duplication_checked": true, "ignor
+2026-03-23 15:32:20,156 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "cbcfcfce-74e2-440c-9a02-fce91393987a", "loi": 289, "user_reward_without_bonus": 89, "user_reward": 111, "user_rating_avg": 5, "user_rating_ct": 110, "feature": false, "external_id": "bf5593a3e34b5bb941dfc8c9357e1256", "survey_session_id": "5c5a68130a191a4055985ca9ab535946", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "bf5593a3e34b5bb941dfc8c9357e1256", "rd_destination_platform_survey_number": "bf5593a3e34b5bb941dfc8c9357e1256", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 12, "rd_duplication_checked": true, "ignore
+2026-03-23 15:32:20,156 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "fea76930-4baa-4600-ab8a-8f0a14d56d7a", "loi": 289, "user_reward_without_bonus": 37, "user_reward": 46, "user_rating_avg": 5, "user_rating_ct": 110, "feature": false, "external_id": "a1746adde530eb360014b54307e1ef77", "survey_session_id": "27a3468d0c7141c769c2ea158f680bb7", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "a1746adde530eb360014b54307e1ef77", "rd_destination_platform_survey_number": "a1746adde530eb360014b54307e1ef77", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 13, "rd_duplication_checked": true, "ignore_
+2026-03-23 15:32:20,156 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "3e27a945-2aaf-426f-b8f2-e99f10abc383", "loi": 235, "user_reward_without_bonus": 108, "user_reward": 135, "user_rating_avg": 5, "user_rating_ct": 110, "feature": false, "external_id": "a957175d3e215d60b32332d395657bf5", "survey_session_id": "4500826b4077a15eac14cf6ad3baca70", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "a957175d3e215d60b32332d395657bf5", "rd_destination_platform_survey_number": "a957175d3e215d60b32332d395657bf5", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 14, "rd_duplication_checked": true, "ignor
+2026-03-23 15:32:20,157 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "01e2ac73-0933-452c-9d3e-6936fc6803e5", "loi": 243, "user_reward_without_bonus": 23, "user_reward": 29, "user_rating_avg": 5, "user_rating_ct": 110, "feature": false, "external_id": "75718182", "survey_session_id": "a6cda1571eab479f3ee8a5ecf4c84b40", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "75718182", "rd_destination_platform_survey_number": "75718182", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 15, "rd_duplication_checked": true, "ignore_rd": true}
+2026-03-23 15:32:20,157 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "cd52d2c1-70b2-4832-aa35-a61a67b46f0f", "loi": 174, "user_reward_without_bonus": 48, "user_reward": 60, "user_rating_avg": 5, "user_rating_ct": 4, "feature": false, "external_id": "75816329", "survey_session_id": "9e43679b2c6478380468ab2e273faaa5", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "75816329", "rd_destination_platform_survey_number": "75816329", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 16, "rd_duplication_checked": true, "ignore_rd": true}
+2026-03-23 15:32:20,157 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "1c9bf8d9-9f16-403e-a068-1fc4a44ad8cb", "loi": 672, "user_reward_without_bonus": 156, "user_reward": 195, "user_rating_avg": 3.5, "user_rating_ct": 57, "feature": false, "external_id": "46883504", "survey_session_id": "98a8fe709e1a380fa4f48970f5cc71d7", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "46883504", "rd_destination_platform_survey_number": "46883504", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 17, "rd_duplication_checked": true, "ignore_rd": true}
+2026-03-23 15:32:20,157 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "fa99997a-a314-491c-9280-ef5324946033", "loi": 229, "user_reward_without_bonus": 37, "user_reward": 46, "user_rating_avg": 5, "user_rating_ct": 110, "feature": false, "external_id": "df3b9c5aee400667bb1cd9f800362618", "survey_session_id": "13dae8aff2935488005c6a63c93f1f80", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "df3b9c5aee400667bb1cd9f800362618", "rd_destination_platform_survey_number": "df3b9c5aee400667bb1cd9f800362618", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 18, "rd_duplication_checked": true, "ignore_
+2026-03-23 15:32:20,157 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "aee190ae-9a3e-4e84-a0b7-728bff219b6b", "loi": 954, "user_reward_without_bonus": 198, "user_reward": 247, "user_rating_avg": 3.5, "user_rating_ct": 2, "feature": false, "external_id": "75805063", "survey_session_id": "da7340f4e67f149ea0df51baccfe99c7", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "75805063", "rd_destination_platform_survey_number": "75805063", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 19, "rd_duplication_checked": true, "ignore_rd": true}
+2026-03-23 15:32:20,157 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "64d7afc3-8450-47c7-bae8-fce829f3653d", "loi": 377, "user_reward_without_bonus": 107, "user_reward": 134, "user_rating_avg": 2.5, "user_rating_ct": 103, "feature": false, "external_id": "29345c277a613327d2928b8b0c062778", "survey_session_id": "a195fe4ed734e4cf38eb665c390a9d0f", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "29345c277a613327d2928b8b0c062778", "rd_destination_platform_survey_number": "29345c277a613327d2928b8b0c062778", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 20, "rd_duplication_checked": true, "ign
+2026-03-23 15:32:20,158 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "229af20e-b909-4584-9d56-99569c495458", "loi": 177, "user_reward_without_bonus": 19, "user_reward": 24, "user_rating_avg": 5, "user_rating_ct": 8, "feature": false, "external_id": "75812962", "survey_session_id": "8e17ba28efb311a9a5085699a44d747b", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "75812962", "rd_destination_platform_survey_number": "75812962", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 21, "rd_duplication_checked": true, "ignore_rd": true}
+2026-03-23 15:32:20,158 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "4111529e-1a8a-461e-9439-95df18e129e7", "loi": 710, "user_reward_without_bonus": 118, "user_reward": 147, "user_rating_avg": 4.5, "user_rating_ct": 84, "feature": false, "external_id": "48158981", "survey_session_id": "df63076fb65bc78a6566882f05c4cbb9", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "48158981", "rd_destination_platform_survey_number": "48158981", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 22, "rd_duplication_checked": true, "ignore_rd": true}
+2026-03-23 15:32:20,158 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "1a54ad20-e5e9-41bb-849a-e61233665c3e", "loi": 601, "user_reward_without_bonus": 139, "user_reward": 174, "user_rating_avg": 5, "user_rating_ct": 5, "feature": false, "external_id": "597787", "survey_session_id": "087b299421b09ece8186b1c71e85d09f", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "0f448174-aeb2-461d-8004-81949ba1f93e", "rd_destination_platform_survey_number": "0f448174-aeb2-461d-8004-81949ba1f93e", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 23, "rd_duplication_checked": true, "ignore_rd": true}
+2026-03-23 15:32:20,158 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "e9bb73d9-83b4-4872-bc82-6c9035ac6676", "loi": 184, "user_reward_without_bonus": 30, "user_reward": 37, "user_rating_avg": 4.5, "user_rating_ct": 84, "feature": false, "external_id": "592202", "survey_session_id": "586e5cc7480c329f05326e93585f2ebe", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "578bdfde-1074-46ad-a2b8-ffaec01193d5", "rd_destination_platform_survey_number": "578bdfde-1074-46ad-a2b8-ffaec01193d5", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 24, "rd_duplication_checked": true, "ignore_rd": true}
+2026-03-23 15:32:20,158 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "136ef2eb-499e-4d99-8a48-1a46d4628b5d", "loi": 1467, "user_reward_without_bonus": 210, "user_reward": 262, "user_rating_avg": 3.5, "user_rating_ct": 53, "feature": false, "external_id": "48051701", "survey_session_id": "6ead4509eccf048a2048ba329ea96c3e", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "48051701", "rd_destination_platform_survey_number": "48051701", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 25, "rd_duplication_checked": true, "ignore_rd": true}
+2026-03-23 15:32:20,158 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "24d248f6-d1d3-486e-8ead-b9b40b86ac07", "loi": 688, "user_reward_without_bonus": 89, "user_reward": 111, "user_rating_avg": 4.5, "user_rating_ct": 59, "feature": false, "external_id": "557672", "survey_session_id": "41880707c82a5971fb998e356773d68e", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "8a01b332-cecb-44cc-b10b-45c90851597b", "rd_destination_platform_survey_number": "8a01b332-cecb-44cc-b10b-45c90851597b", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 26, "rd_duplication_checked": true, "ignore_rd": true}
+2026-03-23 15:32:20,159 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "7cadf82f-d120-442d-9f80-3271fac20eb7", "loi": 576, "user_reward_without_bonus": 82, "user_reward": 103, "user_rating_avg": 4.5, "user_rating_ct": 10, "feature": false, "external_id": "75635880", "survey_session_id": "00a9954484de6f7e3ddb927a1237524e", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "75635880", "rd_destination_platform_survey_number": "75635880", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 27, "rd_duplication_checked": true, "ignore_rd": true}
+2026-03-23 15:32:20,159 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "3be9f1f1-c89e-4c28-9e13-0701ec30df15", "loi": 543, "user_reward_without_bonus": 87, "user_reward": 109, "user_rating_avg": 4.5, "user_rating_ct": 110, "feature": false, "external_id": "2157880419028", "survey_session_id": "033fd20d3993319176d8695b87d8f4bd", "rd_supplier_id": null, "is_rfg_survey": true, "onboarding": false, "rd_sy_nr": "2157880419028", "rd_destination_platform_survey_number": "2157880419028", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 28, "rd_duplication_checked": true, "ignore_rd": true}
+2026-03-23 15:32:20,159 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "be50b0a2-5ba5-4690-b144-227b02940db5", "loi": 898, "user_reward_without_bonus": 112, "user_reward": 140, "user_rating_avg": 4, "user_rating_ct": 49, "feature": false, "external_id": "75482743", "survey_session_id": "68b79582cf0454067d3d51abf9692525", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "75482743", "rd_destination_platform_survey_number": "75482743", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 29, "rd_duplication_checked": true, "ignore_rd": true}
+2026-03-23 15:32:20,159 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "14779214-3a28-4507-a5df-65a891016e06", "loi": 228, "user_reward_without_bonus": 37, "user_reward": 46, "user_rating_avg": 5, "user_rating_ct": 110, "feature": false, "external_id": "d64e4e7e1f074d259295603e1951e41e", "survey_session_id": "a4892a8bd8b129314ec1fa31759a0b4f", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "d64e4e7e1f074d259295603e1951e41e", "rd_destination_platform_survey_number": "d64e4e7e1f074d259295603e1951e41e", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 30, "rd_duplication_checked": true, "ignore_
+2026-03-23 15:32:20,159 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "b24668e3-0157-4fcc-95df-8e749c0f955c", "loi": 297, "user_reward_without_bonus": 99, "user_reward": 124, "user_rating_avg": 4.5, "user_rating_ct": 110, "feature": false, "external_id": "75647757", "survey_session_id": "8c97056af284766b2014e33c3fb0ff4c", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "75647757", "rd_destination_platform_survey_number": "75647757", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 31, "rd_duplication_checked": true, "ignore_rd": true}
+2026-03-23 15:32:20,159 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "88111aad-b42e-460b-a86e-0ad5f30833f5", "loi": 709, "user_reward_without_bonus": 230, "user_reward": 287, "user_rating_avg": 3.5, "user_rating_ct": 12, "feature": false, "external_id": "75705521", "survey_session_id": "f7e7deba60096e05bacc63e21ba71f0c", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "75705521", "rd_destination_platform_survey_number": "75705521", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 32, "rd_duplication_checked": true, "ignore_rd": true}
+2026-03-23 15:32:20,159 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "52ff7da1-a8a5-4dbd-a9fa-2fb4342d0a2c", "loi": 1644, "user_reward_without_bonus": 288, "user_reward": 360, "user_rating_avg": 3.5, "user_rating_ct": 39, "feature": false, "external_id": "47879223", "survey_session_id": "34c3abd9d3a6e804e32a0b9d89e6c364", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "47879223", "rd_destination_platform_survey_number": "47879223", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 33, "rd_duplication_checked": true, "ignore_rd": true}
+2026-03-23 15:32:20,160 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "628736e9-7ff2-4c49-8120-f34527f5a450", "loi": 270, "user_reward_without_bonus": 37, "user_reward": 46, "user_rating_avg": 5, "user_rating_ct": 110, "feature": false, "external_id": "20c300b3d5a79347f9bc48a1ff35fda5", "survey_session_id": "433f16de27e61e4d0226dbeb51ebd2c1", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "20c300b3d5a79347f9bc48a1ff35fda5", "rd_destination_platform_survey_number": "20c300b3d5a79347f9bc48a1ff35fda5", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 34, "rd_duplication_checked": true, "ignore_
+2026-03-23 15:32:20,160 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "b27bf484-3ed3-41e7-b4e2-d813c1b7cc1e", "loi": 249, "user_reward_without_bonus": 126, "user_reward": 157, "user_rating_avg": 5, "user_rating_ct": 110, "feature": false, "external_id": "5044f960ed7579bf4bd1bdddf4306be0", "survey_session_id": "a1ace331d880fdcfc630282e2c88fd6a", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "5044f960ed7579bf4bd1bdddf4306be0", "rd_destination_platform_survey_number": "5044f960ed7579bf4bd1bdddf4306be0", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 35, "rd_duplication_checked": true, "ignor
+2026-03-23 15:32:20,160 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "f8694d04-2c6a-4974-b58e-8b5ed29c44f4", "loi": 1301, "user_reward_without_bonus": 254, "user_reward": 318, "user_rating_avg": 3.5, "user_rating_ct": 38, "feature": false, "external_id": "575710", "survey_session_id": "cd9d0de6351ba1881c2d3a9744b47e59", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "de19d5ff-249b-41c0-b3ec-33b2ff4c93c7", "rd_destination_platform_survey_number": "de19d5ff-249b-41c0-b3ec-33b2ff4c93c7", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 36, "rd_duplication_checked": true, "ignore_rd": true}
+2026-03-23 15:32:20,160 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "535c8be1-4464-44c5-9fcd-3ae7a3e0d236", "loi": 889, "user_reward_without_bonus": 217, "user_reward": 271, "user_rating_avg": 3.5, "user_rating_ct": 9, "feature": false, "external_id": "1ce5f5c5-ca89-4a89-bd03-45e9e9d1f917", "survey_session_id": "090e8637f3ef927a408ddc059a7c8949", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "1ce5f5c5-ca89-4a89-bd03-45e9e9d1f917", "rd_destination_platform_survey_number": "1ce5f5c5-ca89-4a89-bd03-45e9e9d1f917", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 37, "rd_duplication_checked": 
+2026-03-23 15:32:20,160 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "c5b7d852-e7f3-4e09-8ac9-7e7f1369cd06", "loi": 207, "user_reward_without_bonus": 37, "user_reward": 46, "user_rating_avg": 5, "user_rating_ct": 110, "feature": false, "external_id": "5145b24236b8f67c68c587e30a374666", "survey_session_id": "17488818681daf40f952324390902d8c", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "5145b24236b8f67c68c587e30a374666", "rd_destination_platform_survey_number": "5145b24236b8f67c68c587e30a374666", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 38, "rd_duplication_checked": true, "ignore_
+2026-03-23 15:32:20,160 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "12d6cdab-f970-4879-95d5-543b88a8e9f0", "loi": 777, "user_reward_without_bonus": 136, "user_reward": 170, "user_rating_avg": 4.5, "user_rating_ct": 12, "feature": false, "external_id": "48267159", "survey_session_id": "0476bf5efdc9ff7ae74fa35941e23adb", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "48267159", "rd_destination_platform_survey_number": "48267159", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 39, "rd_duplication_checked": true, "ignore_rd": true}
+2026-03-23 15:32:20,160 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "0d6aed86-1e83-48ac-9063-a051e345afd6", "loi": 767, "user_reward_without_bonus": 86, "user_reward": 107, "user_rating_avg": 4.5, "user_rating_ct": 4, "feature": false, "external_id": "598259", "survey_session_id": "113b7929a4b9423c3455c8adde455d77", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "12174474-7e9e-40e7-9718-8308aad305bb", "rd_destination_platform_survey_number": "12174474-7e9e-40e7-9718-8308aad305bb", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 40, "rd_duplication_checked": true, "ignore_rd": true}
+2026-03-23 15:32:20,161 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "ea0b1890-e0c6-4ea6-853f-d288b95056d8", "loi": 867, "user_reward_without_bonus": 189, "user_reward": 236, "user_rating_avg": 4, "user_rating_ct": 67, "feature": false, "external_id": "47960609", "survey_session_id": "ffc1ab81394151153f63f5f0ded01d59", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "47960609", "rd_destination_platform_survey_number": "47960609", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 41, "rd_duplication_checked": true, "ignore_rd": true}
+2026-03-23 15:32:20,161 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "dbf0ba62-3c1c-4e55-a661-eb4ec5d08218", "loi": 976, "user_reward_without_bonus": 183, "user_reward": 229, "user_rating_avg": 4, "user_rating_ct": 49, "feature": false, "external_id": "2096836266104", "survey_session_id": "2c57978fddf6fd2b69fd2b77c39a59c2", "rd_supplier_id": null, "is_rfg_survey": true, "onboarding": false, "rd_sy_nr": "2096836266104", "rd_destination_platform_survey_number": "2096836266104", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 42, "rd_duplication_checked": true, "ignore_rd": true}
+2026-03-23 15:32:20,161 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "1e53de70-244f-4c91-bc4e-7a68f6b73c30", "loi": 237, "user_reward_without_bonus": 37, "user_reward": 46, "user_rating_avg": 5, "user_rating_ct": 110, "feature": false, "external_id": "2ae82dd654d83b432024b80ea7d299d1", "survey_session_id": "18874dd7a99c12b5dbd3d8a869258ad7", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "2ae82dd654d83b432024b80ea7d299d1", "rd_destination_platform_survey_number": "2ae82dd654d83b432024b80ea7d299d1", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 43, "rd_duplication_checked": true, "ignore_
+2026-03-23 15:32:20,161 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "ae28b853-7b40-4d39-810e-cde2a45a37d0", "loi": 514, "user_reward_without_bonus": 135, "user_reward": 169, "user_rating_avg": 4.5, "user_rating_ct": 10, "feature": false, "external_id": "597784", "survey_session_id": "29a293de13b8abdeb48226a5a556584e", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "0f448174-aeb2-461d-8004-81949ba1f93e", "rd_destination_platform_survey_number": "0f448174-aeb2-461d-8004-81949ba1f93e", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 44, "rd_duplication_checked": true, "ignore_rd": true}
+2026-03-23 15:32:20,163 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "97f1e643-4d56-4fd2-8359-1a3f4ac875c5", "loi": 896, "user_reward_without_bonus": 136, "user_reward": 170, "user_rating_avg": 3.5, "user_rating_ct": 7, "feature": false, "external_id": "48203896", "survey_session_id": "67fd2b3cd1f105ef5fe077460b41a80b", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "48203896", "rd_destination_platform_survey_number": "48203896", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 45, "rd_duplication_checked": true, "ignore_rd": true}
+2026-03-23 15:32:20,165 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "b3484b95-07e9-47c3-b5ac-8abfd1f52474", "loi": 317, "user_reward_without_bonus": 102, "user_reward": 128, "user_rating_avg": 4.5, "user_rating_ct": 7, "feature": false, "external_id": "75269753", "survey_session_id": "4fc8fdcbc2e5202b9330744b1537a42f", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "75269753", "rd_destination_platform_survey_number": "75269753", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 46, "rd_duplication_checked": true, "ignore_rd": true}
+2026-03-23 15:32:20,165 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "75729344-a63a-4269-ab85-6abb08b50d78", "loi": 334, "user_reward_without_bonus": 193, "user_reward": 241, "user_rating_avg": 4, "user_rating_ct": 60, "feature": false, "external_id": "47857253", "survey_session_id": "9f24250a3f36bfb165571c7f71ee5aab", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "47857253", "rd_destination_platform_survey_number": "47857253", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 47, "rd_duplication_checked": true, "ignore_rd": true}
+2026-03-23 15:32:20,166 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "70c696c0-04b4-458e-9add-8e72b62ad680", "loi": 233, "user_reward_without_bonus": 110, "user_reward": 138, "user_rating_avg": 5, "user_rating_ct": 110, "feature": false, "external_id": "52c6268d3796d5e86ea06ca616cd6e1b", "survey_session_id": "ff13431e8b4e26a8b90bfcee83df3544", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "52c6268d3796d5e86ea06ca616cd6e1b", "rd_destination_platform_survey_number": "52c6268d3796d5e86ea06ca616cd6e1b", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 48, "rd_duplication_checked": true, "ignor
+2026-03-23 15:32:20,168 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "d77da0a9-5bd5-4294-a8ec-c88c0dc31af1", "loi": 1235, "user_reward_without_bonus": 180, "user_reward": 225, "user_rating_avg": 4, "user_rating_ct": 25, "feature": false, "external_id": "75483499", "survey_session_id": "0cf0f7b8b78b64d49a0ee07757df23a4", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "75483499", "rd_destination_platform_survey_number": "75483499", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 49, "rd_duplication_checked": true, "ignore_rd": true}
+2026-03-23 15:32:20,168 - _genmw_topsurveys_extractor - INFO - [RAW_ITEM] {"hash": "4843c2a8-6189-4097-ab5a-f2fc49c5181c", "loi": 400, "user_reward_without_bonus": 40, "user_reward": 50, "user_rating_avg": 5, "user_rating_ct": 4, "feature": false, "external_id": "9651145", "survey_session_id": "f3b4f9217000f1ae7d5dbdcc26d60a16", "rd_supplier_id": null, "is_rfg_survey": false, "onboarding": false, "rd_sy_nr": "9651145", "rd_destination_platform_survey_number": "9651145", "payout_type": 1, "bonus": 25, "vip": false, "is_high_match": false, "order": 50, "rd_duplication_checked": true, "ignore_rd": true}
+2026-03-23 15:32:20,169 - _genmw_topsurveys_extractor - INFO - [DISCOVERY] API extraction found 50 survey(s) — source: network intercept
+2026-03-23 15:32:20,170 - _genmw_topsurveys_extractor - INFO - [DISCOVERY]   [1] Survey 52ff7da1 | 27 min | $3.60 | +25% bonus — $3.6  27min
+2026-03-23 15:32:20,171 - _genmw_topsurveys_extractor - INFO - [DISCOVERY]   [2] Survey f8694d04 | 22 min | $3.18 | +25% bonus — $3.18  22min
+2026-03-23 15:32:20,172 - _genmw_topsurveys_extractor - INFO - [DISCOVERY]   [3] Survey 88111aad | 12 min | $2.87 | +25% bonus — $2.87  12min
+2026-03-23 15:32:20,172 - _genmw_topsurveys_extractor - INFO - [DISCOVERY]   [4] Survey 535c8be1 | 15 min | $2.71 | +25% bonus — $2.71  15min
+2026-03-23 15:32:20,172 - _genmw_topsurveys_extractor - INFO - [DISCOVERY]   [5] Survey 136ef2eb | 24 min | $2.62 | +25% bonus — $2.62  24min
+2026-03-23 15:32:20,172 - _genmw_topsurveys_extractor - INFO - [DISCOVERY]   [6] Survey aee190ae | 16 min | $2.47 | +25% bonus — $2.47  16min
+2026-03-23 15:32:20,172 - _genmw_topsurveys_extractor - INFO - [DISCOVERY]   [7] Survey 75729344 | 6 min | $2.41 | +25% bonus — $2.41  6min
+2026-03-23 15:32:20,172 - _genmw_topsurveys_extractor - INFO - [DISCOVERY]   [8] Survey ea0b1890 | 14 min | $2.36 | +25% bonus — $2.36  14min
+2026-03-23 15:32:20,172 - _genmw_topsurveys_extractor - INFO - [DISCOVERY]   [9] Survey dbf0ba62 | 16 min | $2.29 | +25% bonus — $2.29  16min
+2026-03-23 15:32:20,172 - _genmw_topsurveys_extractor - INFO - [DISCOVERY]   [10] Survey d77da0a9 | 21 min | $2.25 | +25% bonus — $2.25  21min
+2026-03-23 15:32:20,172 - _genmw_topsurveys_extractor - INFO - [DISCOVERY]   [11] Survey d78109f8 | 17 min | $2.12 | +25% bonus — $2.12  17min
+2026-03-23 15:32:20,172 - _genmw_topsurveys_extractor - INFO - [DISCOVERY]   [12] Survey 1ecd480f | 5 min | $2.07 | +25% bonus — $2.07  5min
+2026-03-23 15:32:20,173 - _genmw_topsurveys_extractor - INFO - [DISCOVERY]   [13] Survey 1c9bf8d9 | 11 min | $1.95 | +25% bonus — $1.95  11min
+2026-03-23 15:32:20,173 - _genmw_topsurveys_extractor - INFO - [DISCOVERY]   [14] Survey 1a54ad20 | 10 min | $1.74 | +25% bonus — $1.74  10min
+2026-03-23 15:32:20,173 - _genmw_topsurveys_extractor - INFO - [DISCOVERY]   [15] Survey 6e3aee3c | 6 min | $1.72 | +25% bonus — $1.72  6min
+2026-03-23 15:32:20,173 - _genmw_topsurveys_extractor - INFO - [DISCOVERY]   [16] Survey 12d6cdab | 13 min | $1.70 | +25% bonus — $1.7  13min
+2026-03-23 15:32:20,173 - _genmw_topsurveys_extractor - INFO - [DISCOVERY]   [17] Survey 97f1e643 | 15 min | $1.70 | +25% bonus — $1.7  15min
+2026-03-23 15:32:20,173 - _genmw_topsurveys_extractor - INFO - [DISCOVERY]   [18] Survey ae28b853 | 9 min | $1.69 | +25% bonus — $1.69  9min
+2026-03-23 15:32:20,173 - _genmw_topsurveys_extractor - INFO - [DISCOVERY]   [19] Survey b27bf484 | 4 min | $1.57 | +25% bonus — $1.57  4min
+2026-03-23 15:32:20,173 - _genmw_topsurveys_extractor - INFO - [DISCOVERY]   [20] Survey 4111529e | 12 min | $1.47 | +25% bonus — $1.47  12min
+2026-03-23 15:32:20,173 - _genmw_topsurveys_extractor - INFO - [TopSurveys] API extraction found 50 surveys
+2026-03-23 15:32:20,178 - _genmw_topsurveys_extractor - INFO - [TopSurveys] [1/20] [api] Survey 52ff7da1 | 27 min | $3.60 | +25% bonus
+2026-03-23 15:32:20,178 - _genmw_topsurveys_extractor - INFO - [NAV] Opening survey — https://app.topsurveys.app/survey/52ff7da1-a8a5-4dbd-a9fa-2fb4342d0a2c?session=3
+2026-03-23 15:32:20,882 - _genmw_topsurveys_extractor - INFO - [NAV] page.goto() navigation succeeded — attempt 1
+2026-03-23 15:32:20,882 - _genmw_topsurveys_extractor - INFO - [NAV] Navigated to survey — now at: https://app.topsurveys.app/survey/52ff7da1-a8a5-4dbd-a9fa-2fb4342d0a2c?session=3
+2026-03-23 15:32:23,386 - _genmw_topsurveys_extractor - INFO - [SURVEY] Provider detected: unknown
+2026-03-23 15:32:23,386 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Provider: unknown
+2026-03-23 15:32:23,401 - _genmw_topsurveys_extractor - INFO - [SURVEY] Survey name resolved: 'Top Surveys'
+2026-03-23 15:32:23,401 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Survey name: 'Top Surveys'
+2026-03-23 15:32:23,401 - _genmw_topsurveys_extractor - INFO - [EXTRACT] Extracting screener page 1…
+2026-03-23 15:32:23,497 - _genmw_topsurveys_extractor - INFO - [EXTRACT] No questions found on page 1 — done with this survey
+2026-03-23 15:32:23,498 - _genmw_topsurveys_extractor - INFO - [TopSurveys] No questions on page 1
+2026-03-23 15:32:23,498 - _genmw_topsurveys_extractor - INFO - [DB] Saving 0 question(s) to DB…
+2026-03-23 15:32:23,541 - _genmw_topsurveys_extractor - INFO - [DB] Inserted 0 / 0 question(s) — batch=topsurveys_1_1774269140_0
+2026-03-23 15:32:23,542 - _genmw_topsurveys_extractor - INFO - [SURVEY] Done — 0 questions, 0 inserted
+2026-03-23 15:32:23,542 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Done: 'Top Surveys' — 0 Qs, 0 inserted
+2026-03-23 15:32:25,044 - _genmw_topsurveys_extractor - INFO - [TopSurveys] [2/20] [api] Survey f8694d04 | 22 min | $3.18 | +25% bonus
+2026-03-23 15:32:25,045 - _genmw_topsurveys_extractor - INFO - [NAV] Returning to listing page…
+2026-03-23 15:32:37,772 - _genmw_topsurveys_extractor - INFO - [NAV] Opening survey — https://app.topsurveys.app/survey/f8694d04-2c6a-4974-b58e-8b5ed29c44f4?session=c
+2026-03-23 15:32:38,466 - _genmw_topsurveys_extractor - INFO - [NAV] page.goto() navigation succeeded — attempt 1
+2026-03-23 15:32:38,466 - _genmw_topsurveys_extractor - INFO - [NAV] Navigated to survey — now at: https://app.topsurveys.app/survey/f8694d04-2c6a-4974-b58e-8b5ed29c44f4?session=c
+2026-03-23 15:32:40,971 - _genmw_topsurveys_extractor - INFO - [SURVEY] Provider detected: unknown
+2026-03-23 15:32:40,971 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Provider: unknown
+2026-03-23 15:32:40,991 - _genmw_topsurveys_extractor - INFO - [SURVEY] Survey name resolved: 'Top Surveys'
+2026-03-23 15:32:40,992 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Survey name: 'Top Surveys'
+2026-03-23 15:32:40,992 - _genmw_topsurveys_extractor - INFO - [EXTRACT] Extracting screener page 1…
+2026-03-23 15:32:41,097 - _genmw_topsurveys_extractor - INFO - [EXTRACT] No questions found on page 1 — done with this survey
+2026-03-23 15:32:41,097 - _genmw_topsurveys_extractor - INFO - [TopSurveys] No questions on page 1
+2026-03-23 15:32:41,097 - _genmw_topsurveys_extractor - INFO - [DB] Saving 0 question(s) to DB…
+2026-03-23 15:32:41,104 - _genmw_topsurveys_extractor - INFO - [DB] Inserted 0 / 0 question(s) — batch=topsurveys_1_1774269145_1
+2026-03-23 15:32:41,104 - _genmw_topsurveys_extractor - INFO - [SURVEY] Done — 0 questions, 0 inserted
+2026-03-23 15:32:41,104 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Done: 'Top Surveys' — 0 Qs, 0 inserted
+2026-03-23 15:32:42,607 - _genmw_topsurveys_extractor - INFO - [TopSurveys] [3/20] [api] Survey 88111aad | 12 min | $2.87 | +25% bonus
+2026-03-23 15:32:42,607 - _genmw_topsurveys_extractor - INFO - [NAV] Returning to listing page…
+2026-03-23 15:32:52,962 - _genmw_topsurveys_extractor - INFO - [NAV] Opening survey — https://app.topsurveys.app/survey/88111aad-b42e-460b-a86e-0ad5f30833f5?session=f
+2026-03-23 15:32:53,605 - _genmw_topsurveys_extractor - INFO - [NAV] page.goto() navigation succeeded — attempt 1
+2026-03-23 15:32:53,605 - _genmw_topsurveys_extractor - INFO - [NAV] Navigated to survey — now at: https://app.topsurveys.app/survey/88111aad-b42e-460b-a86e-0ad5f30833f5?session=f
+2026-03-23 15:32:56,110 - _genmw_topsurveys_extractor - INFO - [SURVEY] Provider detected: unknown
+2026-03-23 15:32:56,110 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Provider: unknown
+2026-03-23 15:32:56,131 - _genmw_topsurveys_extractor - INFO - [SURVEY] Survey name resolved: 'Top Surveys'
+2026-03-23 15:32:56,131 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Survey name: 'Top Surveys'
+2026-03-23 15:32:56,131 - _genmw_topsurveys_extractor - INFO - [EXTRACT] Extracting screener page 1…
+2026-03-23 15:32:56,248 - _genmw_topsurveys_extractor - INFO - [EXTRACT] No questions found on page 1 — done with this survey
+2026-03-23 15:32:56,248 - _genmw_topsurveys_extractor - INFO - [TopSurveys] No questions on page 1
+2026-03-23 15:32:56,248 - _genmw_topsurveys_extractor - INFO - [DB] Saving 0 question(s) to DB…
+2026-03-23 15:32:56,258 - _genmw_topsurveys_extractor - INFO - [DB] Inserted 0 / 0 question(s) — batch=topsurveys_1_1774269162_2
+2026-03-23 15:32:56,258 - _genmw_topsurveys_extractor - INFO - [SURVEY] Done — 0 questions, 0 inserted
+2026-03-23 15:32:56,258 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Done: 'Top Surveys' — 0 Qs, 0 inserted
+2026-03-23 15:32:57,763 - _genmw_topsurveys_extractor - INFO - [TopSurveys] [4/20] [api] Survey 535c8be1 | 15 min | $2.71 | +25% bonus
+2026-03-23 15:32:57,763 - _genmw_topsurveys_extractor - INFO - [NAV] Returning to listing page…
+2026-03-23 15:33:10,459 - _genmw_topsurveys_extractor - INFO - [NAV] Opening survey — https://app.topsurveys.app/survey/535c8be1-4464-44c5-9fcd-3ae7a3e0d236?session=0
+2026-03-23 15:33:11,294 - _genmw_topsurveys_extractor - INFO - [NAV] page.goto() navigation succeeded — attempt 1
+2026-03-23 15:33:11,294 - _genmw_topsurveys_extractor - INFO - [NAV] Navigated to survey — now at: https://app.topsurveys.app/survey/535c8be1-4464-44c5-9fcd-3ae7a3e0d236?session=0
+2026-03-23 15:33:11,486 - _genmw_topsurveys_extractor - INFO - [SURVEY] Provider detected: unknown
+2026-03-23 15:33:11,486 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Provider: unknown
+2026-03-23 15:33:11,512 - _genmw_topsurveys_extractor - INFO - [SURVEY] Survey name resolved: 'Top Surveys'
+2026-03-23 15:33:11,513 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Survey name: 'Top Surveys'
+2026-03-23 15:33:11,513 - _genmw_topsurveys_extractor - INFO - [EXTRACT] Extracting screener page 1…
+2026-03-23 15:33:11,610 - _genmw_topsurveys_extractor - INFO - [EXTRACT] No questions found on page 1 — done with this survey
+2026-03-23 15:33:11,611 - _genmw_topsurveys_extractor - INFO - [TopSurveys] No questions on page 1
+2026-03-23 15:33:11,611 - _genmw_topsurveys_extractor - INFO - [DB] Saving 0 question(s) to DB…
+2026-03-23 15:33:11,615 - _genmw_topsurveys_extractor - INFO - [DB] Inserted 0 / 0 question(s) — batch=topsurveys_1_1774269177_3
+2026-03-23 15:33:11,616 - _genmw_topsurveys_extractor - INFO - [SURVEY] Done — 0 questions, 0 inserted
+2026-03-23 15:33:11,616 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Done: 'Top Surveys' — 0 Qs, 0 inserted
+2026-03-23 15:33:13,120 - _genmw_topsurveys_extractor - INFO - [TopSurveys] [5/20] [api] Survey 136ef2eb | 24 min | $2.62 | +25% bonus
+2026-03-23 15:33:13,120 - _genmw_topsurveys_extractor - INFO - [NAV] Returning to listing page…
+2026-03-23 15:33:26,071 - _genmw_topsurveys_extractor - INFO - [NAV] Opening survey — https://app.topsurveys.app/survey/136ef2eb-499e-4d99-8a48-1a46d4628b5d?session=6
+2026-03-23 15:33:26,678 - _genmw_topsurveys_extractor - INFO - [NAV] page.goto() navigation succeeded — attempt 1
+2026-03-23 15:33:26,678 - _genmw_topsurveys_extractor - INFO - [NAV] Navigated to survey — now at: https://app.topsurveys.app/survey/136ef2eb-499e-4d99-8a48-1a46d4628b5d?session=6
+2026-03-23 15:33:29,183 - _genmw_topsurveys_extractor - INFO - [SURVEY] Provider detected: unknown
+2026-03-23 15:33:29,183 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Provider: unknown
+2026-03-23 15:33:29,204 - _genmw_topsurveys_extractor - INFO - [SURVEY] Survey name resolved: 'Top Surveys'
+2026-03-23 15:33:29,205 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Survey name: 'Top Surveys'
+2026-03-23 15:33:29,205 - _genmw_topsurveys_extractor - INFO - [EXTRACT] Extracting screener page 1…
+2026-03-23 15:33:29,329 - _genmw_topsurveys_extractor - INFO - [EXTRACT] No questions found on page 1 — done with this survey
+2026-03-23 15:33:29,329 - _genmw_topsurveys_extractor - INFO - [TopSurveys] No questions on page 1
+2026-03-23 15:33:29,329 - _genmw_topsurveys_extractor - INFO - [DB] Saving 0 question(s) to DB…
+2026-03-23 15:33:29,334 - _genmw_topsurveys_extractor - INFO - [DB] Inserted 0 / 0 question(s) — batch=topsurveys_1_1774269193_4
+2026-03-23 15:33:29,334 - _genmw_topsurveys_extractor - INFO - [SURVEY] Done — 0 questions, 0 inserted
+2026-03-23 15:33:29,334 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Done: 'Top Surveys' — 0 Qs, 0 inserted
+2026-03-23 15:33:30,843 - _genmw_topsurveys_extractor - INFO - [TopSurveys] [6/20] [api] Survey aee190ae | 16 min | $2.47 | +25% bonus
+2026-03-23 15:33:30,844 - _genmw_topsurveys_extractor - INFO - [NAV] Returning to listing page…
+2026-03-23 15:33:41,191 - _genmw_topsurveys_extractor - INFO - [NAV] Opening survey — https://app.topsurveys.app/survey/aee190ae-9a3e-4e84-a0b7-728bff219b6b?session=d
+2026-03-23 15:33:42,127 - _genmw_topsurveys_extractor - INFO - [NAV] page.goto() navigation succeeded — attempt 1
+2026-03-23 15:33:42,128 - _genmw_topsurveys_extractor - INFO - [NAV] Navigated to survey — now at: https://app.topsurveys.app/survey/aee190ae-9a3e-4e84-a0b7-728bff219b6b?session=d
+2026-03-23 15:33:44,636 - _genmw_topsurveys_extractor - INFO - [SURVEY] Provider detected: unknown
+2026-03-23 15:33:44,636 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Provider: unknown
+2026-03-23 15:33:44,667 - _genmw_topsurveys_extractor - INFO - [SURVEY] Survey name resolved: 'Top Surveys'
+2026-03-23 15:33:44,667 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Survey name: 'Top Surveys'
+2026-03-23 15:33:44,667 - _genmw_topsurveys_extractor - INFO - [EXTRACT] Extracting screener page 1…
+2026-03-23 15:33:44,863 - _genmw_topsurveys_extractor - INFO - [EXTRACT] No questions found on page 1 — done with this survey
+2026-03-23 15:33:44,864 - _genmw_topsurveys_extractor - INFO - [TopSurveys] No questions on page 1
+2026-03-23 15:33:44,864 - _genmw_topsurveys_extractor - INFO - [DB] Saving 0 question(s) to DB…
+2026-03-23 15:33:44,900 - _genmw_topsurveys_extractor - INFO - [DB] Inserted 0 / 0 question(s) — batch=topsurveys_1_1774269210_5
+2026-03-23 15:33:44,900 - _genmw_topsurveys_extractor - INFO - [SURVEY] Done — 0 questions, 0 inserted
+2026-03-23 15:33:44,900 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Done: 'Top Surveys' — 0 Qs, 0 inserted
+2026-03-23 15:33:46,405 - _genmw_topsurveys_extractor - INFO - [TopSurveys] [7/20] [api] Survey 75729344 | 6 min | $2.41 | +25% bonus
+2026-03-23 15:33:46,406 - _genmw_topsurveys_extractor - INFO - [NAV] Returning to listing page…
+2026-03-23 15:33:59,225 - _genmw_topsurveys_extractor - INFO - [NAV] Opening survey — https://app.topsurveys.app/survey/75729344-a63a-4269-ab85-6abb08b50d78?session=9
+2026-03-23 15:33:59,918 - _genmw_topsurveys_extractor - INFO - [NAV] page.goto() navigation succeeded — attempt 1
+2026-03-23 15:33:59,918 - _genmw_topsurveys_extractor - INFO - [NAV] Navigated to survey — now at: https://app.topsurveys.app/survey/75729344-a63a-4269-ab85-6abb08b50d78?session=9
+2026-03-23 15:34:02,422 - _genmw_topsurveys_extractor - INFO - [SURVEY] Provider detected: unknown
+2026-03-23 15:34:02,422 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Provider: unknown
+2026-03-23 15:34:02,459 - _genmw_topsurveys_extractor - INFO - [SURVEY] Survey name resolved: 'Top Surveys'
+2026-03-23 15:34:02,459 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Survey name: 'Top Surveys'
+2026-03-23 15:34:02,459 - _genmw_topsurveys_extractor - INFO - [EXTRACT] Extracting screener page 1…
+2026-03-23 15:34:02,594 - _genmw_topsurveys_extractor - INFO - [EXTRACT] No questions found on page 1 — done with this survey
+2026-03-23 15:34:02,594 - _genmw_topsurveys_extractor - INFO - [TopSurveys] No questions on page 1
+2026-03-23 15:34:02,594 - _genmw_topsurveys_extractor - INFO - [DB] Saving 0 question(s) to DB…
+2026-03-23 15:34:02,637 - _genmw_topsurveys_extractor - INFO - [DB] Inserted 0 / 0 question(s) — batch=topsurveys_1_1774269226_6
+2026-03-23 15:34:02,637 - _genmw_topsurveys_extractor - INFO - [SURVEY] Done — 0 questions, 0 inserted
+2026-03-23 15:34:02,637 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Done: 'Top Surveys' — 0 Qs, 0 inserted
+2026-03-23 15:34:04,143 - _genmw_topsurveys_extractor - INFO - [TopSurveys] [8/20] [api] Survey ea0b1890 | 14 min | $2.36 | +25% bonus
+2026-03-23 15:34:04,144 - _genmw_topsurveys_extractor - INFO - [NAV] Returning to listing page…
+2026-03-23 15:34:14,443 - _genmw_topsurveys_extractor - INFO - [NAV] Opening survey — https://app.topsurveys.app/survey/ea0b1890-e0c6-4ea6-853f-d288b95056d8?session=f
+2026-03-23 15:34:15,256 - _genmw_topsurveys_extractor - INFO - [NAV] page.goto() navigation succeeded — attempt 1
+2026-03-23 15:34:15,256 - _genmw_topsurveys_extractor - INFO - [NAV] Navigated to survey — now at: https://app.topsurveys.app/survey/ea0b1890-e0c6-4ea6-853f-d288b95056d8?session=f
+2026-03-23 15:34:17,760 - _genmw_topsurveys_extractor - INFO - [SURVEY] Provider detected: unknown
+2026-03-23 15:34:17,760 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Provider: unknown
+2026-03-23 15:34:17,777 - _genmw_topsurveys_extractor - INFO - [SURVEY] Survey name resolved: 'Top Surveys'
+2026-03-23 15:34:17,777 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Survey name: 'Top Surveys'
+2026-03-23 15:34:17,777 - _genmw_topsurveys_extractor - INFO - [EXTRACT] Extracting screener page 1…
+2026-03-23 15:34:17,886 - _genmw_topsurveys_extractor - INFO - [EXTRACT] No questions found on page 1 — done with this survey
+2026-03-23 15:34:17,886 - _genmw_topsurveys_extractor - INFO - [TopSurveys] No questions on page 1
+2026-03-23 15:34:17,886 - _genmw_topsurveys_extractor - INFO - [DB] Saving 0 question(s) to DB…
+2026-03-23 15:34:17,927 - _genmw_topsurveys_extractor - INFO - [DB] Inserted 0 / 0 question(s) — batch=topsurveys_1_1774269244_7
+2026-03-23 15:34:17,927 - _genmw_topsurveys_extractor - INFO - [SURVEY] Done — 0 questions, 0 inserted
+2026-03-23 15:34:17,927 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Done: 'Top Surveys' — 0 Qs, 0 inserted
+2026-03-23 15:34:19,436 - _genmw_topsurveys_extractor - INFO - [TopSurveys] [9/20] [api] Survey dbf0ba62 | 16 min | $2.29 | +25% bonus
+2026-03-23 15:34:19,436 - _genmw_topsurveys_extractor - INFO - [NAV] Returning to listing page…
+2026-03-23 15:34:32,419 - _genmw_topsurveys_extractor - INFO - [NAV] Opening survey — https://app.topsurveys.app/survey/dbf0ba62-3c1c-4e55-a661-eb4ec5d08218?session=2
+2026-03-23 15:34:33,191 - _genmw_topsurveys_extractor - INFO - [NAV] page.goto() navigation succeeded — attempt 1
+2026-03-23 15:34:33,192 - _genmw_topsurveys_extractor - INFO - [NAV] Navigated to survey — now at: https://app.topsurveys.app/survey/dbf0ba62-3c1c-4e55-a661-eb4ec5d08218?session=2
+2026-03-23 15:34:35,696 - _genmw_topsurveys_extractor - INFO - [SURVEY] Provider detected: unknown
+2026-03-23 15:34:35,696 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Provider: unknown
+2026-03-23 15:34:35,733 - _genmw_topsurveys_extractor - INFO - [SURVEY] Survey name resolved: 'Top Surveys'
+2026-03-23 15:34:35,733 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Survey name: 'Top Surveys'
+2026-03-23 15:34:35,733 - _genmw_topsurveys_extractor - INFO - [EXTRACT] Extracting screener page 1…
+2026-03-23 15:34:35,844 - _genmw_topsurveys_extractor - INFO - [EXTRACT] No questions found on page 1 — done with this survey
+2026-03-23 15:34:35,845 - _genmw_topsurveys_extractor - INFO - [TopSurveys] No questions on page 1
+2026-03-23 15:34:35,845 - _genmw_topsurveys_extractor - INFO - [DB] Saving 0 question(s) to DB…
+2026-03-23 15:34:35,851 - _genmw_topsurveys_extractor - INFO - [DB] Inserted 0 / 0 question(s) — batch=topsurveys_1_1774269259_8
+2026-03-23 15:34:35,851 - _genmw_topsurveys_extractor - INFO - [SURVEY] Done — 0 questions, 0 inserted
+2026-03-23 15:34:35,851 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Done: 'Top Surveys' — 0 Qs, 0 inserted
+2026-03-23 15:34:35,096 - _genmw_topsurveys_extractor - INFO - [TopSurveys] [10/20] [api] Survey d77da0a9 | 21 min | $2.25 | +25% bonus
+2026-03-23 15:34:35,096 - _genmw_topsurveys_extractor - INFO - [NAV] Returning to listing page…
+2026-03-23 15:34:47,726 - _genmw_topsurveys_extractor - INFO - [NAV] Opening survey — https://app.topsurveys.app/survey/d77da0a9-5bd5-4294-a8ec-c88c0dc31af1?session=0
+2026-03-23 15:34:48,369 - _genmw_topsurveys_extractor - INFO - [NAV] page.goto() navigation succeeded — attempt 1
+2026-03-23 15:34:48,369 - _genmw_topsurveys_extractor - INFO - [NAV] Navigated to survey — now at: https://app.topsurveys.app/survey/d77da0a9-5bd5-4294-a8ec-c88c0dc31af1?session=0
+2026-03-23 15:34:50,873 - _genmw_topsurveys_extractor - INFO - [SURVEY] Provider detected: unknown
+2026-03-23 15:34:50,874 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Provider: unknown
+2026-03-23 15:34:50,895 - _genmw_topsurveys_extractor - INFO - [SURVEY] Survey name resolved: 'Top Surveys'
+2026-03-23 15:34:50,896 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Survey name: 'Top Surveys'
+2026-03-23 15:34:50,896 - _genmw_topsurveys_extractor - INFO - [EXTRACT] Extracting screener page 1…
+2026-03-23 15:34:51,007 - _genmw_topsurveys_extractor - INFO - [EXTRACT] No questions found on page 1 — done with this survey
+2026-03-23 15:34:51,008 - _genmw_topsurveys_extractor - INFO - [TopSurveys] No questions on page 1
+2026-03-23 15:34:51,008 - _genmw_topsurveys_extractor - INFO - [DB] Saving 0 question(s) to DB…
+2026-03-23 15:34:51,012 - _genmw_topsurveys_extractor - INFO - [DB] Inserted 0 / 0 question(s) — batch=topsurveys_1_1774269275_9
+2026-03-23 15:34:51,012 - _genmw_topsurveys_extractor - INFO - [SURVEY] Done — 0 questions, 0 inserted
+2026-03-23 15:34:51,012 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Done: 'Top Surveys' — 0 Qs, 0 inserted
+2026-03-23 15:34:52,518 - _genmw_topsurveys_extractor - INFO - [TopSurveys] [11/20] [api] Survey d78109f8 | 17 min | $2.12 | +25% bonus
+2026-03-23 15:34:52,518 - _genmw_topsurveys_extractor - INFO - [NAV] Returning to listing page…
+2026-03-23 15:35:02,916 - _genmw_topsurveys_extractor - INFO - [NAV] Opening survey — https://app.topsurveys.app/survey/d78109f8-9a14-44e6-913e-3ad23fdbe0ea?session=4
+2026-03-23 15:35:03,677 - _genmw_topsurveys_extractor - INFO - [NAV] page.goto() navigation succeeded — attempt 1
+2026-03-23 15:35:03,677 - _genmw_topsurveys_extractor - INFO - [NAV] Navigated to survey — now at: https://app.topsurveys.app/survey/d78109f8-9a14-44e6-913e-3ad23fdbe0ea?session=4
+2026-03-23 15:35:06,181 - _genmw_topsurveys_extractor - INFO - [SURVEY] Provider detected: unknown
+2026-03-23 15:35:06,181 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Provider: unknown
+2026-03-23 15:35:06,207 - _genmw_topsurveys_extractor - INFO - [SURVEY] Survey name resolved: 'Top Surveys'
+2026-03-23 15:35:06,208 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Survey name: 'Top Surveys'
+2026-03-23 15:35:06,208 - _genmw_topsurveys_extractor - INFO - [EXTRACT] Extracting screener page 1…
+2026-03-23 15:35:06,341 - _genmw_topsurveys_extractor - INFO - [EXTRACT] No questions found on page 1 — done with this survey
+2026-03-23 15:35:06,341 - _genmw_topsurveys_extractor - INFO - [TopSurveys] No questions on page 1
+2026-03-23 15:35:06,341 - _genmw_topsurveys_extractor - INFO - [DB] Saving 0 question(s) to DB…
+2026-03-23 15:35:06,347 - _genmw_topsurveys_extractor - INFO - [DB] Inserted 0 / 0 question(s) — batch=topsurveys_1_1774269292_10
+2026-03-23 15:35:06,347 - _genmw_topsurveys_extractor - INFO - [SURVEY] Done — 0 questions, 0 inserted
+2026-03-23 15:35:06,347 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Done: 'Top Surveys' — 0 Qs, 0 inserted
+2026-03-23 15:35:07,851 - _genmw_topsurveys_extractor - INFO - [TopSurveys] [12/20] [api] Survey 1ecd480f | 5 min | $2.07 | +25% bonus
+2026-03-23 15:35:07,852 - _genmw_topsurveys_extractor - INFO - [NAV] Returning to listing page…
+2026-03-23 15:35:20,479 - _genmw_topsurveys_extractor - INFO - [NAV] Opening survey — https://app.topsurveys.app/survey/1ecd480f-7805-4010-85ed-8327ef81665a?session=8
+2026-03-23 15:35:21,188 - _genmw_topsurveys_extractor - INFO - [NAV] page.goto() navigation succeeded — attempt 1
+2026-03-23 15:35:21,189 - _genmw_topsurveys_extractor - INFO - [NAV] Navigated to survey — now at: https://app.topsurveys.app/survey/1ecd480f-7805-4010-85ed-8327ef81665a?session=8
+2026-03-23 15:35:23,692 - _genmw_topsurveys_extractor - INFO - [SURVEY] Provider detected: unknown
+2026-03-23 15:35:23,692 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Provider: unknown
+2026-03-23 15:35:23,719 - _genmw_topsurveys_extractor - INFO - [SURVEY] Survey name resolved: 'Top Surveys'
+2026-03-23 15:35:23,719 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Survey name: 'Top Surveys'
+2026-03-23 15:35:23,719 - _genmw_topsurveys_extractor - INFO - [EXTRACT] Extracting screener page 1…
+2026-03-23 15:35:23,837 - _genmw_topsurveys_extractor - INFO - [EXTRACT] No questions found on page 1 — done with this survey
+2026-03-23 15:35:23,837 - _genmw_topsurveys_extractor - INFO - [TopSurveys] No questions on page 1
+2026-03-23 15:35:23,837 - _genmw_topsurveys_extractor - INFO - [DB] Saving 0 question(s) to DB…
+2026-03-23 15:35:23,879 - _genmw_topsurveys_extractor - INFO - [DB] Inserted 0 / 0 question(s) — batch=topsurveys_1_1774269307_11
+2026-03-23 15:35:23,879 - _genmw_topsurveys_extractor - INFO - [SURVEY] Done — 0 questions, 0 inserted
+2026-03-23 15:35:23,879 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Done: 'Top Surveys' — 0 Qs, 0 inserted
+2026-03-23 15:35:25,384 - _genmw_topsurveys_extractor - INFO - [TopSurveys] [13/20] [api] Survey 1c9bf8d9 | 11 min | $1.95 | +25% bonus
+2026-03-23 15:35:25,385 - _genmw_topsurveys_extractor - INFO - [NAV] Returning to listing page…
+2026-03-23 15:35:35,729 - _genmw_topsurveys_extractor - INFO - [NAV] Opening survey — https://app.topsurveys.app/survey/1c9bf8d9-9f16-403e-a068-1fc4a44ad8cb?session=9
+2026-03-23 15:35:36,587 - _genmw_topsurveys_extractor - INFO - [NAV] page.goto() navigation succeeded — attempt 1
+2026-03-23 15:35:36,588 - _genmw_topsurveys_extractor - INFO - [NAV] Navigated to survey — now at: https://app.topsurveys.app/survey/1c9bf8d9-9f16-403e-a068-1fc4a44ad8cb?session=9
+2026-03-23 15:35:39,091 - _genmw_topsurveys_extractor - INFO - [SURVEY] Provider detected: unknown
+2026-03-23 15:35:39,092 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Provider: unknown
+2026-03-23 15:35:39,110 - _genmw_topsurveys_extractor - INFO - [SURVEY] Survey name resolved: 'Top Surveys'
+2026-03-23 15:35:39,111 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Survey name: 'Top Surveys'
+2026-03-23 15:35:39,111 - _genmw_topsurveys_extractor - INFO - [EXTRACT] Extracting screener page 1…
+2026-03-23 15:35:39,205 - _genmw_topsurveys_extractor - INFO - [EXTRACT] No questions found on page 1 — done with this survey
+2026-03-23 15:35:39,205 - _genmw_topsurveys_extractor - INFO - [TopSurveys] No questions on page 1
+2026-03-23 15:35:39,205 - _genmw_topsurveys_extractor - INFO - [DB] Saving 0 question(s) to DB…
+2026-03-23 15:35:39,248 - _genmw_topsurveys_extractor - INFO - [DB] Inserted 0 / 0 question(s) — batch=topsurveys_1_1774269325_12
+2026-03-23 15:35:39,248 - _genmw_topsurveys_extractor - INFO - [SURVEY] Done — 0 questions, 0 inserted
+2026-03-23 15:35:39,248 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Done: 'Top Surveys' — 0 Qs, 0 inserted
+2026-03-23 15:35:40,754 - _genmw_topsurveys_extractor - INFO - [TopSurveys] [14/20] [api] Survey 1a54ad20 | 10 min | $1.74 | +25% bonus
+2026-03-23 15:35:40,755 - _genmw_topsurveys_extractor - INFO - [NAV] Returning to listing page…
+2026-03-23 15:35:53,607 - _genmw_topsurveys_extractor - INFO - [NAV] Opening survey — https://app.topsurveys.app/survey/1a54ad20-e5e9-41bb-849a-e61233665c3e?session=0
+2026-03-23 15:35:54,378 - _genmw_topsurveys_extractor - INFO - [NAV] page.goto() navigation succeeded — attempt 1
+2026-03-23 15:35:54,378 - _genmw_topsurveys_extractor - INFO - [NAV] Navigated to survey — now at: https://app.topsurveys.app/survey/1a54ad20-e5e9-41bb-849a-e61233665c3e?session=0
+2026-03-23 15:35:56,885 - _genmw_topsurveys_extractor - INFO - [SURVEY] Provider detected: unknown
+2026-03-23 15:35:56,886 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Provider: unknown
+2026-03-23 15:35:57,090 - _genmw_topsurveys_extractor - INFO - [SURVEY] Survey name resolved: 'Top Surveys'
+2026-03-23 15:35:57,091 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Survey name: 'Top Surveys'
+2026-03-23 15:35:57,092 - _genmw_topsurveys_extractor - INFO - [EXTRACT] Extracting screener page 1…
+2026-03-23 15:35:57,327 - _genmw_topsurveys_extractor - INFO - [EXTRACT] No questions found on page 1 — done with this survey
+2026-03-23 15:35:57,327 - _genmw_topsurveys_extractor - INFO - [TopSurveys] No questions on page 1
+2026-03-23 15:35:57,327 - _genmw_topsurveys_extractor - INFO - [DB] Saving 0 question(s) to DB…
+2026-03-23 15:35:57,332 - _genmw_topsurveys_extractor - INFO - [DB] Inserted 0 / 0 question(s) — batch=topsurveys_1_1774269340_13
+2026-03-23 15:35:57,332 - _genmw_topsurveys_extractor - INFO - [SURVEY] Done — 0 questions, 0 inserted
+2026-03-23 15:35:57,332 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Done: 'Top Surveys' — 0 Qs, 0 inserted
+2026-03-23 15:35:58,843 - _genmw_topsurveys_extractor - INFO - [TopSurveys] [15/20] [api] Survey 6e3aee3c | 6 min | $1.72 | +25% bonus
+2026-03-23 15:35:58,846 - _genmw_topsurveys_extractor - INFO - [NAV] Returning to listing page…
+2026-03-23 15:36:09,578 - _genmw_topsurveys_extractor - INFO - [NAV] Opening survey — https://app.topsurveys.app/survey/6e3aee3c-6cea-4038-99ca-680e438f8ead?session=0
+2026-03-23 15:36:10,278 - _genmw_topsurveys_extractor - INFO - [NAV] page.goto() navigation succeeded — attempt 1
+2026-03-23 15:36:10,278 - _genmw_topsurveys_extractor - INFO - [NAV] Navigated to survey — now at: https://app.topsurveys.app/survey/6e3aee3c-6cea-4038-99ca-680e438f8ead?session=0
+2026-03-23 15:36:12,787 - _genmw_topsurveys_extractor - INFO - [SURVEY] Provider detected: unknown
+2026-03-23 15:36:12,787 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Provider: unknown
+2026-03-23 15:36:12,817 - _genmw_topsurveys_extractor - INFO - [SURVEY] Survey name resolved: 'Top Surveys'
+2026-03-23 15:36:12,818 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Survey name: 'Top Surveys'
+2026-03-23 15:36:12,818 - _genmw_topsurveys_extractor - INFO - [EXTRACT] Extracting screener page 1…
+2026-03-23 15:36:12,930 - _genmw_topsurveys_extractor - INFO - [EXTRACT] No questions found on page 1 — done with this survey
+2026-03-23 15:36:12,930 - _genmw_topsurveys_extractor - INFO - [TopSurveys] No questions on page 1
+2026-03-23 15:36:12,931 - _genmw_topsurveys_extractor - INFO - [DB] Saving 0 question(s) to DB…
+2026-03-23 15:36:12,972 - _genmw_topsurveys_extractor - INFO - [DB] Inserted 0 / 0 question(s) — batch=topsurveys_1_1774269358_14
+2026-03-23 15:36:12,972 - _genmw_topsurveys_extractor - INFO - [SURVEY] Done — 0 questions, 0 inserted
+2026-03-23 15:36:12,973 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Done: 'Top Surveys' — 0 Qs, 0 inserted
+2026-03-23 15:36:14,480 - _genmw_topsurveys_extractor - INFO - [TopSurveys] [16/20] [api] Survey 12d6cdab | 13 min | $1.70 | +25% bonus
+2026-03-23 15:36:14,480 - _genmw_topsurveys_extractor - INFO - [NAV] Returning to listing page…
+2026-03-23 15:36:28,261 - _genmw_topsurveys_extractor - INFO - [NAV] Opening survey — https://app.topsurveys.app/survey/12d6cdab-f970-4879-95d5-543b88a8e9f0?session=0
+2026-03-23 15:36:25,610 - _genmw_topsurveys_extractor - INFO - [NAV] page.goto() navigation succeeded — attempt 1
+2026-03-23 15:36:25,610 - _genmw_topsurveys_extractor - INFO - [NAV] Navigated to survey — now at: https://app.topsurveys.app/survey/12d6cdab-f970-4879-95d5-543b88a8e9f0?session=0
+2026-03-23 15:36:28,114 - _genmw_topsurveys_extractor - INFO - [SURVEY] Provider detected: unknown
+2026-03-23 15:36:28,114 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Provider: unknown
+2026-03-23 15:36:28,139 - _genmw_topsurveys_extractor - INFO - [SURVEY] Survey name resolved: 'Top Surveys'
+2026-03-23 15:36:28,139 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Survey name: 'Top Surveys'
+2026-03-23 15:36:28,139 - _genmw_topsurveys_extractor - INFO - [EXTRACT] Extracting screener page 1…
+2026-03-23 15:36:28,263 - _genmw_topsurveys_extractor - INFO - [EXTRACT] No questions found on page 1 — done with this survey
+2026-03-23 15:36:28,263 - _genmw_topsurveys_extractor - INFO - [TopSurveys] No questions on page 1
+2026-03-23 15:36:28,263 - _genmw_topsurveys_extractor - INFO - [DB] Saving 0 question(s) to DB…
+2026-03-23 15:36:28,286 - _genmw_topsurveys_extractor - INFO - [DB] Inserted 0 / 0 question(s) — batch=topsurveys_1_1774269374_15
+2026-03-23 15:36:28,287 - _genmw_topsurveys_extractor - INFO - [SURVEY] Done — 0 questions, 0 inserted
+2026-03-23 15:36:28,287 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Done: 'Top Surveys' — 0 Qs, 0 inserted
+2026-03-23 15:36:29,793 - _genmw_topsurveys_extractor - INFO - [TopSurveys] [17/20] [api] Survey 97f1e643 | 15 min | $1.70 | +25% bonus
+2026-03-23 15:36:29,795 - _genmw_topsurveys_extractor - INFO - [NAV] Returning to listing page…
+2026-03-23 15:36:42,578 - _genmw_topsurveys_extractor - INFO - [NAV] Opening survey — https://app.topsurveys.app/survey/97f1e643-4d56-4fd2-8359-1a3f4ac875c5?session=6
+2026-03-23 15:36:43,306 - _genmw_topsurveys_extractor - INFO - [NAV] page.goto() navigation succeeded — attempt 1
+2026-03-23 15:36:43,306 - _genmw_topsurveys_extractor - INFO - [NAV] Navigated to survey — now at: https://app.topsurveys.app/survey/97f1e643-4d56-4fd2-8359-1a3f4ac875c5?session=6
+2026-03-23 15:36:45,810 - _genmw_topsurveys_extractor - INFO - [SURVEY] Provider detected: unknown
+2026-03-23 15:36:45,811 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Provider: unknown
+2026-03-23 15:36:45,837 - _genmw_topsurveys_extractor - INFO - [SURVEY] Survey name resolved: 'Top Surveys'
+2026-03-23 15:36:45,837 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Survey name: 'Top Surveys'
+2026-03-23 15:36:45,837 - _genmw_topsurveys_extractor - INFO - [EXTRACT] Extracting screener page 1…
+2026-03-23 15:36:45,977 - _genmw_topsurveys_extractor - INFO - [EXTRACT] No questions found on page 1 — done with this survey
+2026-03-23 15:36:45,977 - _genmw_topsurveys_extractor - INFO - [TopSurveys] No questions on page 1
+2026-03-23 15:36:45,977 - _genmw_topsurveys_extractor - INFO - [DB] Saving 0 question(s) to DB…
+2026-03-23 15:36:45,986 - _genmw_topsurveys_extractor - INFO - [DB] Inserted 0 / 0 question(s) — batch=topsurveys_1_1774269389_16
+2026-03-23 15:36:45,986 - _genmw_topsurveys_extractor - INFO - [SURVEY] Done — 0 questions, 0 inserted
+2026-03-23 15:36:45,986 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Done: 'Top Surveys' — 0 Qs, 0 inserted
+2026-03-23 15:36:47,492 - _genmw_topsurveys_extractor - INFO - [TopSurveys] [18/20] [api] Survey ae28b853 | 9 min | $1.69 | +25% bonus
+2026-03-23 15:36:47,493 - _genmw_topsurveys_extractor - INFO - [NAV] Returning to listing page…
+2026-03-23 15:36:57,898 - _genmw_topsurveys_extractor - INFO - [NAV] Opening survey — https://app.topsurveys.app/survey/ae28b853-7b40-4d39-810e-cde2a45a37d0?session=2
+2026-03-23 15:36:58,567 - _genmw_topsurveys_extractor - INFO - [NAV] page.goto() navigation succeeded — attempt 1
+2026-03-23 15:36:58,568 - _genmw_topsurveys_extractor - INFO - [NAV] Navigated to survey — now at: https://app.topsurveys.app/survey/ae28b853-7b40-4d39-810e-cde2a45a37d0?session=2
+2026-03-23 15:37:01,073 - _genmw_topsurveys_extractor - INFO - [SURVEY] Provider detected: unknown
+2026-03-23 15:37:01,073 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Provider: unknown
+2026-03-23 15:37:01,093 - _genmw_topsurveys_extractor - INFO - [SURVEY] Survey name resolved: 'Top Surveys'
+2026-03-23 15:37:01,093 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Survey name: 'Top Surveys'
+2026-03-23 15:37:01,093 - _genmw_topsurveys_extractor - INFO - [EXTRACT] Extracting screener page 1…
+2026-03-23 15:37:01,201 - _genmw_topsurveys_extractor - INFO - [EXTRACT] No questions found on page 1 — done with this survey
+2026-03-23 15:37:01,201 - _genmw_topsurveys_extractor - INFO - [TopSurveys] No questions on page 1
+2026-03-23 15:37:01,201 - _genmw_topsurveys_extractor - INFO - [DB] Saving 0 question(s) to DB…
+2026-03-23 15:37:01,211 - _genmw_topsurveys_extractor - INFO - [DB] Inserted 0 / 0 question(s) — batch=topsurveys_1_1774269407_17
+2026-03-23 15:37:01,211 - _genmw_topsurveys_extractor - INFO - [SURVEY] Done — 0 questions, 0 inserted
+2026-03-23 15:37:01,211 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Done: 'Top Surveys' — 0 Qs, 0 inserted
+2026-03-23 15:37:02,715 - _genmw_topsurveys_extractor - INFO - [TopSurveys] [19/20] [api] Survey b27bf484 | 4 min | $1.57 | +25% bonus
+2026-03-23 15:37:02,716 - _genmw_topsurveys_extractor - INFO - [NAV] Returning to listing page…
+2026-03-23 15:37:15,415 - _genmw_topsurveys_extractor - INFO - [NAV] Opening survey — https://app.topsurveys.app/survey/b27bf484-3ed3-41e7-b4e2-d813c1b7cc1e?session=a
+2026-03-23 15:37:16,141 - _genmw_topsurveys_extractor - INFO - [NAV] page.goto() navigation succeeded — attempt 1
+2026-03-23 15:37:16,141 - _genmw_topsurveys_extractor - INFO - [NAV] Navigated to survey — now at: https://app.topsurveys.app/survey/b27bf484-3ed3-41e7-b4e2-d813c1b7cc1e?session=a
+2026-03-23 15:37:18,646 - _genmw_topsurveys_extractor - INFO - [SURVEY] Provider detected: unknown
+2026-03-23 15:37:18,646 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Provider: unknown
+2026-03-23 15:37:18,665 - _genmw_topsurveys_extractor - INFO - [SURVEY] Survey name resolved: 'Top Surveys'
+2026-03-23 15:37:18,665 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Survey name: 'Top Surveys'
+2026-03-23 15:37:18,665 - _genmw_topsurveys_extractor - INFO - [EXTRACT] Extracting screener page 1…
+2026-03-23 15:37:18,780 - _genmw_topsurveys_extractor - INFO - [EXTRACT] No questions found on page 1 — done with this survey
+2026-03-23 15:37:18,781 - _genmw_topsurveys_extractor - INFO - [TopSurveys] No questions on page 1
+2026-03-23 15:37:18,781 - _genmw_topsurveys_extractor - INFO - [DB] Saving 0 question(s) to DB…
+2026-03-23 15:37:18,805 - _genmw_topsurveys_extractor - INFO - [DB] Inserted 0 / 0 question(s) — batch=topsurveys_1_1774269422_18
+2026-03-23 15:37:18,805 - _genmw_topsurveys_extractor - INFO - [SURVEY] Done — 0 questions, 0 inserted
+2026-03-23 15:37:18,805 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Done: 'Top Surveys' — 0 Qs, 0 inserted
+2026-03-23 15:37:20,344 - _genmw_topsurveys_extractor - INFO - [TopSurveys] [20/20] [api] Survey 4111529e | 12 min | $1.47 | +25% bonus
+2026-03-23 15:37:20,345 - _genmw_topsurveys_extractor - INFO - [NAV] Returning to listing page…
+2026-03-23 15:37:30,776 - _genmw_topsurveys_extractor - INFO - [NAV] Opening survey — https://app.topsurveys.app/survey/4111529e-1a8a-461e-9439-95df18e129e7?session=d
+2026-03-23 15:37:31,508 - _genmw_topsurveys_extractor - INFO - [NAV] page.goto() navigation succeeded — attempt 1
+2026-03-23 15:37:31,508 - _genmw_topsurveys_extractor - INFO - [NAV] Navigated to survey — now at: https://app.topsurveys.app/survey/4111529e-1a8a-461e-9439-95df18e129e7?session=d
+2026-03-23 15:37:34,010 - _genmw_topsurveys_extractor - INFO - [SURVEY] Provider detected: unknown
+2026-03-23 15:37:34,011 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Provider: unknown
+2026-03-23 15:37:34,064 - _genmw_topsurveys_extractor - INFO - [SURVEY] Survey name resolved: 'Top Surveys'
+2026-03-23 15:37:34,064 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Survey name: 'Top Surveys'
+2026-03-23 15:37:34,064 - _genmw_topsurveys_extractor - INFO - [EXTRACT] Extracting screener page 1…
+2026-03-23 15:37:34,162 - _genmw_topsurveys_extractor - INFO - [EXTRACT] No questions found on page 1 — done with this survey
+2026-03-23 15:37:34,162 - _genmw_topsurveys_extractor - INFO - [TopSurveys] No questions on page 1
+2026-03-23 15:37:34,162 - _genmw_topsurveys_extractor - INFO - [DB] Saving 0 question(s) to DB…
+2026-03-23 15:37:34,167 - _genmw_topsurveys_extractor - INFO - [DB] Inserted 0 / 0 question(s) — batch=topsurveys_1_1774269440_19
+2026-03-23 15:37:34,167 - _genmw_topsurveys_extractor - INFO - [SURVEY] Done — 0 questions, 0 inserted
+2026-03-23 15:37:34,167 - _genmw_topsurveys_extractor - INFO - [TopSurveys] Done: 'Top Surveys' — 0 Qs, 0 inserted
+2026-03-23 15:37:35,704 - asyncio - ERROR - Exception in callback SyncBase._sync.<locals>.<lambda>(<Task cancell...twork.py:911>>) at /usr/local/lib/python3.10/site-packages/playwright/_impl/_sync_base.py:111
+handle: <Handle SyncBase._sync.<locals>.<lambda>(<Task cancell...twork.py:911>>) at /usr/local/lib/python3.10/site-packages/playwright/_impl/_sync_base.py:111>
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.10/site-packages/playwright/_impl/_network.py", line 912, in json
+    return json.loads(await self.text())
+  File "/usr/local/lib/python3.10/site-packages/playwright/_impl/_network.py", line 908, in text
+    content = await self.body()
+  File "/usr/local/lib/python3.10/site-packages/playwright/_impl/_network.py", line 901, in body
+    binary = await self._channel.send(
+  File "/usr/local/lib/python3.10/site-packages/playwright/_impl/_connection.py", line 69, in send
+    return await self._connection.wrap_api_call(
+  File "/usr/local/lib/python3.10/site-packages/playwright/_impl/_connection.py", line 557, in wrap_api_call
+    return await cb()
+  File "/usr/local/lib/python3.10/site-packages/playwright/_impl/_connection.py", line 123, in _inner_send
+    done, _ = await asyncio.wait(
+  File "/usr/local/lib/python3.10/asyncio/tasks.py", line 384, in wait
+    return await _wait(fs, timeout, return_when, loop)
+  File "/usr/local/lib/python3.10/asyncio/tasks.py", line 491, in _wait
+    await waiter
+asyncio.exceptions.CancelledError
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.10/asyncio/events.py", line 80, in _run
+    self._context.run(self._callback, *self._args)
+  File "/usr/local/lib/python3.10/site-packages/playwright/_impl/_sync_base.py", line 111, in <lambda>
+    task.add_done_callback(lambda _: g_self.switch())
+  File "/usr/local/lib/python3.10/site-packages/playwright/_impl/_connection.py", line 472, in _listener_with_error_handler_attached
+    potential_future = listener(params)
+  File "/usr/local/lib/python3.10/site-packages/playwright/_impl/_browser_context.py", line 181, in <lambda>
+    lambda params: self._on_response(
+  File "/usr/local/lib/python3.10/site-packages/playwright/_impl/_browser_context.py", line 730, in _on_response
+    page.emit(Page.Events.Response, response)
+  File "/usr/local/lib/python3.10/site-packages/pyee/asyncio.py", line 70, in emit
+    return super().emit(event, *args, **kwargs)
+  File "/usr/local/lib/python3.10/site-packages/pyee/base.py", line 220, in emit
+    handled = self._call_handlers(event, args, kwargs)
+  File "/usr/local/lib/python3.10/site-packages/pyee/base.py", line 196, in _call_handlers
+    self._emit_run(f, args, kwargs)
+  File "/usr/local/lib/python3.10/site-packages/pyee/asyncio.py", line 79, in _emit_run
+    coro: Any = f(*args, **kwargs)
+  File "/usr/local/lib/python3.10/site-packages/playwright/_impl/_impl_to_api_mapping.py", line 123, in wrapper_func
+    return handler(
+  File "/app/src/streamlit/ui/pages/generate_manual_workflows/extractors/topsurveys_extractor.py", line 854, in handle_response
+    data = response.json()
+  File "/usr/local/lib/python3.10/site-packages/playwright/sync_api/_generated.py", line 644, in json
+    return mapping.from_maybe_impl(self._sync(self._impl_obj.json()))
+  File "/usr/local/lib/python3.10/site-packages/playwright/_impl/_sync_base.py", line 115, in _sync
+    return task.result()
+asyncio.exceptions.CancelledError
+2026-03-23 15:37:35,709 - asyncio - ERROR - Exception in callback SyncBase._sync.<locals>.<lambda>(<Task cancell...twork.py:911>>) at /usr/local/lib/python3.10/site-packages/playwright/_impl/_sync_base.py:111
+handle: <Handle SyncBase._sync.<locals>.<lambda>(<Task cancell...twork.py:911>>) at /usr/local/lib/python3.10/site-packages/playwright/_impl/_sync_base.py:111>
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.10/site-packages/playwright/_impl/_network.py", line 912, in json
+    return json.loads(await self.text())
+  File "/usr/local/lib/python3.10/site-packages/playwright/_impl/_network.py", line 908, in text
+    content = await self.body()
+  File "/usr/local/lib/python3.10/site-packages/playwright/_impl/_network.py", line 901, in body
+    binary = await self._channel.send(
+  File "/usr/local/lib/python3.10/site-packages/playwright/_impl/_connection.py", line 69, in send
+    return await self._connection.wrap_api_call(
+  File "/usr/local/lib/python3.10/site-packages/playwright/_impl/_connection.py", line 557, in wrap_api_call
+    return await cb()
+  File "/usr/local/lib/python3.10/site-packages/playwright/_impl/_connection.py", line 123, in _inner_send
+    done, _ = await asyncio.wait(
+  File "/usr/local/lib/python3.10/asyncio/tasks.py", line 384, in wait
+    return await _wait(fs, timeout, return_when, loop)
+  File "/usr/local/lib/python3.10/asyncio/tasks.py", line 491, in _wait
+    await waiter
+asyncio.exceptions.CancelledError
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.10/asyncio/events.py", line 80, in _run
+    self._context.run(self._callback, *self._args)
+  File "/usr/local/lib/python3.10/site-packages/playwright/_impl/_sync_base.py", line 111, in <lambda>
+    task.add_done_callback(lambda _: g_self.switch())
+  File "/usr/local/lib/python3.10/site-packages/playwright/_impl/_connection.py", line 472, in _listener_with_error_handler_attached
+    potential_future = listener(params)
+  File "/usr/local/lib/python3.10/site-packages/playwright/_impl/_browser_context.py", line 181, in <lambda>
+    lambda params: self._on_response(
+  File "/usr/local/lib/python3.10/site-packages/playwright/_impl/_browser_context.py", line 730, in _on_response
+    page.emit(Page.Events.Response, response)
+  File "/usr/local/lib/python3.10/site-packages/pyee/asyncio.py", line 70, in emit
+    return super().emit(event, *args, **kwargs)
+  File "/usr/local/lib/python3.10/site-packages/pyee/base.py", line 220, in emit
+    handled = self._call_handlers(event, args, kwargs)
+  File "/usr/local/lib/python3.10/site-packages/pyee/base.py", line 196, in _call_handlers
+    self._emit_run(f, args, kwargs)
+  File "/usr/local/lib/python3.10/site-packages/pyee/asyncio.py", line 79, in _emit_run
+    coro: Any = f(*args, **kwargs)
+  File "/usr/local/lib/python3.10/site-packages/playwright/_impl/_impl_to_api_mapping.py", line 123, in wrapper_func
+    return handler(
+  File "/app/src/streamlit/ui/pages/generate_manual_workflows/extractors/topsurveys_extractor.py", line 854, in handle_response
+    data = response.json()
+  File "/usr/local/lib/python3.10/site-packages/playwright/sync_api/_generated.py", line 644, in json
+    return mapping.from_maybe_impl(self._sync(self._impl_obj.json()))
+  File "/usr/local/lib/python3.10/site-packages/playwright/_impl/_sync_base.py", line 115, in _sync
+    return task.result()
+asyncio.exceptions.CancelledError
+2026-03-23 15:37:35,711 - asyncio - ERROR - Exception in callback SyncBase._sync.<locals>.<lambda>(<Task cancell...twork.py:911>>) at /usr/local/lib/python3.10/site-packages/playwright/_impl/_sync_base.py:111
+handle: <Handle SyncBase._sync.<locals>.<lambda>(<Task cancell...twork.py:911>>) at /usr/local/lib/python3.10/site-packages/playwright/_impl/_sync_base.py:111>
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.10/site-packages/playwright/_impl/_network.py", line 912, in json
+    return json.loads(await self.text())
+  File "/usr/local/lib/python3.10/site-packages/playwright/_impl/_network.py", line 908, in text
+    content = await self.body()
+  File "/usr/local/lib/python3.10/site-packages/playwright/_impl/_network.py", line 901, in body
+    binary = await self._channel.send(
+  File "/usr/local/lib/python3.10/site-packages/playwright/_impl/_connection.py", line 69, in send
+    return await self._connection.wrap_api_call(
+  File "/usr/local/lib/python3.10/site-packages/playwright/_impl/_connection.py", line 557, in wrap_api_call
+    return await cb()
+  File "/usr/local/lib/python3.10/site-packages/playwright/_impl/_connection.py", line 123, in _inner_send
+    done, _ = await asyncio.wait(
+  File "/usr/local/lib/python3.10/asyncio/tasks.py", line 384, in wait
+    return await _wait(fs, timeout, return_when, loop)
+  File "/usr/local/lib/python3.10/asyncio/tasks.py", line 491, in _wait
+    await waiter
+asyncio.exceptions.CancelledError
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.10/asyncio/events.py", line 80, in _run
+    self._context.run(self._callback, *self._args)
+  File "/usr/local/lib/python3.10/site-packages/playwright/_impl/_sync_base.py", line 111, in <lambda>
+    task.add_done_callback(lambda _: g_self.switch())
+  File "/usr/local/lib/python3.10/site-packages/playwright/_impl/_connection.py", line 472, in _listener_with_error_handler_attached
+    potential_future = listener(params)
+  File "/usr/local/lib/python3.10/site-packages/playwright/_impl/_browser_context.py", line 181, in <lambda>
+    lambda params: self._on_response(
+  File "/usr/local/lib/python3.10/site-packages/playwright/_impl/_browser_context.py", line 730, in _on_response
+    page.emit(Page.Events.Response, response)
+  File "/usr/local/lib/python3.10/site-packages/pyee/asyncio.py", line 70, in emit
+    return super().emit(event, *args, **kwargs)
+  File "/usr/local/lib/python3.10/site-packages/pyee/base.py", line 220, in emit
+    handled = self._call_handlers(event, args, kwargs)
+  File "/usr/local/lib/python3.10/site-packages/pyee/base.py", line 196, in _call_handlers
+    self._emit_run(f, args, kwargs)
+  File "/usr/local/lib/python3.10/site-packages/pyee/asyncio.py", line 79, in _emit_run
+    coro: Any = f(*args, **kwargs)
+  File "/usr/local/lib/python3.10/site-packages/playwright/_impl/_impl_to_api_mapping.py", line 123, in wrapper_func
+    return handler(
+  File "/app/src/streamlit/ui/pages/generate_manual_workflows/extractors/topsurveys_extractor.py", line 854, in handle_response
+    data = response.json()
+  File "/usr/local/lib/python3.10/site-packages/playwright/sync_api/_generated.py", line 644, in json
+    return mapping.from_maybe_impl(self._sync(self._impl_obj.json()))
+  File "/usr/local/lib/python3.10/site-packages/playwright/_impl/_sync_base.py", line 115, in _sync
+    return task.result()
+asyncio.exceptions.CancelledError
+2026-03-23 15:37:35,712 - _genmw_topsurveys_extractor - INFO - [INIT] Extraction finished — 20 ok, 0 failed/dq — 0 total questions, 0 inserted, 344.9s
+2026-03-23 15:37:35,858 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:35,858 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:35,862 - src.core.database.postgres.connection - ERROR - PostgreSQL error: record "new" has no field "updated_time"
+CONTEXT:  PL/pgSQL assignment "NEW.updated_time = CURRENT_TIMESTAMP"
+PL/pgSQL function update_updated_time_column() line 3 at assignment
+
+2026-03-23 15:37:35,862 - src.core.database.postgres.connection - ERROR - PostgreSQL error: record "new" has no field "updated_time"
+CONTEXT:  PL/pgSQL assignment "NEW.updated_time = CURRENT_TIMESTAMP"
+PL/pgSQL function update_updated_time_column() line 3 at assignment
+
+2026-03-23 15:37:35,864 - ui.pages.generate_manual_workflows.generate_manual_workflows - ERROR - _mark_url_used: record "new" has no field "updated_time"
+CONTEXT:  PL/pgSQL assignment "NEW.updated_time = CURRENT_TIMESTAMP"
+PL/pgSQL function update_updated_time_column() line 3 at assignment
+
+2026-03-23 15:37:36,105 - asyncio - ERROR - Future exception was never retrieved
+future: <Future finished exception=TargetClosedError('Target page, context or browser has been closed')>
+playwright._impl._errors.TargetClosedError: Target page, context or browser has been closed
+2026-03-23 15:37:36,110 - asyncio - ERROR - Future exception was never retrieved
+future: <Future finished exception=TargetClosedError('Target page, context or browser has been closed')>
+playwright._impl._errors.TargetClosedError: Target page, context or browser has been closed
+2026-03-23 15:37:36,116 - asyncio - ERROR - Future exception was never retrieved
+future: <Future finished exception=TargetClosedError('Target page, context or browser has been closed')>
+playwright._impl._errors.TargetClosedError: Target page, context or browser has been closed
+2026-03-23 15:37:36,239 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-03-23 15:37:36,239 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-03-23 15:37:36,240 - core.database_manager - INFO - Starting database initialization...
+2026-03-23 15:37:36,240 - core.database_manager - INFO - Connecting to MongoDB...
+2026-03-23 15:37:36,242 - core.database_manager - INFO - Connecting to PostgreSQL...
+2026-03-23 15:37:36,244 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool is active
+2026-03-23 15:37:36,244 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool is active
+2026-03-23 15:37:36,244 - core.database_manager - INFO - PostgreSQL connection pool initialized successfully.
+2026-03-23 15:37:36,244 - core.database_manager - INFO - Ensuring database schema...
+2026-03-23 15:37:36,247 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:36,247 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:36,248 - src.core.database.postgres.schema - INFO - Creating SURVEY AUTOMATION schema...
+2026-03-23 15:37:36,251 - src.core.database.postgres.schema - INFO - ✓ accounts table ready (with demographic fields)
+2026-03-23 15:37:36,253 - src.core.database.postgres.schema - INFO - ✓ account_cookies table ready
+2026-03-23 15:37:36,254 - src.core.database.postgres.schema - INFO - ✓ survey_sites table ready (by name)
+2026-03-23 15:37:36,256 - src.core.database.postgres.schema - INFO - ✓ account_urls table ready (with usage tracking)
+2026-03-23 15:37:36,257 - src.core.database.postgres.schema - INFO - ✓ prompts table ready (one per user)
+2026-03-23 15:37:36,258 - src.core.database.postgres.schema - INFO - ✓ prompt_backups table ready
+2026-03-23 15:37:36,259 - src.core.database.postgres.schema - INFO - ✓ workflows table ready (with upload tracking)
+2026-03-23 15:37:36,260 - src.core.database.postgres.schema - INFO - ✓ questions table ready (with click elements, categories, and survey tracking)
+2026-03-23 15:37:36,261 - src.core.database.postgres.schema - INFO - ✓ answers table ready
+2026-03-23 15:37:36,262 - src.core.database.postgres.schema - INFO - ✓ extraction_state table ready
+2026-03-23 15:37:36,263 - src.core.database.postgres.schema - INFO - ✓ workflow_generation_log table ready
+2026-03-23 15:37:36,264 - src.core.database.postgres.schema - INFO - ✓ screening_results table ready
+2026-03-23 15:37:36,268 - src.core.database.postgres.schema - INFO - ✓ questions.workflow_id foreign key ready
+2026-03-23 15:37:36,268 - src.core.database.postgres.schema - INFO - Creating indexes...
+2026-03-23 15:37:36,292 - src.core.database.postgres.schema - INFO - ✓ All indexes ready
+2026-03-23 15:37:36,293 - src.core.database.postgres.schema - INFO - Dropping existing functions to avoid signature conflicts...
+2026-03-23 15:37:36,310 - src.core.database.postgres.schema - INFO - ✓ Existing functions dropped
+2026-03-23 15:37:36,310 - src.core.database.postgres.schema - INFO - Creating helper functions...
+2026-03-23 15:37:36,315 - src.core.database.postgres.schema - INFO - ✓ Helper functions ready (7 functions)
+2026-03-23 15:37:36,315 - src.core.database.postgres.schema - INFO - Creating trigger functions...
+2026-03-23 15:37:36,319 - src.core.database.postgres.schema - INFO - ✓ Trigger functions ready
+2026-03-23 15:37:36,319 - src.core.database.postgres.schema - INFO - Creating triggers...
+2026-03-23 15:37:36,328 - src.core.database.postgres.schema - INFO - ✓ Triggers ready — created: 0, existing: 8
+2026-03-23 15:37:36,328 - src.core.database.postgres.schema - INFO - Creating views...
+2026-03-23 15:37:36,339 - src.core.database.postgres.schema - INFO -   ↳ Dropped/refreshed 9 views
+2026-03-23 15:37:36,361 - src.core.database.postgres.schema - INFO - ✓ All views ready (9 views)
+2026-03-23 15:37:36,361 - src.core.database.postgres.schema - INFO - Inserting default data...
+2026-03-23 15:37:36,362 - src.core.database.postgres.schema - INFO - ✓ Default survey sites inserted
+2026-03-23 15:37:36,410 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:37:36,411 - src.core.database.postgres.schema - INFO - ✅ POSTGRESQL SCHEMA FULLY INITIALIZED
+2026-03-23 15:37:36,411 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:37:36,411 - src.core.database.postgres.schema - INFO - 📊 Schema summary:
+2026-03-23 15:37:36,411 - src.core.database.postgres.schema - INFO -   • 12 tables
+2026-03-23 15:37:36,411 - src.core.database.postgres.schema - INFO -   • 7 helper functions
+2026-03-23 15:37:36,411 - src.core.database.postgres.schema - INFO -   • 9 views
+2026-03-23 15:37:36,411 - src.core.database.postgres.schema - INFO -   • 8 triggers
+2026-03-23 15:37:36,411 - src.core.database.postgres.schema - INFO -   • ~45 indexes
+2026-03-23 15:37:36,411 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:37:36,412 - core.database_manager - INFO - Database schema ensured successfully.
+2026-03-23 15:37:36,417 - src.streamlit.ui.pages.accounts.chrome_session_manager - INFO - ChromeSessionManager initialized with profile dir: /workspace/chrome_profiles
+2026-03-23 15:37:36,433 - ui.pages.accounts.accounts - INFO - ✅ Ensured survey_sites table exists with site_name
+2026-03-23 15:37:36,504 - ui.pages.accounts.accounts - INFO - ✅ Ensured account_urls table exists
+2026-03-23 15:37:36,542 - ui.pages.generate_manual_workflows.orchestrator - INFO -   ✓ Extractor: 'Top Surveys' (topsurveys_extractor.py)
+2026-03-23 15:37:36,553 - ui.pages.generate_manual_workflows.orchestrator - INFO -   ✓ WorkflowCreator: 'Top Surveys' (topsurveys_workflow.py)
+2026-03-23 15:37:36,554 - ui.pages.generate_manual_workflows.orchestrator - INFO - Orchestrator loaded — extractors: ['Top Surveys'] | creators:   ['Top Surveys']
+2026-03-23 15:37:36,558 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:36,558 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:36,560 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:36,560 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:36,562 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:36,562 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:36,571 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:36,571 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:36,576 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:36,576 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:36,577 - src.core.database.postgres.connection - ERROR - Connection error: 0
+2026-03-23 15:37:36,577 - src.core.database.postgres.connection - ERROR - Connection error: 0
+2026-03-23 15:37:36,578 - ui.pages.generate_manual_workflows.generate_manual_workflows - ERROR - _get_survey_names: 0
+2026-03-23 15:37:36,581 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:36,581 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:36,583 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:36,583 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:36,584 - src.core.database.postgres.connection - ERROR - Connection error: 0
+2026-03-23 15:37:36,584 - src.core.database.postgres.connection - ERROR - Connection error: 0
+2026-03-23 15:37:36,585 - ui.pages.generate_manual_workflows.generate_manual_workflows - ERROR - _get_survey_names: 0
+2026-03-23 15:37:36,588 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:36,588 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:36,593 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:36,593 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:46,019 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-03-23 15:37:46,019 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-03-23 15:37:46,021 - core.database_manager - INFO - Starting database initialization...
+2026-03-23 15:37:46,021 - core.database_manager - INFO - Connecting to MongoDB...
+2026-03-23 15:37:46,025 - core.database_manager - INFO - Connecting to PostgreSQL...
+2026-03-23 15:37:46,026 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool is active
+2026-03-23 15:37:46,026 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool is active
+2026-03-23 15:37:46,027 - core.database_manager - INFO - PostgreSQL connection pool initialized successfully.
+2026-03-23 15:37:46,027 - core.database_manager - INFO - Ensuring database schema...
+2026-03-23 15:37:46,028 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:46,028 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:46,028 - src.core.database.postgres.schema - INFO - Creating SURVEY AUTOMATION schema...
+2026-03-23 15:37:46,028 - src.core.database.postgres.schema - INFO - ✓ accounts table ready (with demographic fields)
+2026-03-23 15:37:46,029 - src.core.database.postgres.schema - INFO - ✓ account_cookies table ready
+2026-03-23 15:37:46,029 - src.core.database.postgres.schema - INFO - ✓ survey_sites table ready (by name)
+2026-03-23 15:37:46,030 - src.core.database.postgres.schema - INFO - ✓ account_urls table ready (with usage tracking)
+2026-03-23 15:37:46,030 - src.core.database.postgres.schema - INFO - ✓ prompts table ready (one per user)
+2026-03-23 15:37:46,031 - src.core.database.postgres.schema - INFO - ✓ prompt_backups table ready
+2026-03-23 15:37:46,031 - src.core.database.postgres.schema - INFO - ✓ workflows table ready (with upload tracking)
+2026-03-23 15:37:46,032 - src.core.database.postgres.schema - INFO - ✓ questions table ready (with click elements, categories, and survey tracking)
+2026-03-23 15:37:46,033 - src.core.database.postgres.schema - INFO - ✓ answers table ready
+2026-03-23 15:37:46,034 - src.core.database.postgres.schema - INFO - ✓ extraction_state table ready
+2026-03-23 15:37:46,034 - src.core.database.postgres.schema - INFO - ✓ workflow_generation_log table ready
+2026-03-23 15:37:46,035 - src.core.database.postgres.schema - INFO - ✓ screening_results table ready
+2026-03-23 15:37:46,038 - src.core.database.postgres.schema - INFO - ✓ questions.workflow_id foreign key ready
+2026-03-23 15:37:46,038 - src.core.database.postgres.schema - INFO - Creating indexes...
+2026-03-23 15:37:46,061 - src.core.database.postgres.schema - INFO - ✓ All indexes ready
+2026-03-23 15:37:46,062 - src.core.database.postgres.schema - INFO - Dropping existing functions to avoid signature conflicts...
+2026-03-23 15:37:46,077 - src.core.database.postgres.schema - INFO - ✓ Existing functions dropped
+2026-03-23 15:37:46,077 - src.core.database.postgres.schema - INFO - Creating helper functions...
+2026-03-23 15:37:46,082 - src.core.database.postgres.schema - INFO - ✓ Helper functions ready (7 functions)
+2026-03-23 15:37:46,082 - src.core.database.postgres.schema - INFO - Creating trigger functions...
+2026-03-23 15:37:46,084 - src.core.database.postgres.schema - INFO - ✓ Trigger functions ready
+2026-03-23 15:37:46,085 - src.core.database.postgres.schema - INFO - Creating triggers...
+2026-03-23 15:37:46,092 - src.core.database.postgres.schema - INFO - ✓ Triggers ready — created: 0, existing: 8
+2026-03-23 15:37:46,092 - src.core.database.postgres.schema - INFO - Creating views...
+2026-03-23 15:37:46,100 - src.core.database.postgres.schema - INFO -   ↳ Dropped/refreshed 9 views
+2026-03-23 15:37:46,123 - src.core.database.postgres.schema - INFO - ✓ All views ready (9 views)
+2026-03-23 15:37:46,124 - src.core.database.postgres.schema - INFO - Inserting default data...
+2026-03-23 15:37:46,125 - src.core.database.postgres.schema - INFO - ✓ Default survey sites inserted
+2026-03-23 15:37:46,136 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:37:46,136 - src.core.database.postgres.schema - INFO - ✅ POSTGRESQL SCHEMA FULLY INITIALIZED
+2026-03-23 15:37:46,136 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:37:46,136 - src.core.database.postgres.schema - INFO - 📊 Schema summary:
+2026-03-23 15:37:46,136 - src.core.database.postgres.schema - INFO -   • 12 tables
+2026-03-23 15:37:46,137 - src.core.database.postgres.schema - INFO -   • 7 helper functions
+2026-03-23 15:37:46,137 - src.core.database.postgres.schema - INFO -   • 9 views
+2026-03-23 15:37:46,137 - src.core.database.postgres.schema - INFO -   • 8 triggers
+2026-03-23 15:37:46,137 - src.core.database.postgres.schema - INFO -   • ~45 indexes
+2026-03-23 15:37:46,137 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:37:46,137 - core.database_manager - INFO - Database schema ensured successfully.
+2026-03-23 15:37:46,145 - src.streamlit.ui.pages.accounts.chrome_session_manager - INFO - ChromeSessionManager initialized with profile dir: /workspace/chrome_profiles
+2026-03-23 15:37:46,163 - ui.pages.accounts.accounts - INFO - ✅ Ensured survey_sites table exists with site_name
+2026-03-23 15:37:46,253 - ui.pages.accounts.accounts - INFO - ✅ Ensured account_urls table exists
+2026-03-23 15:37:46,299 - ui.pages.generate_manual_workflows.orchestrator - INFO -   ✓ Extractor: 'Top Surveys' (topsurveys_extractor.py)
+2026-03-23 15:37:46,316 - ui.pages.generate_manual_workflows.orchestrator - INFO -   ✓ WorkflowCreator: 'Top Surveys' (topsurveys_workflow.py)
+2026-03-23 15:37:46,317 - ui.pages.generate_manual_workflows.orchestrator - INFO - Orchestrator loaded — extractors: ['Top Surveys'] | creators:   ['Top Surveys']
+2026-03-23 15:37:46,326 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:46,326 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:46,330 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:46,330 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:46,334 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:46,334 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:46,350 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:46,350 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:46,363 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:46,363 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:46,366 - src.core.database.postgres.connection - ERROR - Connection error: 0
+2026-03-23 15:37:46,366 - src.core.database.postgres.connection - ERROR - Connection error: 0
+2026-03-23 15:37:46,367 - ui.pages.generate_manual_workflows.generate_manual_workflows - ERROR - _get_survey_names: 0
+2026-03-23 15:37:46,371 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:46,371 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:46,375 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:46,375 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:46,376 - src.core.database.postgres.connection - ERROR - Connection error: 0
+2026-03-23 15:37:46,376 - src.core.database.postgres.connection - ERROR - Connection error: 0
+2026-03-23 15:37:46,376 - ui.pages.generate_manual_workflows.generate_manual_workflows - ERROR - _get_survey_names: 0
+2026-03-23 15:37:46,379 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:46,379 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:46,382 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:37:46,382 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:14,148 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-03-23 15:38:14,148 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-03-23 15:38:14,153 - core.database_manager - INFO - Starting database initialization...
+2026-03-23 15:38:14,155 - core.database_manager - INFO - Connecting to MongoDB...
+2026-03-23 15:38:14,158 - core.database_manager - INFO - Connecting to PostgreSQL...
+2026-03-23 15:38:14,160 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool is active
+2026-03-23 15:38:14,160 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool is active
+2026-03-23 15:38:14,161 - core.database_manager - INFO - PostgreSQL connection pool initialized successfully.
+2026-03-23 15:38:14,161 - core.database_manager - INFO - Ensuring database schema...
+2026-03-23 15:38:14,162 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:14,162 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:14,162 - src.core.database.postgres.schema - INFO - Creating SURVEY AUTOMATION schema...
+2026-03-23 15:38:14,163 - src.core.database.postgres.schema - INFO - ✓ accounts table ready (with demographic fields)
+2026-03-23 15:38:14,166 - src.core.database.postgres.schema - INFO - ✓ account_cookies table ready
+2026-03-23 15:38:14,167 - src.core.database.postgres.schema - INFO - ✓ survey_sites table ready (by name)
+2026-03-23 15:38:14,168 - src.core.database.postgres.schema - INFO - ✓ account_urls table ready (with usage tracking)
+2026-03-23 15:38:14,169 - src.core.database.postgres.schema - INFO - ✓ prompts table ready (one per user)
+2026-03-23 15:38:14,169 - src.core.database.postgres.schema - INFO - ✓ prompt_backups table ready
+2026-03-23 15:38:14,170 - src.core.database.postgres.schema - INFO - ✓ workflows table ready (with upload tracking)
+2026-03-23 15:38:14,171 - src.core.database.postgres.schema - INFO - ✓ questions table ready (with click elements, categories, and survey tracking)
+2026-03-23 15:38:14,172 - src.core.database.postgres.schema - INFO - ✓ answers table ready
+2026-03-23 15:38:14,173 - src.core.database.postgres.schema - INFO - ✓ extraction_state table ready
+2026-03-23 15:38:14,174 - src.core.database.postgres.schema - INFO - ✓ workflow_generation_log table ready
+2026-03-23 15:38:14,174 - src.core.database.postgres.schema - INFO - ✓ screening_results table ready
+2026-03-23 15:38:14,178 - src.core.database.postgres.schema - INFO - ✓ questions.workflow_id foreign key ready
+2026-03-23 15:38:14,178 - src.core.database.postgres.schema - INFO - Creating indexes...
+2026-03-23 15:38:14,199 - src.core.database.postgres.schema - INFO - ✓ All indexes ready
+2026-03-23 15:38:14,199 - src.core.database.postgres.schema - INFO - Dropping existing functions to avoid signature conflicts...
+2026-03-23 15:38:14,215 - src.core.database.postgres.schema - INFO - ✓ Existing functions dropped
+2026-03-23 15:38:14,215 - src.core.database.postgres.schema - INFO - Creating helper functions...
+2026-03-23 15:38:14,220 - src.core.database.postgres.schema - INFO - ✓ Helper functions ready (7 functions)
+2026-03-23 15:38:14,220 - src.core.database.postgres.schema - INFO - Creating trigger functions...
+2026-03-23 15:38:14,223 - src.core.database.postgres.schema - INFO - ✓ Trigger functions ready
+2026-03-23 15:38:14,223 - src.core.database.postgres.schema - INFO - Creating triggers...
+2026-03-23 15:38:14,230 - src.core.database.postgres.schema - INFO - ✓ Triggers ready — created: 0, existing: 8
+2026-03-23 15:38:14,231 - src.core.database.postgres.schema - INFO - Creating views...
+2026-03-23 15:38:14,239 - src.core.database.postgres.schema - INFO -   ↳ Dropped/refreshed 9 views
+2026-03-23 15:38:14,260 - src.core.database.postgres.schema - INFO - ✓ All views ready (9 views)
+2026-03-23 15:38:14,261 - src.core.database.postgres.schema - INFO - Inserting default data...
+2026-03-23 15:38:14,261 - src.core.database.postgres.schema - INFO - ✓ Default survey sites inserted
+2026-03-23 15:38:14,268 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:38:14,268 - src.core.database.postgres.schema - INFO - ✅ POSTGRESQL SCHEMA FULLY INITIALIZED
+2026-03-23 15:38:14,268 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:38:14,268 - src.core.database.postgres.schema - INFO - 📊 Schema summary:
+2026-03-23 15:38:14,268 - src.core.database.postgres.schema - INFO -   • 12 tables
+2026-03-23 15:38:14,268 - src.core.database.postgres.schema - INFO -   • 7 helper functions
+2026-03-23 15:38:14,268 - src.core.database.postgres.schema - INFO -   • 9 views
+2026-03-23 15:38:14,268 - src.core.database.postgres.schema - INFO -   • 8 triggers
+2026-03-23 15:38:14,268 - src.core.database.postgres.schema - INFO -   • ~45 indexes
+2026-03-23 15:38:14,268 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:38:14,268 - core.database_manager - INFO - Database schema ensured successfully.
+2026-03-23 15:38:14,275 - src.streamlit.ui.pages.accounts.chrome_session_manager - INFO - ChromeSessionManager initialized with profile dir: /workspace/chrome_profiles
+2026-03-23 15:38:14,290 - ui.pages.accounts.accounts - INFO - ✅ Ensured survey_sites table exists with site_name
+2026-03-23 15:38:14,369 - ui.pages.accounts.accounts - INFO - ✅ Ensured account_urls table exists
+2026-03-23 15:38:14,414 - ui.pages.generate_manual_workflows.orchestrator - INFO -   ✓ Extractor: 'Top Surveys' (topsurveys_extractor.py)
+2026-03-23 15:38:14,426 - ui.pages.generate_manual_workflows.orchestrator - INFO -   ✓ WorkflowCreator: 'Top Surveys' (topsurveys_workflow.py)
+2026-03-23 15:38:14,426 - ui.pages.generate_manual_workflows.orchestrator - INFO - Orchestrator loaded — extractors: ['Top Surveys'] | creators:   ['Top Surveys']
+2026-03-23 15:38:14,430 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:14,430 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:14,432 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:14,432 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:14,434 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:14,434 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:14,443 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:14,443 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:14,448 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:14,448 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:14,449 - src.core.database.postgres.connection - ERROR - Connection error: 0
+2026-03-23 15:38:14,449 - src.core.database.postgres.connection - ERROR - Connection error: 0
+2026-03-23 15:38:14,450 - ui.pages.generate_manual_workflows.generate_manual_workflows - ERROR - _get_survey_names: 0
+2026-03-23 15:38:14,453 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:14,453 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:14,457 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:14,457 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:14,458 - src.core.database.postgres.connection - ERROR - Connection error: 0
+2026-03-23 15:38:14,458 - src.core.database.postgres.connection - ERROR - Connection error: 0
+2026-03-23 15:38:14,459 - ui.pages.generate_manual_workflows.generate_manual_workflows - ERROR - _get_survey_names: 0
+2026-03-23 15:38:14,462 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:14,462 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:14,467 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:14,467 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:18,655 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-03-23 15:38:18,655 - __main__ - INFO - Starting Social Media Automation Dashboard...
+2026-03-23 15:38:18,659 - core.database_manager - INFO - Starting database initialization...
+2026-03-23 15:38:18,659 - core.database_manager - INFO - Connecting to MongoDB...
+2026-03-23 15:38:18,662 - core.database_manager - INFO - Connecting to PostgreSQL...
+2026-03-23 15:38:18,665 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool is active
+2026-03-23 15:38:18,665 - src.core.database.postgres.connection - INFO - ✅ PostgreSQL connection pool is active
+2026-03-23 15:38:18,665 - core.database_manager - INFO - PostgreSQL connection pool initialized successfully.
+2026-03-23 15:38:18,665 - core.database_manager - INFO - Ensuring database schema...
+2026-03-23 15:38:18,667 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:18,667 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:18,667 - src.core.database.postgres.schema - INFO - Creating SURVEY AUTOMATION schema...
+2026-03-23 15:38:18,668 - src.core.database.postgres.schema - INFO - ✓ accounts table ready (with demographic fields)
+2026-03-23 15:38:18,669 - src.core.database.postgres.schema - INFO - ✓ account_cookies table ready
+2026-03-23 15:38:18,670 - src.core.database.postgres.schema - INFO - ✓ survey_sites table ready (by name)
+2026-03-23 15:38:18,671 - src.core.database.postgres.schema - INFO - ✓ account_urls table ready (with usage tracking)
+2026-03-23 15:38:18,672 - src.core.database.postgres.schema - INFO - ✓ prompts table ready (one per user)
+2026-03-23 15:38:18,673 - src.core.database.postgres.schema - INFO - ✓ prompt_backups table ready
+2026-03-23 15:38:18,673 - src.core.database.postgres.schema - INFO - ✓ workflows table ready (with upload tracking)
+2026-03-23 15:38:18,675 - src.core.database.postgres.schema - INFO - ✓ questions table ready (with click elements, categories, and survey tracking)
+2026-03-23 15:38:18,676 - src.core.database.postgres.schema - INFO - ✓ answers table ready
+2026-03-23 15:38:18,677 - src.core.database.postgres.schema - INFO - ✓ extraction_state table ready
+2026-03-23 15:38:18,678 - src.core.database.postgres.schema - INFO - ✓ workflow_generation_log table ready
+2026-03-23 15:38:18,679 - src.core.database.postgres.schema - INFO - ✓ screening_results table ready
+2026-03-23 15:38:18,683 - src.core.database.postgres.schema - INFO - ✓ questions.workflow_id foreign key ready
+2026-03-23 15:38:18,683 - src.core.database.postgres.schema - INFO - Creating indexes...
+2026-03-23 15:38:18,706 - src.core.database.postgres.schema - INFO - ✓ All indexes ready
+2026-03-23 15:38:18,706 - src.core.database.postgres.schema - INFO - Dropping existing functions to avoid signature conflicts...
+2026-03-23 15:38:18,727 - src.core.database.postgres.schema - INFO - ✓ Existing functions dropped
+2026-03-23 15:38:18,728 - src.core.database.postgres.schema - INFO - Creating helper functions...
+2026-03-23 15:38:18,732 - src.core.database.postgres.schema - INFO - ✓ Helper functions ready (7 functions)
+2026-03-23 15:38:18,733 - src.core.database.postgres.schema - INFO - Creating trigger functions...
+2026-03-23 15:38:18,735 - src.core.database.postgres.schema - INFO - ✓ Trigger functions ready
+2026-03-23 15:38:18,735 - src.core.database.postgres.schema - INFO - Creating triggers...
+2026-03-23 15:38:18,741 - src.core.database.postgres.schema - INFO - ✓ Triggers ready — created: 0, existing: 8
+2026-03-23 15:38:18,742 - src.core.database.postgres.schema - INFO - Creating views...
+2026-03-23 15:38:18,750 - src.core.database.postgres.schema - INFO -   ↳ Dropped/refreshed 9 views
+2026-03-23 15:38:18,770 - src.core.database.postgres.schema - INFO - ✓ All views ready (9 views)
+2026-03-23 15:38:18,771 - src.core.database.postgres.schema - INFO - Inserting default data...
+2026-03-23 15:38:18,772 - src.core.database.postgres.schema - INFO - ✓ Default survey sites inserted
+2026-03-23 15:38:18,780 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:38:18,780 - src.core.database.postgres.schema - INFO - ✅ POSTGRESQL SCHEMA FULLY INITIALIZED
+2026-03-23 15:38:18,780 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:38:18,780 - src.core.database.postgres.schema - INFO - 📊 Schema summary:
+2026-03-23 15:38:18,780 - src.core.database.postgres.schema - INFO -   • 12 tables
+2026-03-23 15:38:18,780 - src.core.database.postgres.schema - INFO -   • 7 helper functions
+2026-03-23 15:38:18,780 - src.core.database.postgres.schema - INFO -   • 9 views
+2026-03-23 15:38:18,780 - src.core.database.postgres.schema - INFO -   • 8 triggers
+2026-03-23 15:38:18,780 - src.core.database.postgres.schema - INFO -   • ~45 indexes
+2026-03-23 15:38:18,780 - src.core.database.postgres.schema - INFO - ============================================================
+2026-03-23 15:38:18,781 - core.database_manager - INFO - Database schema ensured successfully.
+2026-03-23 15:38:18,787 - src.streamlit.ui.pages.accounts.chrome_session_manager - INFO - ChromeSessionManager initialized with profile dir: /workspace/chrome_profiles
+2026-03-23 15:38:18,802 - ui.pages.accounts.accounts - INFO - ✅ Ensured survey_sites table exists with site_name
+2026-03-23 15:38:18,881 - ui.pages.accounts.accounts - INFO - ✅ Ensured account_urls table exists
+2026-03-23 15:38:18,924 - ui.pages.generate_manual_workflows.orchestrator - INFO -   ✓ Extractor: 'Top Surveys' (topsurveys_extractor.py)
+2026-03-23 15:38:18,935 - ui.pages.generate_manual_workflows.orchestrator - INFO -   ✓ WorkflowCreator: 'Top Surveys' (topsurveys_workflow.py)
+2026-03-23 15:38:18,935 - ui.pages.generate_manual_workflows.orchestrator - INFO - Orchestrator loaded — extractors: ['Top Surveys'] | creators:   ['Top Surveys']
+2026-03-23 15:38:18,939 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:18,939 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:18,942 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:18,942 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:18,944 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:18,944 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:18,955 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:18,955 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:18,961 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:18,961 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:18,962 - src.core.database.postgres.connection - ERROR - Connection error: 0
+2026-03-23 15:38:18,962 - src.core.database.postgres.connection - ERROR - Connection error: 0
+2026-03-23 15:38:18,963 - ui.pages.generate_manual_workflows.generate_manual_workflows - ERROR - _get_survey_names: 0
+2026-03-23 15:38:18,965 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:18,965 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:18,967 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:18,967 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:18,968 - src.core.database.postgres.connection - ERROR - Connection error: 0
+2026-03-23 15:38:18,968 - src.core.database.postgres.connection - ERROR - Connection error: 0
+2026-03-23 15:38:18,970 - ui.pages.generate_manual_workflows.generate_manual_workflows - ERROR - _get_survey_names: 0
+2026-03-23 15:38:18,973 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:18,973 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:18,976 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool
+2026-03-23 15:38:18,976 - src.core.database.postgres.connection - INFO - Retrieved PostgreSQL connection from pool

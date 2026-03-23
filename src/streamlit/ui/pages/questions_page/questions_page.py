@@ -21,11 +21,6 @@ class QuestionsPage:
         self._ensure_new_columns()
 
     def _ensure_new_columns(self):
-        """
-        Add survey_name / survey_complete / survey_completed_at columns if they
-        don't exist yet (safe to run on an already-migrated DB — uses IF NOT EXISTS).
-        Does NOT recreate the table; the full schema in init-db.sql owns the structure.
-        """
         migrations = [
             "ALTER TABLE questions ADD COLUMN IF NOT EXISTS survey_name VARCHAR(255);",
             "ALTER TABLE questions ADD COLUMN IF NOT EXISTS survey_complete BOOLEAN DEFAULT FALSE;",
@@ -44,7 +39,6 @@ class QuestionsPage:
     # =========================================================================
 
     def get_question(self, question_id: int) -> Optional[Dict[str, Any]]:
-        """Get a single question by ID with all details."""
         try:
             with get_postgres_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
@@ -84,7 +78,6 @@ class QuestionsPage:
         limit:             int            = 1000,
         batch_id:          Optional[str]  = None,
     ) -> List[Dict[str, Any]]:
-        """Get questions with optional filters including survey_name."""
         try:
             with get_postgres_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
@@ -103,19 +96,19 @@ class QuestionsPage:
                     params = []
 
                     if survey_site_id:
-                        query += " AND q.survey_site_id = %s";  params.append(survey_site_id)
+                        query += " AND q.survey_site_id = %s";    params.append(survey_site_id)
                     if account_id:
-                        query += " AND q.account_id = %s";      params.append(account_id)
+                        query += " AND q.account_id = %s";        params.append(account_id)
                     if question_type:
-                        query += " AND q.question_type = %s";   params.append(question_type)
+                        query += " AND q.question_type = %s";     params.append(question_type)
                     if question_category:
                         query += " AND q.question_category = %s"; params.append(question_category)
                     if survey_name:
-                        query += " AND q.survey_name = %s";     params.append(survey_name)
+                        query += " AND q.survey_name = %s";       params.append(survey_name)
                     if survey_complete is not None:
-                        query += " AND q.survey_complete = %s"; params.append(survey_complete)
+                        query += " AND q.survey_complete = %s";   params.append(survey_complete)
                     if is_active is not None:
-                        query += " AND q.is_active = %s";       params.append(is_active)
+                        query += " AND q.is_active = %s";         params.append(is_active)
                     if unused_only:
                         query += " AND (q.used_in_workflow IS NULL OR q.used_in_workflow = FALSE)"
                     if batch_id:
@@ -147,7 +140,6 @@ class QuestionsPage:
         account_id:     Optional[int] = None,
         survey_site_id: Optional[int] = None,
     ) -> List[str]:
-        """Return all distinct survey_name values (for filter dropdowns)."""
         try:
             with get_postgres_connection() as conn:
                 with conn.cursor() as cursor:
@@ -211,6 +203,42 @@ class QuestionsPage:
             logger.error(f"get_recent_extractions: {e}")
             return []
 
+    def get_survey_counts(
+        self,
+        survey_site_id: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Returns per-survey question counts, answer counts, and completion status.
+        Used to populate the survey summary metrics at the top of the questions list.
+        """
+        try:
+            with get_postgres_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    query = """
+                        SELECT
+                            q.survey_name,
+                            ss.site_name,
+                            COUNT(DISTINCT q.question_id)                               AS total_questions,
+                            COUNT(DISTINCT CASE WHEN q.is_active THEN q.question_id END) AS active_questions,
+                            COUNT(DISTINCT CASE WHEN q.used_in_workflow THEN q.question_id END) AS used_questions,
+                            COUNT(DISTINCT ans.answer_id)                               AS answers_generated,
+                            BOOL_AND(q.survey_complete)                                  AS all_complete,
+                            MAX(q.survey_completed_at)                                   AS completed_at
+                        FROM questions q
+                        LEFT JOIN survey_sites ss ON q.survey_site_id = ss.site_id
+                        LEFT JOIN answers       ans ON q.question_id  = ans.question_id
+                        WHERE q.survey_name IS NOT NULL
+                    """
+                    params = []
+                    if survey_site_id:
+                        query += " AND q.survey_site_id = %s"; params.append(survey_site_id)
+                    query += " GROUP BY q.survey_name, ss.site_name ORDER BY ss.site_name, q.survey_name"
+                    cursor.execute(query, params)
+                    return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"get_survey_counts: {e}")
+            return []
+
     # =========================================================================
     # UPDATE METHODS
     # =========================================================================
@@ -245,7 +273,6 @@ class QuestionsPage:
         return self._simple_update(question_id, 'survey_name', survey_name)
 
     def mark_survey_complete(self, account_id: int, site_id: int, survey_name: str) -> Dict[str, Any]:
-        """Mark all questions for a survey as complete."""
         try:
             with get_postgres_connection() as conn:
                 with conn.cursor() as cursor:
@@ -441,7 +468,6 @@ class QuestionsPage:
             return pd.DataFrame()
 
     def get_survey_name_summary(self) -> pd.DataFrame:
-        """Summary grouped by survey_name — shows completion status."""
         try:
             with get_postgres_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
@@ -530,53 +556,65 @@ class QuestionsPage:
 
     def _render_questions_list(self):
         st.subheader("📋 Extracted Questions")
-        st.info("Questions are extracted automatically from survey sites. Each question shows its survey name, click selector, and classification.")
 
         questions = self.get_questions(limit=1000)
         if not questions:
             st.warning("No questions extracted yet. Run the extraction process first.")
             return
 
-        # ── Filters ──────────────────────────────────────────────────
-        col1, col2, col3, col4, col5, col6 = st.columns(6)
+        # ── Survey count summary metrics ──────────────────────────────
+        survey_counts = self.get_survey_counts()
+        total_surveys   = len(survey_counts)
+        complete_surveys = sum(1 for s in survey_counts if s.get('all_complete'))
+        total_questions  = sum(s['total_questions'] for s in survey_counts)
+        total_answers    = sum(s['answers_generated'] for s in survey_counts)
+
+        mc1, mc2, mc3, mc4 = st.columns(4)
+        mc1.metric("Total Surveys",    total_surveys)
+        mc2.metric("✅ Completed",      complete_surveys)
+        mc3.metric("Total Questions",  total_questions)
+        mc4.metric("Answers Generated",total_answers)
+
+        st.markdown("---")
+
+        # ── Two filters only: Site and Survey Name ────────────────────
+        col1, col2 = st.columns(2)
 
         with col1:
             sites = sorted(set(q.get('survey_site_name', 'Unknown') for q in questions))
-            site_filter = st.selectbox("Site:", ["All"] + sites, key="q_filter_site")
+            site_filter = st.selectbox("🌐 Site:", ["All"] + sites, key="q_filter_site")
 
         with col2:
-            survey_names = sorted(set(q.get('survey_name') for q in questions if q.get('survey_name')))
-            survey_filter = st.selectbox("Survey:", ["All"] + survey_names, key="q_filter_survey")
-
-        with col3:
-            types = sorted(set(q.get('question_type', '') for q in questions))
-            type_filter = st.selectbox("Type:", ["All"] + types, key="q_filter_type")
-
-        with col4:
-            cats = sorted(set(q.get('question_category') for q in questions if q.get('question_category')))
-            cat_filter = st.selectbox("Category:", ["All"] + cats, key="q_filter_category")
-
-        with col5:
-            active_filter = st.selectbox("Status:", ["All", "Active", "Inactive"], key="q_filter_active")
-
-        with col6:
-            complete_filter = st.selectbox("Survey Complete:", ["All", "Complete", "In Progress"], key="q_filter_complete")
-
-        search = st.text_input("🔍 Search question text:", placeholder="Type to filter…")
+            # Dynamically filter survey names to those belonging to the selected site
+            if site_filter != "All":
+                survey_names = sorted(set(
+                    q.get('survey_name') for q in questions
+                    if q.get('survey_name') and q.get('survey_site_name') == site_filter
+                ))
+            else:
+                survey_names = sorted(set(q.get('survey_name') for q in questions if q.get('survey_name')))
+            survey_filter = st.selectbox("📋 Survey Name:", ["All"] + survey_names, key="q_filter_survey")
 
         # ── Apply filters ─────────────────────────────────────────────
         filtered = questions
-        if site_filter    != "All": filtered = [q for q in filtered if q.get('survey_site_name') == site_filter]
-        if survey_filter  != "All": filtered = [q for q in filtered if q.get('survey_name') == survey_filter]
-        if type_filter    != "All": filtered = [q for q in filtered if q.get('question_type') == type_filter]
-        if cat_filter     != "All": filtered = [q for q in filtered if q.get('question_category') == cat_filter]
-        if active_filter  == "Active":   filtered = [q for q in filtered if q.get('is_active')]
-        if active_filter  == "Inactive": filtered = [q for q in filtered if not q.get('is_active')]
-        if complete_filter == "Complete":    filtered = [q for q in filtered if q.get('survey_complete')]
-        if complete_filter == "In Progress": filtered = [q for q in filtered if not q.get('survey_complete')]
-        if search: filtered = [q for q in filtered if search.lower() in q.get('question_text', '').lower()]
+        if site_filter   != "All": filtered = [q for q in filtered if q.get('survey_site_name') == site_filter]
+        if survey_filter != "All": filtered = [q for q in filtered if q.get('survey_name') == survey_filter]
 
-        st.info(f"Showing {len(filtered)} of {len(questions)} questions")
+        # Per-survey summary strip when a specific survey is selected
+        if survey_filter != "All":
+            match = next((s for s in survey_counts if s['survey_name'] == survey_filter), None)
+            if match:
+                sc1, sc2, sc3, sc4 = st.columns(4)
+                sc1.metric("Questions",        match['total_questions'])
+                sc2.metric("Active",           match['active_questions'])
+                sc3.metric("Used in Workflow", match['used_questions'])
+                sc4.metric("Answers",          match['answers_generated'])
+                if match.get('all_complete'):
+                    completed_at = match.get('completed_at')
+                    label = f" — completed {completed_at.strftime('%Y-%m-%d %H:%M')}" if completed_at else ""
+                    st.success(f"🏁 Survey marked complete{label}")
+
+        st.caption(f"Showing {len(filtered)} question(s)")
 
         # ── Question cards ────────────────────────────────────────────
         for q in filtered:
@@ -631,13 +669,13 @@ class QuestionsPage:
                     st.markdown("**Actions:**")
                     qid = q['question_id']
 
-                    if st.button("📝 View Answers",       key=f"view_ans_{qid}", use_container_width=True):
+                    if st.button("📝 View Answers",    key=f"view_ans_{qid}", use_container_width=True):
                         st.session_state[f'viewing_answers_{qid}'] = True; st.rerun()
-                    if st.button("🖱️ Edit Selectors",     key=f"edit_click_{qid}", use_container_width=True):
+                    if st.button("🖱️ Edit Selectors",  key=f"edit_click_{qid}", use_container_width=True):
                         st.session_state[f'editing_click_{qid}'] = True; st.rerun()
-                    if st.button("📂 Edit Category",       key=f"edit_cat_{qid}", use_container_width=True):
+                    if st.button("📂 Edit Category",   key=f"edit_cat_{qid}", use_container_width=True):
                         st.session_state[f'editing_category_{qid}'] = True; st.rerun()
-                    if st.button("🗂️ Edit Survey Name",    key=f"edit_survey_{qid}", use_container_width=True):
+                    if st.button("🗂️ Edit Survey Name", key=f"edit_survey_{qid}", use_container_width=True):
                         st.session_state[f'editing_survey_{qid}'] = True; st.rerun()
 
                     if q.get('is_active'):
@@ -746,49 +784,70 @@ class QuestionsPage:
     def _render_answers_view(self):
         st.subheader("📝 All Answers")
 
-        col1, col2, col3 = st.columns(3)
+        # ── Two filters only: Site and Survey Name ────────────────────
+        col1, col2 = st.columns(2)
         with col1:
-            survey_names = self.get_distinct_survey_names()
-            survey_filter = st.selectbox("Survey:", ["All"] + survey_names, key="ans_survey_filter")
+            try:
+                with get_postgres_connection() as conn:
+                    with conn.cursor() as cursor:
+                        cursor.execute("SELECT DISTINCT site_name FROM survey_sites ORDER BY site_name")
+                        all_sites = [row[0] for row in cursor.fetchall()]
+            except Exception:
+                all_sites = []
+            site_filter = st.selectbox("🌐 Site:", ["All"] + all_sites, key="ans_site_filter")
+
         with col2:
-            date_range = st.date_input(
-                "Date range:",
-                value=(datetime.now() - timedelta(days=7), datetime.now()),
-                key="ans_date_range",
-            )
-        with col3:
-            batch_filter = st.text_input("Batch ID:", placeholder="Filter by batch…")
+            site_id_for_filter = None
+            if site_filter != "All":
+                try:
+                    with get_postgres_connection() as conn:
+                        with conn.cursor() as cursor:
+                            cursor.execute("SELECT site_id FROM survey_sites WHERE site_name = %s", (site_filter,))
+                            row = cursor.fetchone()
+                            site_id_for_filter = row[0] if row else None
+                except Exception:
+                    pass
+            survey_names = self.get_distinct_survey_names(survey_site_id=site_id_for_filter)
+            survey_filter = st.selectbox("📋 Survey Name:", ["All"] + survey_names, key="ans_survey_filter")
+
+        # ── Survey count summary ──────────────────────────────────────
+        survey_counts = self.get_survey_counts(survey_site_id=site_id_for_filter)
+        total_surveys    = len(survey_counts)
+        complete_surveys = sum(1 for s in survey_counts if s.get('all_complete'))
+        total_answers    = sum(s['answers_generated'] for s in survey_counts)
+
+        mc1, mc2, mc3 = st.columns(3)
+        mc1.metric("Total Surveys",     total_surveys)
+        mc2.metric("✅ Completed",       complete_surveys)
+        mc3.metric("Answers Generated", total_answers)
+
+        st.markdown("---")
 
         answers = self.get_answers(limit=500)
+
+        # filter in Python after fetch (survey_name filter via question join)
+        if site_filter != "All":
+            answers = [a for a in answers if a.get('survey_site_name') == site_filter]
+        if survey_filter != "All":
+            answers = [a for a in answers if a.get('survey_name') == survey_filter]
+
         if not answers:
             st.info("No answers found.")
             return
 
-        filtered = answers
-        if survey_filter != "All":
-            filtered = [a for a in filtered if a.get('survey_name') == survey_filter]
-        if batch_filter:
-            filtered = [a for a in filtered if batch_filter in (a.get('submission_batch_id') or '')]
-        if len(date_range) == 2:
-            s, e = date_range
-            filtered = [
-                a for a in filtered
-                if a.get('submitted_at') and s <= a['submitted_at'].date() <= e
-            ]
-
-        st.info(f"Showing {len(filtered)} of {len(answers)} answers")
+        st.caption(f"Showing {len(answers)} answer(s)")
 
         df = pd.DataFrame([{
-            'Answer ID': a['answer_id'],
-            'Question':  (a.get('question_text') or '')[:100],
-            'Survey':    a.get('survey_name', '—'),
-            'Answer':    a.get('answer_text', ''),
-            'Type':      a.get('question_type', ''),
-            'Account':   a.get('account_username', 'Unknown'),
-            'Site':      a.get('survey_site_name', 'Unknown'),
-            'Submitted': a.get('submitted_at'),
-            'Batch':     (a.get('submission_batch_id') or '')[:20],
-        } for a in filtered])
+            'Answer ID':    a['answer_id'],
+            'Survey':       a.get('survey_name', '—'),
+            'Question':     (a.get('question_text') or '')[:100],
+            'Answer':       a.get('answer_text', ''),
+            'Type':         a.get('question_type', ''),
+            'Account':      a.get('account_username', 'Unknown'),
+            'Site':         a.get('survey_site_name', 'Unknown'),
+            'Submitted':    a.get('submitted_at'),
+            'Batch':        (a.get('submission_batch_id') or '')[:20],
+        } for a in answers])
 
         st.dataframe(df, use_container_width=True, hide_index=True, height=500)
         st.download_button(
@@ -804,9 +863,9 @@ class QuestionsPage:
     def _render_analytics(self):
         st.subheader("📊 Questions Analytics")
 
-        summary_df      = self.get_questions_summary()
-        type_dist_df    = self.get_question_type_distribution()
-        category_dist_df= self.get_question_category_distribution()
+        summary_df       = self.get_questions_summary()
+        type_dist_df     = self.get_question_type_distribution()
+        category_dist_df = self.get_question_category_distribution()
 
         if summary_df.empty:
             st.info("No data available yet.")
@@ -840,6 +899,37 @@ class QuestionsPage:
     # Tab 4 — By Survey
     # ------------------------------------------------------------------
 
+    def delete_survey(self, survey_name: str, survey_site_id: Optional[int] = None, account_id: Optional[int] = None) -> Dict[str, Any]:
+        """
+        Delete all questions belonging to a specific survey.
+        This will cascade delete associated answers due to foreign key constraints.
+        """
+        try:
+            with get_postgres_connection() as conn:
+                with conn.cursor() as cursor:
+                    query = "DELETE FROM questions WHERE survey_name = %s"
+                    params = [survey_name]
+                    
+                    if survey_site_id:
+                        query += " AND survey_site_id = %s"
+                        params.append(survey_site_id)
+                    if account_id:
+                        query += " AND account_id = %s"
+                        params.append(account_id)
+                    
+                    cursor.execute(query, params)
+                    conn.commit()
+                    deleted_count = cursor.rowcount
+                    
+                    return {
+                        'success': True,
+                        'deleted_questions': deleted_count,
+                        'error': None
+                    }
+        except Exception as e:
+            logger.error(f"delete_survey: {e}")
+            return {'success': False, 'deleted_questions': 0, 'error': str(e)}
+
     def _render_by_survey(self):
         st.subheader("🗂️ Questions by Survey")
         st.caption("View and manage questions grouped by survey name, including completion status.")
@@ -849,50 +939,82 @@ class QuestionsPage:
             st.info("No survey names found yet. Extract questions first.")
             return
 
-        # Summary table
+        # Add action column with delete buttons
         display = survey_df.copy()
         if 'completed_at' in display.columns:
             display['completed_at'] = pd.to_datetime(display['completed_at']).dt.strftime('%Y-%m-%d %H:%M').fillna('—')
         display['all_complete'] = display['all_complete'].apply(lambda x: '🏁 Yes' if x else '⏳ No')
+
+        # Show the dataframe with an extra column for delete actions
         st.dataframe(display, use_container_width=True, hide_index=True)
 
         st.divider()
 
-        # Drill-down into a specific survey
         survey_names = survey_df['survey_name'].tolist()
         selected = st.selectbox("Drill into survey:", survey_names, key="by_survey_select")
 
         if selected:
             qs = self.get_questions(survey_name=selected, limit=200)
             if qs:
-                st.success(f"**{len(qs)}** questions for *{selected}*")
-
-                answered   = sum(1 for q in qs if (q.get('answer_count') or 0) > 0)
-                used       = sum(1 for q in qs if q.get('used_in_workflow'))
-                completed  = sum(1 for q in qs if q.get('survey_complete'))
-
+                # Add delete button row
+                col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+                with col1:
+                    st.success(f"**{len(qs)}** questions for *{selected}*")
+                with col4:
+                    # Delete button with confirmation
+                    if st.button("🗑️ Delete Survey", type="secondary", key=f"delete_survey_{selected}"):
+                        st.session_state[f'confirm_delete_{selected}'] = True
+                
+                # Handle delete confirmation
+                if st.session_state.get(f'confirm_delete_{selected}', False):
+                    st.warning(f"⚠️ Are you sure you want to delete the entire survey **'{selected}'**?")
+                    st.warning(f"This will permanently delete all **{len(qs)}** questions and their associated answers.")
+                    col_yes, col_no = st.columns(2)
+                    with col_yes:
+                        if st.button("✅ Yes, Delete Permanently", type="primary", key=f"confirm_yes_{selected}"):
+                            # Get survey details from first question
+                            first_q = qs[0] if qs else None
+                            result = self.delete_survey(
+                                survey_name=selected,
+                                survey_site_id=first_q.get('survey_site_id') if first_q else None,
+                                account_id=first_q.get('account_id') if first_q else None
+                            )
+                            if result['success']:
+                                st.success(f"✅ Deleted {result['deleted_questions']} questions from survey '{selected}'")
+                                # Clear session state and rerun
+                                del st.session_state[f'confirm_delete_{selected}']
+                                st.rerun()
+                            else:
+                                st.error(f"Failed to delete survey: {result.get('error')}")
+                    with col_no:
+                        if st.button("❌ No, Cancel", key=f"confirm_no_{selected}"):
+                            del st.session_state[f'confirm_delete_{selected}']
+                            st.rerun()
+                
+                answered = sum(1 for q in qs if (q.get('answer_count') or 0) > 0)
+                used = sum(1 for q in qs if q.get('used_in_workflow'))
+                completed = sum(1 for q in qs if q.get('survey_complete'))
+                
                 c1, c2, c3 = st.columns(3)
                 c1.metric("Answered by Gemini", answered)
-                c2.metric("Used in workflow",   used)
-                c3.metric("Survey complete",    f"{'Yes' if completed == len(qs) else 'No'}")
-
-                # Mark all complete button
+                c2.metric("Used in workflow", used)
+                c3.metric("Survey complete", f"{'Yes' if completed == len(qs) else 'No'}")
+                
                 if not all(q.get('survey_complete') for q in qs):
-                    row = survey_df[survey_df['survey_name'] == selected].iloc[0]
-                    # We need account_id and site_id — pull from first question
                     first_q = qs[0]
                     if st.button(f"🏁 Mark all '{selected}' questions as complete"):
                         result = self.mark_survey_complete(
                             first_q.get('account_id'), first_q.get('survey_site_id'), selected
                         )
                         if result['success']:
-                            st.success(f"✅ Marked {result['updated']} questions complete."); st.rerun()
+                            st.success(f"✅ Marked {result['updated']} questions complete.")
+                            st.rerun()
                         else:
                             st.error(result.get('error'))
-
+                
                 for q in qs[:30]:
                     complete_badge = " 🏁" if q.get('survey_complete') else ""
-                    answer_badge   = f" ({q.get('answer_count',0)} answers)" if q.get('answer_count') else ""
+                    answer_badge = f" ({q.get('answer_count',0)} answers)" if q.get('answer_count') else ""
                     st.markdown(
                         f"- **{q['question_type']}**{complete_badge}{answer_badge}: "
                         f"{q['question_text'][:100]}"
