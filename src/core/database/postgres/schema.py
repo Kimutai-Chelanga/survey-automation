@@ -1,25 +1,27 @@
+"""
+PostgreSQL Database Initialization - SURVEY AUTOMATION ARCHITECTURE
+Updated: 2026-03-23
+Complete schema with:
+  - Accounts with demographic fields
+  - Proxy configurations per account
+  - Cloud profile support (browser-use SDK)
+  - Survey sites by name
+  - Account URLs with usage tracking
+  - Questions with click elements, categories, survey_name tracking
+  - Answers with workflow tracking
+  - Prompts (one per user)
+  - Workflows with upload tracking
+  - Extraction state tracking
+  - Workflow generation logs
+  - Screening results tracking
+"""
+
 import logging
 from psycopg2 import Error as Psycopg2Error
 import streamlit as st
 from .connection import get_postgres_connection
 
 logger = logging.getLogger(__name__)
-
-# ===================================================================
-# POSTGRESQL SCHEMA - SURVEY AUTOMATION ARCHITECTURE
-# Updated: 2026-03-21
-# Complete schema for survey automation with:
-#   - Accounts with demographic fields
-#   - Survey sites by name (not URL)
-#   - Account URLs with usage tracking
-#   - Questions with click elements, categories, survey_name tracking
-#   - Answers with workflow tracking
-#   - Prompts (one per user)
-#   - Workflows with upload tracking
-#   - Extraction state tracking
-#   - Workflow generation logs
-#   - Screening results tracking (pass/fail per survey attempt)
-# ===================================================================
 
 
 def create_postgres_tables():
@@ -37,7 +39,7 @@ def create_postgres_tables():
                 # ======================================================
                 logger.info("Creating SURVEY AUTOMATION schema...")
 
-                # ACCOUNTS TABLE - WITH ALL DEMOGRAPHIC FIELDS
+                # ACCOUNTS TABLE - WITH ALL DEMOGRAPHIC FIELDS + CLOUD PROFILE + PROXY
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS accounts (
                         account_id SERIAL PRIMARY KEY,
@@ -45,7 +47,7 @@ def create_postgres_tables():
                         country VARCHAR(100),
                         profile_id VARCHAR(255) UNIQUE,
                         profile_type VARCHAR(50) DEFAULT 'local_chrome'
-                            CHECK (profile_type IN ('local_chrome', 'hyperbrowser')),
+                            CHECK (profile_type IN ('local_chrome', 'hyperbrowser', 'cloud')),
                         created_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         mongo_object_id VARCHAR(24),
@@ -53,6 +55,8 @@ def create_postgres_tables():
                         has_cookies BOOLEAN DEFAULT FALSE,
                         cookies_last_updated TIMESTAMP,
                         is_active BOOLEAN DEFAULT TRUE,
+                        cloud_profile_id VARCHAR(100),
+                        active_proxy_id INTEGER,
 
                         -- Demographic fields (all optional)
                         age INTEGER,
@@ -79,7 +83,24 @@ def create_postgres_tables():
                         demographic_data JSONB
                     )
                 """)
-                logger.info("✓ accounts table ready (with demographic fields)")
+                logger.info("✓ accounts table ready (with cloud_profile_id and active_proxy_id)")
+
+                # PROXY CONFIGURATIONS TABLE
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS proxy_configs (
+                        proxy_id SERIAL PRIMARY KEY,
+                        account_id INTEGER NOT NULL REFERENCES accounts(account_id) ON DELETE CASCADE,
+                        proxy_type VARCHAR(10) NOT NULL CHECK (proxy_type IN ('http', 'https', 'socks4', 'socks5')),
+                        host VARCHAR(255) NOT NULL,
+                        port INTEGER NOT NULL,
+                        username VARCHAR(255),
+                        password VARCHAR(255),
+                        is_active BOOLEAN DEFAULT TRUE,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                logger.info("✓ proxy_configs table ready")
 
                 # ACCOUNT COOKIES TABLE
                 cursor.execute("""
@@ -215,7 +236,7 @@ def create_postgres_tables():
                         workflow_id INTEGER,
                         metadata JSONB,
                         
-                        -- Survey tracking (added migration 2026-03-21)
+                        -- Survey tracking
                         survey_name VARCHAR(255),
                         survey_complete BOOLEAN DEFAULT FALSE,
                         survey_completed_at TIMESTAMP,
@@ -303,7 +324,23 @@ def create_postgres_tables():
                 """)
                 logger.info("✓ screening_results table ready")
 
-                # ADD FOREIGN KEY FOR questions.workflow_id (if not exists)
+                # ADD FOREIGN KEY FOR accounts.active_proxy_id
+                cursor.execute("""
+                    DO $$ 
+                    BEGIN
+                        IF NOT EXISTS (
+                            SELECT 1 FROM information_schema.table_constraints 
+                            WHERE constraint_name = 'fk_accounts_proxy'
+                        ) THEN
+                            ALTER TABLE accounts
+                                ADD CONSTRAINT fk_accounts_proxy
+                                FOREIGN KEY (active_proxy_id) REFERENCES proxy_configs(proxy_id) ON DELETE SET NULL;
+                        END IF;
+                    END $$;
+                """)
+                logger.info("✓ accounts.active_proxy_id foreign key ready")
+
+                # ADD FOREIGN KEY FOR questions.workflow_id
                 cursor.execute("""
                     DO $$ 
                     BEGIN
@@ -328,6 +365,12 @@ def create_postgres_tables():
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_accounts_username ON accounts(username);")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_accounts_country ON accounts(country);")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_accounts_active ON accounts(is_active) WHERE is_active = TRUE;")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_accounts_cloud_profile ON accounts(cloud_profile_id) WHERE cloud_profile_id IS NOT NULL;")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_accounts_active_proxy ON accounts(active_proxy_id) WHERE active_proxy_id IS NOT NULL;")
+
+                # Proxy configs
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_proxy_account ON proxy_configs(account_id);")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_proxy_active ON proxy_configs(is_active) WHERE is_active = TRUE;")
 
                 # Account cookies
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_account_cookies_account ON account_cookies(account_id);")
@@ -392,7 +435,7 @@ def create_postgres_tables():
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_screening_survey ON screening_results(survey_name);")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_screening_batch ON screening_results(batch_id);")
 
-                logger.info("✓ All indexes ready")
+                logger.info("✓ All indexes ready (55+ indexes)")
 
                 # ======================================================
                 # STEP 3: DROP EXISTING FUNCTIONS (TO AVOID SIGNATURE CONFLICTS)
@@ -791,6 +834,12 @@ def create_postgres_tables():
                         FOR EACH ROW
                         EXECUTE FUNCTION update_updated_time_column();
                     """),
+                    ("update_proxy_configs_updated_at", "proxy_configs", """
+                        CREATE TRIGGER update_proxy_configs_updated_at
+                        BEFORE UPDATE ON proxy_configs
+                        FOR EACH ROW
+                        EXECUTE FUNCTION update_updated_at_column();
+                    """),
                     ("update_prompts_updated_time", "prompts", """
                         CREATE TRIGGER update_prompts_updated_time
                         BEFORE UPDATE ON prompts
@@ -867,6 +916,7 @@ def create_postgres_tables():
                     "recent_extractions",
                     "prompt_backup_summary",
                     "screening_summary",
+                    "proxy_config_summary",
                 ]
                 for vname in views_to_drop:
                     cursor.execute(f"DROP VIEW IF EXISTS {vname} CASCADE;")
@@ -916,6 +966,7 @@ def create_postgres_tables():
                         a.education_level,
                         a.job_status,
                         a.income_range,
+                        a.cloud_profile_id,
                         COUNT(DISTINCT q.question_id) as questions_extracted,
                         COUNT(DISTINCT ans.answer_id) as answers_submitted,
                         COUNT(DISTINCT q.survey_site_id) as sites_participated,
@@ -925,16 +976,23 @@ def create_postgres_tables():
                         MAX(ans.submitted_at) as last_answer,
                         p.prompt_id,
                         p.name as prompt_name,
-                        p.is_active as prompt_active
+                        p.is_active as prompt_active,
+                        pc.proxy_id,
+                        pc.proxy_type,
+                        pc.host,
+                        pc.port
                     FROM accounts a
                     LEFT JOIN questions q ON a.account_id = q.account_id
                     LEFT JOIN answers ans ON a.account_id = ans.account_id
                     LEFT JOIN workflows w ON a.account_id = w.account_id
                     LEFT JOIN account_urls au ON a.account_id = au.account_id
                     LEFT JOIN prompts p ON a.account_id = p.account_id
+                    LEFT JOIN proxy_configs pc ON a.active_proxy_id = pc.proxy_id AND pc.is_active = TRUE
                     GROUP BY a.account_id, a.username, a.country, a.created_time, a.is_active,
                              a.total_surveys_processed, a.age, a.gender, a.city, a.education_level,
-                             a.job_status, a.income_range, p.prompt_id, p.name, p.is_active;
+                             a.job_status, a.income_range, a.cloud_profile_id,
+                             p.prompt_id, p.name, p.is_active,
+                             pc.proxy_id, pc.proxy_type, pc.host, pc.port;
                 """)
 
                 cursor.execute("""
@@ -1105,7 +1163,25 @@ def create_postgres_tables():
                     GROUP BY sr.account_id, a.username, sr.site_id, ss.site_name, sr.survey_name;
                 """)
 
-                logger.info("✓ All views ready (9 views)")
+                cursor.execute("""
+                    CREATE VIEW proxy_config_summary AS
+                    SELECT
+                        pc.proxy_id,
+                        pc.account_id,
+                        a.username,
+                        pc.proxy_type,
+                        pc.host,
+                        pc.port,
+                        pc.is_active,
+                        pc.created_at,
+                        pc.updated_at,
+                        CASE WHEN a.active_proxy_id = pc.proxy_id THEN TRUE ELSE FALSE END AS is_active_for_account
+                    FROM proxy_configs pc
+                    JOIN accounts a ON pc.account_id = a.account_id
+                    ORDER BY a.username, pc.created_at DESC;
+                """)
+
+                logger.info("✓ All views ready (10 views)")
 
                 # ======================================================
                 # STEP 8: INSERT DEFAULT DATA
@@ -1144,11 +1220,13 @@ def create_postgres_tables():
                 logger.info("✅ POSTGRESQL SCHEMA FULLY INITIALIZED")
                 logger.info("=" * 60)
                 logger.info("📊 Schema summary:")
-                logger.info("  • 12 tables")
+                logger.info("  • 13 tables (including proxy_configs)")
                 logger.info("  • 7 helper functions")
-                logger.info("  • 9 views")
-                logger.info("  • 8 triggers")
-                logger.info("  • ~45 indexes")
+                logger.info("  • 10 views (including proxy_config_summary)")
+                logger.info("  • 9 triggers")
+                logger.info("  • 60+ indexes")
+                logger.info("  • Cloud profile support (browser-use SDK)")
+                logger.info("  • Proxy configuration support")
                 logger.info("=" * 60)
 
                 return True

@@ -1,6 +1,6 @@
 -- =====================================================
 -- PostgreSQL Schema - SURVEY AUTOMATION ARCHITECTURE
--- Updated: 2026-03-21
+-- Updated: 2026-03-23
 -- Complete schema for survey automation with:
 --   - Accounts with demographic fields
 --   - Survey sites by name
@@ -12,6 +12,7 @@
 --   - Extraction state tracking
 --   - Workflow generation logs
 --   - Screening results tracking (pass/fail per survey attempt)
+--   - Proxy configurations per account
 -- =====================================================
 
 -- ============= ACCOUNTS TABLE =============
@@ -21,7 +22,7 @@ CREATE TABLE IF NOT EXISTS accounts (
     country VARCHAR(100),
     profile_id VARCHAR(255) UNIQUE,
     profile_type VARCHAR(50) DEFAULT 'local_chrome'
-        CHECK (profile_type IN ('local_chrome', 'hyperbrowser')),
+        CHECK (profile_type IN ('local_chrome', 'hyperbrowser', 'cloud')),
     created_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     mongo_object_id VARCHAR(24),
@@ -29,6 +30,8 @@ CREATE TABLE IF NOT EXISTS accounts (
     has_cookies BOOLEAN DEFAULT FALSE,
     cookies_last_updated TIMESTAMP,
     is_active BOOLEAN DEFAULT TRUE,
+    cloud_profile_id VARCHAR(100),
+    active_proxy_id INTEGER,
 
     -- Demographic fields (all optional)
     age INTEGER,
@@ -57,6 +60,25 @@ CREATE TABLE IF NOT EXISTS accounts (
 
 COMMENT ON TABLE accounts IS 'User accounts for survey automation';
 COMMENT ON COLUMN accounts.country IS 'Country for survey targeting and site selection';
+COMMENT ON COLUMN accounts.cloud_profile_id IS 'Browser-use cloud profile ID';
+COMMENT ON COLUMN accounts.active_proxy_id IS 'Currently active proxy configuration for this account';
+
+-- ============= PROXY CONFIGURATIONS TABLE =============
+CREATE TABLE IF NOT EXISTS proxy_configs (
+    proxy_id SERIAL PRIMARY KEY,
+    account_id INTEGER NOT NULL REFERENCES accounts(account_id) ON DELETE CASCADE,
+    proxy_type VARCHAR(10) NOT NULL CHECK (proxy_type IN ('http', 'https', 'socks4', 'socks5')),
+    host VARCHAR(255) NOT NULL,
+    port INTEGER NOT NULL,
+    username VARCHAR(255),
+    password VARCHAR(255),
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE proxy_configs IS 'Proxy configurations per account';
+COMMENT ON COLUMN proxy_configs.proxy_type IS 'Proxy protocol: http, https, socks4, socks5';
 
 -- ============= ACCOUNT COOKIES TABLE =============
 CREATE TABLE IF NOT EXISTS account_cookies (
@@ -185,10 +207,10 @@ CREATE TABLE IF NOT EXISTS questions (
     workflow_id INTEGER,
     metadata JSONB,
 
-    -- Survey tracking (added migration 2026-03-21)
-    survey_name VARCHAR(255),               -- name of the survey this question belongs to
-    survey_complete BOOLEAN DEFAULT FALSE,  -- TRUE once the full survey run is done
-    survey_completed_at TIMESTAMP,          -- when the survey was marked complete
+    -- Survey tracking
+    survey_name VARCHAR(255),
+    survey_complete BOOLEAN DEFAULT FALSE,
+    survey_completed_at TIMESTAMP,
 
     CONSTRAINT unique_question_per_site UNIQUE (survey_site_id, question_text, account_id)
 );
@@ -276,9 +298,14 @@ CREATE TABLE IF NOT EXISTS screening_results (
 );
 
 COMMENT ON TABLE screening_results IS 'One row per survey attempt — tracks pass/fail/complete per account per survey';
-COMMENT ON COLUMN screening_results.screener_answers IS 'How many screener questions were answered by Gemini';
+COMMENT ON COLUMN screening_results.screener_answers IS 'How many screener questions were answered by AI';
 COMMENT ON COLUMN screening_results.survey_answers IS 'How many post-screener survey questions were answered';
-COMMENT ON COLUMN screening_results.status IS 'pending=answered not yet run | passed=screener passed | failed=DQ | complete=full survey done';
+COMMENT ON COLUMN screening_results.status IS 'pending=not yet run | passed=screener passed | failed=DQ | complete=full survey done';
+
+-- ============= ADD FOREIGN KEY FOR accounts.active_proxy_id =============
+ALTER TABLE accounts
+    ADD CONSTRAINT fk_accounts_proxy
+    FOREIGN KEY (active_proxy_id) REFERENCES proxy_configs(proxy_id) ON DELETE SET NULL;
 
 -- ============= ADD FOREIGN KEY FOR questions.workflow_id =============
 ALTER TABLE questions
@@ -291,6 +318,12 @@ ALTER TABLE questions
 CREATE INDEX IF NOT EXISTS idx_accounts_username ON accounts(username);
 CREATE INDEX IF NOT EXISTS idx_accounts_country ON accounts(country);
 CREATE INDEX IF NOT EXISTS idx_accounts_active ON accounts(is_active) WHERE is_active = TRUE;
+CREATE INDEX IF NOT EXISTS idx_accounts_cloud_profile ON accounts(cloud_profile_id) WHERE cloud_profile_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_accounts_active_proxy ON accounts(active_proxy_id) WHERE active_proxy_id IS NOT NULL;
+
+-- Proxy configs
+CREATE INDEX IF NOT EXISTS idx_proxy_account ON proxy_configs(account_id);
+CREATE INDEX IF NOT EXISTS idx_proxy_active ON proxy_configs(is_active) WHERE is_active = TRUE;
 
 -- Account cookies
 CREATE INDEX IF NOT EXISTS idx_account_cookies_account ON account_cookies(account_id);
@@ -431,6 +464,11 @@ DROP TRIGGER IF EXISTS update_accounts_updated_time ON accounts;
 CREATE TRIGGER update_accounts_updated_time
     BEFORE UPDATE ON accounts
     FOR EACH ROW EXECUTE FUNCTION update_updated_time_column();
+
+DROP TRIGGER IF EXISTS update_proxy_configs_updated_at ON proxy_configs;
+CREATE TRIGGER update_proxy_configs_updated_at
+    BEFORE UPDATE ON proxy_configs
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 DROP TRIGGER IF EXISTS update_prompts_updated_time ON prompts;
 CREATE TRIGGER update_prompts_updated_time
@@ -760,6 +798,7 @@ SELECT
     a.education_level,
     a.job_status,
     a.income_range,
+    a.cloud_profile_id,
     COUNT(DISTINCT q.question_id)                                        AS questions_extracted,
     COUNT(DISTINCT ans.answer_id)                                        AS answers_submitted,
     COUNT(DISTINCT q.survey_site_id)                                     AS sites_participated,
@@ -769,18 +808,25 @@ SELECT
     MAX(ans.submitted_at)                                                AS last_answer,
     p.prompt_id,
     p.name                                                               AS prompt_name,
-    p.is_active                                                          AS prompt_active
+    p.is_active                                                          AS prompt_active,
+    pc.proxy_id,
+    pc.proxy_type,
+    pc.host,
+    pc.port
 FROM accounts a
-LEFT JOIN questions q    ON a.account_id = q.account_id
-LEFT JOIN answers ans    ON a.account_id = ans.account_id
-LEFT JOIN workflows w    ON a.account_id = w.account_id
-LEFT JOIN account_urls au ON a.account_id = au.account_id
-LEFT JOIN prompts p      ON a.account_id = p.account_id
+LEFT JOIN questions q       ON a.account_id = q.account_id
+LEFT JOIN answers ans       ON a.account_id = ans.account_id
+LEFT JOIN workflows w       ON a.account_id = w.account_id
+LEFT JOIN account_urls au   ON a.account_id = au.account_id
+LEFT JOIN prompts p         ON a.account_id = p.account_id
+LEFT JOIN proxy_configs pc  ON a.active_proxy_id = pc.proxy_id AND pc.is_active = TRUE
 GROUP BY a.account_id, a.username, a.country, a.created_time, a.is_active,
          a.total_surveys_processed, a.age, a.gender, a.city, a.education_level,
-         a.job_status, a.income_range, p.prompt_id, p.name, p.is_active;
+         a.job_status, a.income_range, a.cloud_profile_id,
+         p.prompt_id, p.name, p.is_active,
+         pc.proxy_id, pc.proxy_type, pc.host, pc.port;
 
-COMMENT ON VIEW account_summary IS 'Summary statistics per account with demographic info';
+COMMENT ON VIEW account_summary IS 'Summary statistics per account with demographic info and proxy config';
 
 DROP VIEW IF EXISTS question_stats CASCADE;
 CREATE VIEW question_stats AS
@@ -947,6 +993,25 @@ GROUP BY sr.account_id, a.username, sr.site_id, ss.site_name, sr.survey_name;
 
 COMMENT ON VIEW screening_summary IS 'Pass/fail rates per account per survey';
 
+DROP VIEW IF EXISTS proxy_config_summary CASCADE;
+CREATE VIEW proxy_config_summary AS
+SELECT
+    pc.proxy_id,
+    pc.account_id,
+    a.username,
+    pc.proxy_type,
+    pc.host,
+    pc.port,
+    pc.is_active,
+    pc.created_at,
+    pc.updated_at,
+    CASE WHEN a.active_proxy_id = pc.proxy_id THEN TRUE ELSE FALSE END AS is_active_for_account
+FROM proxy_configs pc
+JOIN accounts a ON pc.account_id = a.account_id
+ORDER BY a.username, pc.created_at DESC;
+
+COMMENT ON VIEW proxy_config_summary IS 'Proxy configurations per account with activation status';
+
 -- ============= INITIAL DATA =============
 
 INSERT INTO survey_sites (site_name, description)
@@ -971,7 +1036,7 @@ WHERE NOT EXISTS (SELECT 1 FROM survey_sites LIMIT 1);
 
 -- ============= SUCCESS MESSAGE =============
 SELECT '✅ Survey automation schema initialized successfully!' AS status;
-SELECT 'Tables: accounts, account_cookies, survey_sites, account_urls, prompts, prompt_backups, workflows, questions, answers, extraction_state, workflow_generation_log, screening_results' AS tables;
-SELECT 'Views: survey_site_summary, account_summary, question_stats, available_urls, available_questions, workflows_ready_for_upload, recent_extractions, prompt_backup_summary, screening_summary' AS views;
+SELECT 'Tables: accounts, proxy_configs, account_cookies, survey_sites, account_urls, prompts, prompt_backups, workflows, questions, answers, extraction_state, workflow_generation_log, screening_results' AS tables;
+SELECT 'Views: survey_site_summary, account_summary, question_stats, available_urls, available_questions, workflows_ready_for_upload, recent_extractions, prompt_backup_summary, screening_summary, proxy_config_summary' AS views;
 SELECT 'Functions: get_questions_by_site, get_unused_questions, get_answers_for_question, get_prompt_for_account, get_workflows_by_site, record_extraction_batch, get_answer_statistics' AS functions;
-SELECT '🎯 Schema optimized for SURVEY AUTOMATION with Gemini AI answering + screening result tracking' AS feature;
+SELECT '🎯 Schema optimized for SURVEY AUTOMATION with browser-use cloud SDK + proxy support + screening result tracking' AS feature;

@@ -1,55 +1,96 @@
-# ============================================================
-# requirements.txt
-# ============================================================
-
-# Core framework
+# =====================================================
+# CORE DEPENDENCIES
+# =====================================================
 streamlit>=1.28.0
-
-# Database drivers
-psycopg2-binary>=2.9.6
-pymongo>=4.6.0
-motor>=3.3.2
-psutil>=5.9.0
-
-# Image processing
-Pillow>=10.0.0
-
-# Web scraping and automation
-hyperbrowser
-selenium>=4.15.2
-beautifulsoup4>=4.12.2
-requests>=2.31.0
-
-# Playwright (browser automation via CDP)
-playwright>=1.44.0
-
-# Data processing
 pandas>=2.0.0
 numpy>=1.24.0
-
-# Environment and configuration
+plotly>=5.17.0
 python-dotenv>=1.0.0
+requests>=2.31.0
+python-dateutil>=2.8.2
+pytz>=2023.3
+pillow>=10.0.0
 
-# Visualization
-plotly>=5.15.0
-matplotlib>=3.7.0
+# =====================================================
+# DATABASE
+# =====================================================
+psycopg2-binary>=2.9.0
+pymongo>=4.4.0
+sqlalchemy>=2.0.0
+alembic>=1.11.0
+asyncpg>=0.28.0
 
-# Utility
-watchdog
-
-# Additional utilities for media handling
-python-magic>=0.4.27
-
-# Database migrations
-alembic>=1.13.0
-
-# Gemini AI (official SDK — used for answering survey questions)
-google-generativeai>=0.7.0
-websocket-client>=1.6.0
-
-# Browser automation with AI - browser-use open source
+# =====================================================
+# BROWSER AUTOMATION - UPDATED
+# =====================================================
+# Browser-Use with Browserless (replaces browser-use-sdk)
 browser-use>=0.1.0
+playwright>=1.40.0
+webdriver-manager>=4.0.0
+browser-cookie3>=0.19.1
 
-# LLM providers for browser-use
+# Stealth / anti-detection (optional, for local automation)
+undetected-chromedriver>=3.5.0
+selenium-stealth>=1.0.0
+playwright-stealth>=1.0.0
+
+# =====================================================
+# AI & LLM PACKAGES
+# =====================================================
+# LangChain ecosystem (required for LLM integration)
+langchain>=0.1.0
+langchain-openai>=0.1.0          # OpenAI integration
+langchain-anthropic>=0.1.0       # Anthropic Claude integration
+langchain-google-genai>=1.0.0    # Google Gemini integration
+
+# Direct API clients (if needed)
 openai>=1.0.0
-anthropic>=0.18.0
+anthropic>=0.8.0
+google-generativeai>=0.3.0
+groq>=0.4.0
+cohere>=4.0.0
+
+# =====================================================
+# SCRAPING & DATA PROCESSING
+# =====================================================
+lxml>=4.9.0
+cssselect>=1.2.0
+beautifulsoup4>=4.12.0
+
+# =====================================================
+# DATA VALIDATION & SERIALIZATION
+# =====================================================
+pydantic>=2.0.0
+orjson>=3.9.0
+pyyaml>=6.0
+
+# =====================================================
+# ASYNC & NETWORKING
+# =====================================================
+aiohttp>=3.9.0
+httpx>=0.25.0
+websockets>=12.0
+nest-asyncio>=1.5.0  # Required for running async in Streamlit
+
+# =====================================================
+# SYSTEM & UTILITIES
+# =====================================================
+psutil>=5.9.0
+watchdog>=3.0.0
+schedule>=1.2.0
+tqdm>=4.66.0
+click>=8.1.0
+rich>=13.7.0
+
+# =====================================================
+# EXTRAS (Optional but useful)
+# =====================================================
+# For CSV/Excel exports
+openpyxl>=3.1.0
+xlrd>=2.0.0
+
+# For PDF processing (if needed)
+PyPDF2>=3.0.0
+
+# For image processing (if needed)
+opencv-python>=4.8.0

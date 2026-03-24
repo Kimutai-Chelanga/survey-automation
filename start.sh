@@ -1,14 +1,15 @@
 #!/bin/bash
+# FIXED: Removed Chrome from startup — Streamlit launches it per-session
+# FIXED: fbsetbg popup suppressed via xsetroot + fluxbox init rootCommand
 set -e
 
 # ============================================================
-# 🌍 LOCALE, LANGUAGE & TIMEZONE (KENYA / WINDOWS-LIKE)
+# 🌍 LOCALE, LANGUAGE & TIMEZONE
 # ============================================================
 
 export LANG=en_KE.UTF-8
 export LANGUAGE=en_KE:en_US:en
 export LC_ALL=en_KE.UTF-8
-
 export TZ=Africa/Nairobi
 ln -snf /usr/share/zoneinfo/Africa/Nairobi /etc/localtime 2>/dev/null || true
 echo "Africa/Nairobi" > /etc/timezone 2>/dev/null || true
@@ -24,7 +25,7 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 # ============================================================
-# ⚙️ CONFIGURATION (MATCH HP ELITEBOOK x360 1030 G2)
+# ⚙️ CONFIGURATION
 # ============================================================
 
 DISPLAY_NUM=${DISPLAY_NUM:-99}
@@ -32,36 +33,13 @@ VNC_PORT=${VNC_PORT:-5900}
 NOVNC_PORT=${NOVNC_PORT:-6080}
 VNC_PASSWORD=${VNC_PASSWORD:-secret}
 
-# Laptop-equivalent screen settings
 SCREEN_WIDTH=1280
 SCREEN_HEIGHT=720
 SCREEN_DEPTH=24
 SCREEN_DPI=96
 
-CHROME_PROFILES_DIR=${CHROME_PROFILES_BASE_DIR:-/app/chrome_profiles}
-RECORDINGS_DIR=${RECORDINGS_DIR:-/app/recordings}
-
-CHROME_PROFILE_NAME=default
-CHROME_USER_DATA_DIR="${CHROME_PROFILES_DIR}/${CHROME_PROFILE_NAME}"
-
-CHROME_FLAGS="
-  --user-data-dir=${CHROME_USER_DATA_DIR}
-  --lang=en-KE,en-US,en
-  --window-size=${SCREEN_WIDTH},${SCREEN_HEIGHT}
-  --force-device-scale-factor=1
-  --high-dpi-support=1
-  --disable-blink-features=AutomationControlled
-  --no-first-run
-  --no-default-browser-check
-  --disable-infobars
-  --window-size=1280,720 
-  --window-position=0,0 
-  --disable-dev-shm-usage
-  --no-sandbox
-  --start-maximized
-"
-
-CHROME_START_URL="https://www.google.com"
+CHROME_PROFILES_DIR=${CHROME_PROFILES_BASE_DIR:-/workspace/chrome_profiles}
+RECORDINGS_DIR=${RECORDINGS_DIR:-/workspace/recordings}
 
 # ============================================================
 # 🖨️ PRINT HELPERS
@@ -73,7 +51,7 @@ print_error()   { echo -e "${RED}✗${NC} $1"; }
 print_info()    { echo -e "${BLUE}ℹ${NC} $1"; }
 
 echo -e "${BLUE}╔═══════════════════════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║   STREAMLIT + VNC + CHROME (HP ELITEBOOK MODE)            ║${NC}"
+echo -e "${BLUE}║   STREAMLIT + VNC + CHROME SESSION MANAGER                ║${NC}"
 echo -e "${BLUE}╚═══════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
@@ -84,13 +62,11 @@ echo ""
 cleanup() {
     echo ""
     print_warning "Received shutdown signal..."
-
     pkill -TERM -f google-chrome 2>/dev/null || true
     pkill -TERM x11vnc 2>/dev/null || true
     pkill -TERM websockify 2>/dev/null || true
     pkill -TERM fluxbox 2>/dev/null || true
     pkill -TERM Xvfb 2>/dev/null || true
-
     print_status "Cleanup completed"
     exit 0
 }
@@ -98,36 +74,37 @@ cleanup() {
 trap cleanup SIGTERM SIGINT SIGQUIT
 
 # ============================================================
-# [1/10] DIRECTORIES
+# [1/7] DIRECTORIES
 # ============================================================
 
-echo -e "${BLUE}[1/10]${NC} Setting up directories..."
+echo -e "${BLUE}[1/7]${NC} Setting up directories..."
 mkdir -p \
   "$CHROME_PROFILES_DIR" \
-  "$CHROME_USER_DATA_DIR" \
   "$RECORDINGS_DIR" \
   /tmp/.X11-unix \
-  /root/.vnc
+  /root/.vnc \
+  /app/cookie_scripts \
+  /workspace/chrome_profiles \
+  /workspace/downloads
 
-chmod 777 "$CHROME_PROFILES_DIR" "$CHROME_USER_DATA_DIR" "$RECORDINGS_DIR"
+chmod 777 "$CHROME_PROFILES_DIR" "$RECORDINGS_DIR" /app/cookie_scripts 2>/dev/null || true
 chmod 1777 /tmp/.X11-unix
 
 print_status "Directories ready"
-print_info "Chrome profile: $CHROME_USER_DATA_DIR"
 
 # ============================================================
-# [2/10] CLEAN OLD X LOCKS
+# [2/7] CLEAN OLD X LOCKS
 # ============================================================
 
-echo -e "${BLUE}[2/10]${NC} Cleaning old X locks..."
+echo -e "${BLUE}[2/7]${NC} Cleaning old X locks..."
 rm -f /tmp/.X${DISPLAY_NUM}-lock /tmp/.X11-unix/X${DISPLAY_NUM}
 print_status "Old X locks removed"
 
 # ============================================================
-# [3/10] START XVFB (WINDOWS 10 MATCH)
+# [3/7] START XVFB — wait until ready
 # ============================================================
 
-echo -e "${BLUE}[3/10]${NC} Starting Xvfb..."
+echo -e "${BLUE}[3/7]${NC} Starting Xvfb..."
 Xvfb :${DISPLAY_NUM} \
   -screen 0 ${SCREEN_WIDTH}x${SCREEN_HEIGHT}x${SCREEN_DEPTH} \
   -dpi ${SCREEN_DPI} \
@@ -139,22 +116,27 @@ Xvfb :${DISPLAY_NUM} \
   > /tmp/xvfb.log 2>&1 &
 
 XVFB_PID=$!
-sleep 3
 export DISPLAY=:${DISPLAY_NUM}
 
-if ! xdpyinfo >/dev/null 2>&1; then
-    print_error "Xvfb failed to start"
-    cat /tmp/xvfb.log
-    exit 1
-fi
-
-print_status "Xvfb running (PID: $XVFB_PID)"
+# Poll until display is actually up (up to 15s)
+for i in $(seq 1 15); do
+    if xdpyinfo >/dev/null 2>&1; then
+        print_status "Xvfb ready after ${i}s (PID: $XVFB_PID)"
+        break
+    fi
+    sleep 1
+    if [ $i -eq 15 ]; then
+        print_error "Xvfb failed to start within 15s"
+        cat /tmp/xvfb.log
+        exit 1
+    fi
+done
 
 # ============================================================
-# [4/10] XDG + DBUS
+# [4/7] XDG + DBUS
 # ============================================================
 
-echo -e "${BLUE}[4/10]${NC} Setting up XDG runtime..."
+echo -e "${BLUE}[4/7]${NC} Setting up XDG / D-Bus..."
 export XDG_RUNTIME_DIR=/tmp/runtime-root
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 700 "$XDG_RUNTIME_DIR"
@@ -163,56 +145,47 @@ if command -v dbus-launch >/dev/null 2>&1; then
     eval "$(dbus-launch --sh-syntax)"
     print_status "D-Bus started"
 else
-    print_warning "D-Bus not available"
+    print_warning "D-Bus not available — skipping"
 fi
 
 # ============================================================
-# [5/10] FLUXBOX
+# [5/7] SOLID BACKGROUND + FLUXBOX
+#        xsetroot BEFORE fluxbox so it never calls fbsetbg
+#        The rootCommand in ~/.fluxbox/init also sets it on
+#        every subsequent startup, fully suppressing the popup.
 # ============================================================
 
-echo -e "${BLUE}[5/10]${NC} Starting Fluxbox..."
+echo -e "${BLUE}[5/7]${NC} Setting desktop background + starting Fluxbox..."
+
+# Set solid colour now so the display is never black/blank
+xsetroot -solid "#1a1a2e" -display :${DISPLAY_NUM} 2>/dev/null || true
+
+# Write a minimal fluxbox config that:
+#   - uses rootCommand instead of fbsetbg (no popup)
+#   - hides the toolbar (cleaner VNC view)
+mkdir -p /root/.fluxbox
+cat > /root/.fluxbox/init << 'FLUXBOX_INIT'
+session.screen0.rootCommand:	xsetroot -solid "#1a1a2e"
+session.menuFile:	~/.fluxbox/menu
+session.keyFile:	~/.fluxbox/keys
+session.screen0.toolbar.visible:	false
+session.screen0.slit.autoHide:	false
+FLUXBOX_INIT
+
 fluxbox > /tmp/fluxbox.log 2>&1 &
 FLUXBOX_PID=$!
 sleep 2
-print_status "Fluxbox running (PID: $FLUXBOX_PID)"
+print_status "Fluxbox running (PID: $FLUXBOX_PID) — fbsetbg popup suppressed"
 
 # ============================================================
-# [6/10] START CHROME (1:1 LAPTOP VIEW)
+# [6/7] VNC PASSWORD + X11VNC + NOVNC
 # ============================================================
 
-echo -e "${BLUE}[6/10]${NC} Starting Google Chrome..."
+echo -e "${BLUE}[6/7]${NC} Starting VNC services..."
 
-CHROME_BIN=$(command -v google-chrome || command -v google-chrome-stable || true)
-
-if [ -z "$CHROME_BIN" ]; then
-    print_error "Google Chrome not found!"
-    exit 1
-fi
-
-$CHROME_BIN $CHROME_FLAGS "$CHROME_START_URL" > /tmp/chrome.log 2>&1 &
-
-CHROME_PID=$!
-sleep 4
-
-if pgrep -f "google-chrome" >/dev/null; then
-    print_status "Chrome started (PID: $CHROME_PID)"
-else
-    print_warning "Chrome may not have started correctly"
-fi
-
-# ============================================================
-# [7/10] VNC PASSWORD
-# ============================================================
-
-echo -e "${BLUE}[7/10]${NC} Setting VNC password..."
 [ -f /root/.vnc/passwd ] || x11vnc -storepasswd "$VNC_PASSWORD" /root/.vnc/passwd
 print_status "VNC password ready"
 
-# ============================================================
-# [8/10] X11VNC
-# ============================================================
-
-echo -e "${BLUE}[8/10]${NC} Starting x11vnc..."
 x11vnc \
   -display :${DISPLAY_NUM} \
   -forever \
@@ -223,46 +196,44 @@ x11vnc \
   -noxfixes \
   -noxdamage \
   > /tmp/x11vnc.log 2>&1 &
-
 X11VNC_PID=$!
 sleep 2
 print_status "x11vnc running (PID: $X11VNC_PID)"
 
-# ============================================================
-# [9/10] NOVNC
-# ============================================================
-
-echo -e "${BLUE}[9/10]${NC} Starting noVNC..."
 websockify \
   --web /usr/share/novnc \
   ${NOVNC_PORT} \
   localhost:${VNC_PORT} \
   > /tmp/websockify.log 2>&1 &
-
 WEBSOCKIFY_PID=$!
-sleep 2
-print_status "noVNC running (PID: $WEBSOCKIFY_PID)"
+sleep 1
+print_status "noVNC running (PID: $WEBSOCKIFY_PID) → http://localhost:${NOVNC_PORT}/vnc.html"
 
 # ============================================================
-# [10/10] SUMMARY
+# [7/7] SUMMARY
 # ============================================================
 
 echo ""
 echo -e "${GREEN}╔═══════════════════════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║   HP ELITEBOOK x360 1030 G2 – 1:1 DISPLAY ACTIVE          ║${NC}"
+echo -e "${GREEN}║   ALL SERVICES READY                                       ║${NC}"
 echo -e "${GREEN}╚═══════════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo "🖥️  Resolution: ${SCREEN_WIDTH}x${SCREEN_HEIGHT} @ ${SCREEN_DPI} DPI"
-echo "🌍 Locale:     English (Kenya)"
-echo "🕒 Timezone:   Africa/Nairobi"
-echo "🌐 Chrome:     Visible, real window"
-echo "🔐 VNC:        localhost:${VNC_PORT}"
-echo "🌐 noVNC:      http://localhost:${NOVNC_PORT}/vnc.html"
-echo "🚀 Streamlit:  http://localhost:8501"
+echo "🖥️  Resolution : ${SCREEN_WIDTH}x${SCREEN_HEIGHT} @ ${SCREEN_DPI} DPI"
+echo "🌍 Locale      : English (Kenya)"
+echo "🕒 Timezone    : Africa/Nairobi"
+echo ""
+echo "⚠️  Chrome      : NOT started at boot"
+echo "   Chrome is launched ON DEMAND by Streamlit when you click"
+echo "   'Start Session' in Accounts → Local Chrome tab."
+echo "   It will open YOUR chosen URL in this VNC window."
+echo ""
+echo "🔐 VNC         : localhost:${VNC_PORT}  (password: ${VNC_PASSWORD})"
+echo "🌐 noVNC       : http://localhost:${NOVNC_PORT}/vnc.html"
+echo "🚀 Streamlit   : http://localhost:8501"
 echo ""
 
 # ============================================================
-# 🚀 START STREAMLIT (FOREGROUND)
+# 🚀 START STREAMLIT (foreground — keeps the container alive)
 # ============================================================
 
 exec streamlit run src/streamlit/app.py \
