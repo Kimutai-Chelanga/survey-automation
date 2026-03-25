@@ -1,7 +1,7 @@
 docker exec -it streamlit_app python -c "
 import asyncio, websockets
 async def test():
-    token = 'bu_wU7AOU8d5BuxquQQe2VFb74B5FTYv9GZQnaZXdQM1hk'
+    token = '2UDHTet8etjhZ2M0cc02f659e8affc140ca5839c91454f501'
     url = f'wss://production-sfo.browserless.io?token={token}'
     try:
         async with websockets.connect(url) as ws:

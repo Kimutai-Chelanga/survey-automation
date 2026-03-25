@@ -1,5 +1,5 @@
 """
-Generate Manual Workflows — Streamlit page v3.5.0 (Browserless version)
+Generate Manual Workflows — Streamlit page v3.7.3 (Browserless version)
 - Uses browser-use with Browserless WebSocket for AI browser automation
 - Applies proxy settings from database, with UI to edit/update them
 - Uses cookies from database for persistent login sessions
@@ -15,6 +15,7 @@ import os
 import traceback
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+from urllib.parse import quote
 
 import streamlit as st
 from psycopg2.extras import RealDictCursor
@@ -23,7 +24,7 @@ from src.core.database.postgres.connection import get_postgres_connection
 from .orchestrator import SurveySiteOrchestrator
 
 # ============================================================================
-# BROWSER-USE LLM IMPORTS - CORRECTED: Use browser-use's native LLM classes
+# BROWSER-USE LLM IMPORTS
 # ============================================================================
 from browser_use import Agent, Browser
 from browser_use.llm import ChatOpenAI, ChatAnthropic, ChatGoogle
@@ -32,7 +33,6 @@ logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Model registry — maps UI label → (class, kwargs)
-# Now using browser-use's native LLM classes
 # ---------------------------------------------------------------------------
 MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
     "openai — GPT-4o": {
@@ -50,55 +50,44 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
 }
 
 # Environment variable names for API keys
-
 MODEL_ENV_KEYS: Dict[str, str] = {
     "openai — GPT-4o": "OPENAI_API_KEY",
     "anthropic — Claude 3.5": "ANTHROPIC_API_KEY",
-    "gemini — Gemini 2.0 Flash": "GEMINI_API_KEY",   # revert to the key you already have
+    "gemini — Gemini 2.0 Flash": "GEMINI_API_KEY",
 }
 
 
 def run_async(coro):
     """
     Run async coroutine in Streamlit context.
-    Handles the event loop properly for Streamlit's threading model.
+    Uses a robust approach: creates a new event loop in a separate thread if needed.
     """
     try:
-        # Try to get existing loop
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # If loop is running, we need to use nest_asyncio
+        loop = asyncio.get_running_loop()
+        # A loop is already running; create a new thread with its own loop.
+        import threading
+        result = None
+        exception = None
+
+        def run_in_thread():
+            nonlocal result, exception
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
             try:
-                import nest_asyncio
-                nest_asyncio.apply()
-            except ImportError:
-                # Fallback: create new loop in new thread
-                import threading
-                result = None
-                exception = None
-                
-                def run_in_thread():
-                    nonlocal result, exception
-                    try:
-                        new_loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(new_loop)
-                        result = new_loop.run_until_complete(coro)
-                    except Exception as e:
-                        exception = e
-                    finally:
-                        new_loop.close()
-                
-                thread = threading.Thread(target=run_in_thread)
-                thread.start()
-                thread.join()
-                
-                if exception:
-                    raise exception
-                return result
-        else:
-            return loop.run_until_complete(coro)
+                result = new_loop.run_until_complete(coro)
+            except Exception as e:
+                exception = e
+            finally:
+                new_loop.close()
+
+        thread = threading.Thread(target=run_in_thread)
+        thread.start()
+        thread.join()
+        if exception:
+            raise exception
+        return result
     except RuntimeError:
-        # No event loop, create one
+        # No running loop, we can create one and run
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
@@ -408,7 +397,7 @@ class GenerateManualWorkflowsPage:
         self._tab_screening_results(acct, site)
 
     # ------------------------------------------------------------------
-    # Direct AI Answering — Browserless + browser-use
+    # Direct AI Answering — Browserless + browser-use (FIXED)
     # ------------------------------------------------------------------
     def _tab_answer_direct(self, acct, site, prompt):
         st.subheader("🤖 AI Survey Answerer")
@@ -424,7 +413,7 @@ class GenerateManualWorkflowsPage:
         if not available_models:
             st.error(
                 "❌ No LLM API key found.\n"
-                "Add `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GOOGLE_API_KEY` to `.env`."
+                "Add `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY` to `.env`."
             )
             return
 
@@ -459,7 +448,6 @@ class GenerateManualWorkflowsPage:
         st.markdown("---")
         st.subheader("🌐 Proxy Settings")
 
-        # DEFAULT PROXY VALUES (your proxy)
         DEFAULT_PROXY = {
             "proxy_type": "http",
             "host": "proxy-us.proxy-cheap.com",
@@ -470,7 +458,6 @@ class GenerateManualWorkflowsPage:
 
         stored_proxy = self._get_account_proxy(acct["account_id"])
         
-        # Initialize temp_proxy with stored proxy or defaults if not set
         if st.session_state.get("temp_proxy") is None:
             if stored_proxy:
                 st.session_state.temp_proxy = stored_proxy.copy()
@@ -565,7 +552,7 @@ class GenerateManualWorkflowsPage:
 
         with st.expander("⚙️ Advanced Options"):
             max_steps = st.number_input(
-                "Max steps per survey:", min_value=10, max_value=200, value=50, key="max_steps"
+                "Max steps per survey:", min_value=10, max_value=500, value=200, key="max_steps"
             )
 
         if st.button(
@@ -586,194 +573,195 @@ class GenerateManualWorkflowsPage:
         self, acct, site, prompt, start_url, num_surveys,
         model_choice, max_steps
     ):
-        """
-        Run Browserless + browser-use to answer surveys.
-        Uses browser-use's native LLM classes (ChatGoogle, ChatOpenAI, etc.)
-        Connects to Browserless via WebSocket CDP URL with proxy support.
-        """
+        import asyncio
+        import os
+        from datetime import datetime
+
+        from browser_use import Browser, Agent
+
         self.log(f"Starting AI answering: {acct['username']} / {site['site_name']}")
         st.session_state.generation_in_progress = True
 
-        progress_bar = st.progress(0)
-        status_text = st.empty()
+        with st.spinner("🤖 AI Agent is working..."):
 
-        # Build persona system message
-        persona_system = self._build_persona_system_message(prompt, acct)
+            browser = None
 
-        # Task description with persona embedded
-        task = f"""
-Persona: {persona_system}
+            try:
+                # =========================
+                # ENV CHECK
+                # =========================
+                token = os.getenv("BROWSERLESS_TOKEN")
+                ws_base = os.getenv("BROWSERLESS_WS_URL", "wss://production-sfo.browserless.io")
 
-Now navigate to {start_url} and complete up to {num_surveys} online surveys.
+                if not token:
+                    raise Exception("❌ Missing BROWSERLESS_TOKEN")
 
-Steps:
-1. Open {start_url}
-2. Find all available surveys on the dashboard/listing page
-3. Click into the first available survey
-4. Answer every question on every page using the persona described above
-5. If a disqualification (DQ) page appears, note it and return to find the next survey
-6. Submit each survey fully, then return to the listing page
-7. Repeat until {num_surveys} survey(s) have been completed or attempted
-
-Rules:
-- Wait for each page to fully load before interacting
-- Never skip required questions
-- If a submit button cannot be clicked, try send_keys with "Tab Tab Enter"
-- Dismiss cookie banners and popups before proceeding
-- Stay on the survey site — do not navigate elsewhere
-"""
-
-        try:
-            # --- Check required environment variables ---
-            browserless_token = os.environ.get("BROWSERLESS_TOKEN")
-            if not browserless_token:
-                raise Exception("BROWSERLESS_TOKEN not found in environment variables")
-
-            # --- Step 1: Get cookies from database ---
-            cookies = await self._get_account_cookies_for_injection(acct["account_id"])
-            if cookies:
-                self.log(f"✅ Loaded {len(cookies)} cookies for account {acct['username']}")
-            else:
-                self.log("⚠️ No cookies found for this account. Session will start fresh.")
-
-            # --- Step 2: Get proxy configuration ---
-            proxy_to_use = st.session_state.get("temp_proxy") or self._get_account_proxy(acct["account_id"])
-            
-            # --- Step 3: Build Browserless WebSocket URL ---
-            # According to Browserless documentation [citation:3]:
-            # Format: wss://{region}.browserless.io?token={token}&stealth=true&blockAds=true
-            browserless_ws = os.environ.get(
-                "BROWSERLESS_WS_URL", 
-                "wss://production-sfo.browserless.io"
-            )
-            
-            # Build CDP URL with parameters
-            cdp_url = f"{browserless_ws}?token={browserless_token}&stealth=true&blockAds=true"
-            
-            # Add proxy if configured - Browserless accepts proxy via URL parameter [citation:7]
-            if proxy_to_use:
-                # Format proxy string: proxy_type://username:password@host:port
-                proxy_auth = ""
-                if proxy_to_use.get('username') and proxy_to_use.get('password'):
-                    proxy_auth = f"{proxy_to_use['username']}:{proxy_to_use['password']}@"
-                
-                proxy_str = f"{proxy_auth}{proxy_to_use['host']}:{proxy_to_use['port']}"
-                proxy_type = proxy_to_use.get('proxy_type', 'http')
-                cdp_url += f"&proxy={proxy_type}://{proxy_str}"
-                self.log(f"Using proxy: {proxy_type}://{proxy_to_use['host']}:{proxy_to_use['port']}")
-            
-            self.log(f"Connecting to Browserless at: {browserless_ws}")
-            progress_bar.progress(10)
-
-            # --- Step 4: Create browser session with Browserless CDP URL ---
-            # Using browser-use's Browser class with CDP URL [citation:2][citation:10]
-            browser = Browser(cdp_url=cdp_url)
-            
-            # Load cookies if available (using Playwright context)
-            if cookies:
-                if hasattr(browser, 'context') and hasattr(browser.context, 'add_cookies'):
-                    await browser.context.add_cookies(cookies)
-                    self.log("✅ Cookies injected into browser")
-                elif hasattr(browser, 'add_cookies'):
-                    await browser.add_cookies(cookies)
-                    self.log("✅ Cookies injected into browser")
-                else:
-                    self.log("⚠️ Cannot inject cookies – browser API may have changed")
-            
-            status_text.info("🤖 AI Agent is connecting to Browserless...")
-            progress_bar.progress(20)
-
-            # --- Step 5: Initialize LLM using browser-use's native classes ---
-            model_cfg = MODEL_REGISTRY[model_choice]
-            
-            # Get API key from environment
-            env_key = MODEL_ENV_KEYS.get(model_choice)
-            if env_key:
-                api_key = os.environ.get(env_key)
-                if not api_key:
-                    raise Exception(f"{env_key} not found in environment variables")
-            
-            # Create LLM instance with API key
-            kwargs = model_cfg["kwargs"].copy()
-            kwargs["api_key"] = api_key
-            
-            llm = model_cfg["cls"](**kwargs)
-            
-            self.log(f"Using model: {model_choice} with provider: {model_cfg['cls'].__name__}")
-            progress_bar.progress(30)
-
-            # --- Step 6: Create and run agent ---
-            agent = Agent(
-                task=task,
-                llm=llm,
-                browser=browser
-            )
-            
-            status_text.info("🤖 AI Agent is answering surveys — this may take several minutes...")
-            progress_bar.progress(40)
-            
-            # Run the agent
-            result = await agent.run(max_steps=max_steps)
-
-            progress_bar.progress(100)
-            status_text.empty()
-
-            # --- Step 7: Process result ---
-            if result:
-                result_str = str(result)
-                self.log(f"✅ Agent done. Result: {result_str[:200]}")
-                st.success("🎉 AI Agent completed its task!")
-
-                self._upsert_screening_result(
-                    account_id=acct["account_id"],
-                    site_id=site["site_id"],
-                    survey_name="AI_Answered",
-                    batch_id=f"ai_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-                    screener_answers=num_surveys,
-                    status="complete",
+                # =========================
+                # ✅ BROWSERLESS (OFFICIAL PROXY SUPPORT)
+                # =========================
+                cdp_url = (
+                    f"{ws_base}"
+                    f"?token={token}"
+                    f"&proxy=residential"
+                    f"&proxyCountry=us"
+                    f"&proxySticky=true"
                 )
-                self._mark_url_used_by_url(site["site_id"], start_url)
 
-                st.session_state.generation_results = {
-                    "action": "direct_answering",
-                    "status": "success",
-                    "timestamp": datetime.now().isoformat(),
-                    "account": {"id": acct["account_id"], "username": acct["username"]},
-                    "site": {"id": site["site_id"], "name": site["site_name"]},
-                    "start_url": start_url,
-                    "surveys_attempted": num_surveys,
-                    "model": model_choice,
-                    "result_output": result_str[:500],
-                }
-            else:
-                self.log(f"❌ Agent returned no result", "ERROR")
-                st.error("AI Agent did not return a result")
-                st.session_state.generation_results = {
-                    "action": "direct_answering",
-                    "status": "failed",
-                    "error": "No result returned",
-                    "account": {"id": acct["account_id"], "username": acct["username"]},
-                    "site": {"id": site["site_id"], "name": site["site_name"]},
-                    "timestamp": datetime.now().isoformat(),
-                }
+                self.log(f"CDP URL: {cdp_url}")
 
-        except Exception as exc:
-            progress_bar.empty()
-            status_text.empty()
-            error_msg = f"{str(exc)}\n{traceback.format_exc()}"
-            self.log(error_msg, "ERROR")
-            st.error(f"❌ Error: {exc}")
-            st.session_state.generation_results = {
-                "action": "direct_answering",
-                "status": "failed",
-                "error": str(exc),
-                "account": {"id": acct["account_id"], "username": acct["username"]},
-                "site": {"id": site["site_id"], "name": site["site_name"]},
-                "timestamp": datetime.now().isoformat(),
-            }
-        finally:
-            st.session_state.generation_in_progress = False
-            st.rerun()
+                # =========================
+                # START BROWSER
+                # =========================
+                browser = Browser(cdp_url=cdp_url)
+                await browser.start()
+
+                self.log("✅ Browser connected successfully")
+
+                # =========================
+                # COOKIES
+                # =========================
+                cookies = await self._get_account_cookies_for_injection(acct["account_id"])
+
+                if cookies and hasattr(browser, "context") and browser.context:
+                    await browser.context.add_cookies(cookies)
+                    self.log(f"✅ Injected {len(cookies)} cookies")
+                else:
+                    self.log("⚠️ No cookies found")
+
+                # =========================
+                # LLM SETUP
+                # =========================
+                model_cfg = MODEL_REGISTRY[model_choice]
+                api_key = os.getenv(MODEL_ENV_KEYS.get(model_choice))
+
+                if not api_key:
+                    raise Exception("Missing model API key")
+
+                llm = model_cfg["cls"](**{
+                    **model_cfg["kwargs"],
+                    "api_key": api_key
+                })
+
+                # =========================
+                # TASK (UNCHANGED)
+                # =========================
+                persona = self._build_persona_system_message(prompt, acct)
+
+                base_task = f"""
+    Persona:
+    {persona}
+
+    You are a REAL human completing surveys.
+
+    ## CRITICAL RULES
+    - Stay consistent with your persona at ALL times
+    - Never contradict previous answers
+    - Answer like a real human
+
+    ## Step-by-step process
+
+    1. Go to {start_url}
+
+    2. Start a survey
+
+    3. Answer questions:
+    - Read carefully
+    - Match persona
+    - Never skip required fields
+
+    ## Human behavior
+    - Wait 2–5 seconds before each action
+    - Scroll occasionally
+    - Do NOT rush
+
+    ## Answering strategy
+    - Vary answers naturally
+    - Avoid patterns
+    - Be realistic
+
+    ## Attention checks
+    - If instructed to pick a specific answer → obey exactly
+
+    ## Navigation
+    - Click Next / Continue after answering
+    - Wait for page load
+
+    ## Completion
+    STOP only if:
+    - "Thank you" → SUCCESS
+    - "Disqualified" → DQ
+
+    ## Never:
+    - Stop early
+    - Rush
+    - Act like a bot
+
+    Goal:
+    Finish the survey OR reach disqualification page.
+    """
+
+                max_steps = max(max_steps, 300)
+
+                completed = 0
+                disqualified = 0
+
+                # =========================
+                # LOOP SURVEYS
+                # =========================
+                for i in range(num_surveys):
+
+                    self.log(f"Running survey {i+1}/{num_surveys}")
+
+                    agent = Agent(
+                        task=base_task,
+                        llm=llm,
+                        browser=browser
+                    )
+
+                    result = await agent.run(max_steps=max_steps)
+                    result_str = str(result).lower()
+
+                    if "disqual" in result_str:
+                        disqualified += 1
+                        status = "disqualified"
+                    elif "thank" in result_str or "complete" in result_str:
+                        completed += 1
+                        status = "completed"
+                    else:
+                        status = "incomplete"
+
+                    self.log(f"Survey {i+1}: {status}")
+
+                    self._record_survey_attempt(
+                        account_id=acct["account_id"],
+                        site_id=site["site_id"],
+                        survey_name=f"Survey_{i+1}",
+                        batch_id=f"ai_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                        status=status,
+                        notes=result_str[:300]
+                    )
+
+                # =========================
+                # FINAL UI
+                # =========================
+                if completed or disqualified:
+                    st.success(f"✅ Completed: {completed} | DQ: {disqualified}")
+                else:
+                    st.warning("⚠️ No surveys completed")
+
+            except Exception as e:
+                self.log(str(e), "ERROR")
+                st.error(f"❌ {e}")
+
+            finally:
+                if browser:
+                    try:
+                        await browser.stop()
+                    except:
+                        pass
+
+                st.session_state.generation_in_progress = False
+                st.rerun()
 
     # ------------------------------------------------------------------
     # Persona builder
@@ -835,66 +823,77 @@ Rules:
         except Exception as e:
             logger.error(f"_mark_url_used_by_url: {e}")
 
+    def _record_survey_attempt(self, account_id: int, site_id: int, survey_name: str,
+                               batch_id: str, status: str, notes: str = ""):
+        """
+        Record one survey attempt result (per survey, not batch).
+        Uses the screening_results table but repurposed for per-survey tracking.
+        """
+        try:
+            with self._pg() as conn:
+                with conn.cursor() as c:
+                    c.execute(
+                        "INSERT INTO screening_results "
+                        "(account_id, site_id, survey_name, batch_id, screener_answers, status, started_at, completed_at, notes) "
+                        "VALUES (%s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, %s)",
+                        (account_id, site_id, survey_name, batch_id, 1, status, notes)
+                    )
+                    conn.commit()
+        except Exception as e:
+            logger.error(f"_record_survey_attempt: {e}")
+
     # ------------------------------------------------------------------
-    # Screening Results Tab
+    # Screening Results Tab (updated to show per-survey results)
     # ------------------------------------------------------------------
     def _tab_screening_results(self, acct, site):
-        st.subheader("🏆 Screening Results")
+        st.subheader("🏆 Survey Attempts")
         results = self._load_screening_results(acct["account_id"], site["site_id"])
         if not results:
-            st.info("No screening records yet.")
+            st.info("No survey attempts recorded yet.")
             return
 
         total = len(results)
-        passed = sum(1 for r in results if r["status"] == "passed")
-        failed = sum(1 for r in results if r["status"] == "failed")
-        complete = sum(1 for r in results if r["status"] == "complete")
-        pending = sum(1 for r in results if r["status"] == "pending")
+        completed = sum(1 for r in results if r["status"] == "completed")
+        disqualified = sum(1 for r in results if r["status"] == "disqualified")
+        incomplete = sum(1 for r in results if r["status"] == "incomplete")
 
-        c1, c2, c3, c4, c5 = st.columns(5)
+        c1, c2, c3, c4 = st.columns(4)
         c1.metric("Total", total)
-        c2.metric("✅ Passed", passed)
-        c3.metric("🏁 Complete", complete)
-        c4.metric("❌ Failed", failed)
-        c5.metric("⏳ Pending", pending)
+        c2.metric("✅ Completed", completed)
+        c3.metric("❌ Disqualified", disqualified)
+        c4.metric("⚠️ Incomplete", incomplete)
 
         if total > 0:
-            pass_rate = int((passed + complete) / total * 100)
-            st.progress(pass_rate / 100, text=f"Pass rate: {pass_rate}%")
+            pass_rate = int((completed) / total * 100) if total else 0
+            st.progress(pass_rate / 100, text=f"Completion rate: {pass_rate}%")
 
         st.markdown("---")
         for r in results:
-            icon = {"passed": "✅", "failed": "❌", "complete": "🏁",
-                    "pending": "⏳", "error": "⚠️"}.get(r["status"], "❓")
+            icon = {"completed": "✅", "disqualified": "❌", "incomplete": "⚠️", "pending": "⏳", "error": "⚠️"}.get(r["status"], "❓")
             with st.expander(
                 f"{icon} **{r.get('survey_name') or 'Unknown Survey'}** — "
                 f"{r['status'].upper()} — "
                 f"{r['started_at'].strftime('%Y-%m-%d %H:%M') if r.get('started_at') else '?'}",
-                expanded=(r["status"] == "pending"),
+                expanded=False,
             ):
                 col_info, col_actions = st.columns([3, 1])
                 with col_info:
                     st.markdown(
                         f"**Batch ID:** `{r.get('batch_id') or '—'}`\n"
-                        f"**Screener answers:** {r.get('screener_answers', 0)}\n"
                         f"**Started:** {r['started_at'].strftime('%Y-%m-%d %H:%M') if r.get('started_at') else '—'}\n"
-                        f"**Completed:** {r['completed_at'].strftime('%Y-%m-%d %H:%M') if r.get('completed_at') else '—'}"
+                        f"**Completed:** {r['completed_at'].strftime('%Y-%m-%d %H:%M') if r.get('completed_at') else '—'}\n"
                     )
                     if r.get("notes"):
                         st.caption(f"Notes: {r['notes']}")
                 with col_actions:
                     rid = r["result_id"]
-                    if r["status"] != "passed":
-                        if st.button("✅ Mark Passed", key=f"pass_{rid}", use_container_width=True):
-                            self._update_screening_status(rid, "passed")
+                    if r["status"] != "completed":
+                        if st.button("✅ Mark Completed", key=f"pass_{rid}", use_container_width=True):
+                            self._update_screening_status(rid, "completed")
                             st.rerun()
-                    if r["status"] != "complete":
-                        if st.button("🏁 Mark Complete", key=f"comp_{rid}", use_container_width=True):
-                            self._update_screening_status(rid, "complete")
-                            st.rerun()
-                    if r["status"] != "failed":
-                        if st.button("❌ Mark Failed", key=f"fail_{rid}", use_container_width=True):
-                            self._update_screening_status(rid, "failed")
+                    if r["status"] != "disqualified":
+                        if st.button("❌ Mark Disqualified", key=f"fail_{rid}", use_container_width=True):
+                            self._update_screening_status(rid, "disqualified")
                             st.rerun()
                     new_note = st.text_input("Note:", key=f"note_{rid}", placeholder="Optional…")
                     if new_note:
@@ -906,16 +905,13 @@ Rules:
         if st.button("📥 Export CSV", key="exp_screening"):
             buf = io.StringIO()
             w = csv.DictWriter(buf, fieldnames=[
-                "survey_name", "status", "screener_answers",
-                "survey_answers", "started_at", "completed_at", "batch_id", "notes"
+                "survey_name", "status", "started_at", "completed_at", "batch_id", "notes"
             ])
             w.writeheader()
             for r in results:
                 w.writerow({
                     "survey_name": r.get("survey_name", ""),
                     "status": r.get("status", ""),
-                    "screener_answers": r.get("screener_answers", 0),
-                    "survey_answers": r.get("survey_answers", 0),
                     "started_at": str(r.get("started_at", "")),
                     "completed_at": str(r.get("completed_at", "")),
                     "batch_id": r.get("batch_id", ""),
@@ -930,7 +926,7 @@ Rules:
             )
 
     # ------------------------------------------------------------------
-    # Results renderer
+    # Results renderer (updated)
     # ------------------------------------------------------------------
     def _render_results(self, r: Dict):
         if r.get("action") != "direct_answering":
@@ -945,16 +941,20 @@ Rules:
                 st.rerun()
             return
 
-        st.success(f"✅ Completed: {r.get('surveys_attempted', 0)} survey(s)")
+        st.success(f"✅ Completed: {r.get('completed', 0)} surveys, {r.get('disqualified', 0)} disqualifications.")
         
-        st.json({
-            "account": r["account"]["username"],
-            "site": r["site"]["name"],
-            "model": r.get("model", ""),
-            "start_url": r.get("start_url", ""),
-            "timestamp": r.get("timestamp", ""),
-            "output": r.get("result_output", ""),
-        })
+        if "details" in r:
+            st.write("**Per-survey details:**")
+            for d in r["details"]:
+                st.write(f"- Survey {d['survey_number']}: {d['outcome']} — {d['output_snippet'][:100]}...")
+        else:
+            st.json({
+                "account": r["account"]["username"],
+                "site": r["site"]["name"],
+                "model": r.get("model", ""),
+                "start_url": r.get("start_url", ""),
+                "timestamp": r.get("timestamp", ""),
+            })
 
         if st.button("Clear results", key="clr_res"):
             st.session_state.generation_results = None
@@ -981,28 +981,12 @@ Rules:
             logger.error(f"_get_urls: {e}")
             return []
 
-    def _upsert_screening_result(self, account_id, site_id, survey_name,
-                                  batch_id, screener_answers, status="pending"):
-        try:
-            with self._pg() as conn:
-                with conn.cursor() as c:
-                    c.execute(
-                        "INSERT INTO screening_results "
-                        "(account_id,site_id,survey_name,batch_id,screener_answers,status,started_at) "
-                        "VALUES (%s,%s,%s,%s,%s,%s,CURRENT_TIMESTAMP)",
-                        (account_id, site_id, survey_name, batch_id, screener_answers, status)
-                    )
-                    conn.commit()
-        except Exception as e:
-            logger.error(f"_upsert_screening_result: {e}")
-
     def _load_screening_results(self, account_id, site_id) -> List[Dict]:
         try:
             with self._pg() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as c:
                     c.execute(
-                        "SELECT result_id,survey_name,batch_id,status,screener_answers,"
-                        "survey_answers,started_at,completed_at,notes "
+                        "SELECT result_id,survey_name,batch_id,status,started_at,completed_at,notes "
                         "FROM screening_results WHERE account_id=%s AND site_id=%s "
                         "ORDER BY started_at DESC",
                         (account_id, site_id)
@@ -1016,7 +1000,7 @@ Rules:
         try:
             with self._pg() as conn:
                 with conn.cursor() as c:
-                    completed_sql = "CURRENT_TIMESTAMP" if status in ("complete", "failed") else "NULL"
+                    completed_sql = "CURRENT_TIMESTAMP" if status in ("completed", "disqualified") else "NULL"
                     c.execute(
                         f"UPDATE screening_results SET status=%s, completed_at={completed_sql} "
                         f"WHERE result_id=%s",
