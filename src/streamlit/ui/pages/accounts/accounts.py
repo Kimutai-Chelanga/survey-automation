@@ -1138,10 +1138,8 @@ class AccountsPage:
                 with col2:
                     st.write("**Survey Stats**")
                     st.write(f"Total Surveys: {row['total_surveys_processed']}")
-
                     url_count = self._get_account_urls(row['account_id'], show_used=True)
                     st.write(f"Configured URLs: {len(url_count)}")
-
                     st.write("**Basic Info**")
                     if row.get('age'):
                         st.write(f"Age: {row['age']}")
@@ -1160,7 +1158,6 @@ class AccountsPage:
                         st.write(f"Industry: {row['industry']}")
                     if row.get('income_range'):
                         st.write(f"Income: {row['income_range']}")
-
                     st.write("**Household**")
                     if row.get('marital_status'):
                         st.write(f"Marital: {row['marital_status']}")
@@ -1203,10 +1200,15 @@ class AccountsPage:
                         else:
                             st.error(f"Failed: {result.get('error')}")
 
-                # Cookie upload section
+                    # Add "View Cookies" button
+                    if st.button("🍪 View Cookies", key=f"view_cookies_{row['account_id']}",
+                                use_container_width=True):
+                        st.session_state[f'modal_view_{row["account_id"]}'] = True
+                        st.rerun()
+
+                # Cookie upload section (unchanged)
                 st.markdown("---")
                 st.write("**🍪 Upload / Update Cookies**")
-
                 cookie_key = f"cookie_upload_{row['account_id']}"
                 cookies_json_input = st.text_area(
                     "Paste EditThisCookie JSON",
@@ -1807,12 +1809,12 @@ class AccountsPage:
                         mime="text/plain"
                     )
 
+    
+
     def _render_local_chrome_tab(self, accounts_df):
         """Render Local Chrome session management with URL selection."""
         st.subheader("🖥️ Local Chrome Session Management")
         st.info("✓ Free • ✓ Persistent profiles • ✓ Account-based cookies • ✓ Custom start URLs")
-        
-        # Add info about the default URL
         st.info("ℹ️ **Default URL:** All sessions will start at `https://mylocation.org/` if no custom URL is selected.")
 
         if accounts_df.empty:
@@ -1888,42 +1890,37 @@ class AccountsPage:
             if selected[1] is not None:
                 row = local_accounts.iloc[selected[1]]
                 account_id = row['account_id']
-                
-                st.info(f"**👤 Account: {row['username']}**")
-                
-                # URL selection - clearly show default option
+                username = row['username']
+
+                st.info(f"**👤 Account: {username}**")
+
+                # URL selection
                 url_options = ["Default: https://mylocation.org/"]
                 url_mapping = {"Default: https://mylocation.org/": "https://mylocation.org/"}
-                
-                # Add saved URLs for this account
+
                 account_urls = self._get_account_urls(account_id, show_used=False)
-                
-                # Group URLs by site
                 urls_by_site = {}
                 for url_info in account_urls:
                     site_name = url_info.get('site_name', 'Other')
                     if site_name not in urls_by_site:
                         urls_by_site[site_name] = []
                     urls_by_site[site_name].append(url_info)
-                
-                # Add site URLs to options
+
                 for site_name, urls in urls_by_site.items():
                     for url_info in urls:
                         default_marker = "⭐ " if url_info.get('is_default') else ""
                         label = f"{default_marker}{site_name}: {url_info['url'][:50]}..."
                         url_mapping[label] = url_info['url']
                         url_options.append(label)
-                
-                # Allow custom URL entry
+
                 url_options.append("Custom URL...")
-                
                 selected_url_option = st.selectbox(
                     "Select Start URL:",
                     options=url_options,
                     key="start_url_select",
                     help="Choose a URL or enter a custom one. If nothing is selected, the default https://mylocation.org/ will be used."
                 )
-                
+
                 start_url = None
                 if selected_url_option == "Custom URL...":
                     start_url = st.text_input(
@@ -1934,9 +1931,9 @@ class AccountsPage:
                     )
                 elif selected_url_option != "Choose account..." and selected_url_option in url_mapping:
                     start_url = url_mapping.get(selected_url_option)
-                
-                # Show profile status
-                profile_path = self.chrome_manager.get_profile_path(row['username'])
+
+                # Profile status
+                profile_path = self.chrome_manager.get_profile_path(username)
                 default_dir = os.path.join(profile_path, 'Default')
                 if os.path.exists(default_dir):
                     st.success("✓ Existing profile - state preserved")
@@ -1948,8 +1945,7 @@ class AccountsPage:
                     st.success(f"✓ {cookie_info['cookie_count']} cookies stored")
                 else:
                     st.warning("⚠️ No cookies stored")
-                    
-                # Display what URL will be used
+
                 if selected_url_option == "Custom URL..." and start_url and start_url.strip():
                     st.info(f"🔗 Will open: {start_url}")
                 else:
@@ -1960,8 +1956,8 @@ class AccountsPage:
                     with st.spinner("Starting Chrome with 3 tabs..."):
                         result = self._start_local_chrome_session(
                             row['profile_id'],
-                            account_id,
-                            row['username'],
+                            account_id,          # <-- pass account_id
+                            username,
                             start_url
                         )
                         if result.get('success'):
@@ -1975,8 +1971,7 @@ class AccountsPage:
         """Start local Chrome session with 3 tabs: Automa, EditThisCookie, and custom start URL."""
         try:
             self.add_log(f"Starting LOCAL Chrome session for: {account_username}")
-            
-            # Set default URL if none provided
+
             DEFAULT_SURVEY_URL = "https://mylocation.org/"
             if start_url is None or start_url.strip() == "":
                 start_url = DEFAULT_SURVEY_URL
@@ -1993,14 +1988,14 @@ class AccountsPage:
             session_id = f"local_{account_username}_{int(time.time())}"
             self.add_log(f"Session ID: {session_id}")
 
-            # Ensure account cookie script exists
             self._ensure_account_cookie_script(account_id, account_username)
 
-            # Start Chrome with custom start URL (or default)
+            # KEY CHANGE: Pass account_id to run_persistent_chrome
             result = self.chrome_manager.run_persistent_chrome(
                 session_id=session_id,
                 profile_path=profile_path,
                 username=account_username,
+                account_id=account_id,      # <-- added account_id
                 survey_url=start_url,
                 show_terminal=True
             )
@@ -2015,7 +2010,7 @@ class AccountsPage:
             self.add_log(f"  Tab 3: {start_url}")
             self.add_log(f"✓ Chrome visible at: {result.get('vnc_url')}")
 
-            # Store in MongoDB
+            # Store in MongoDB (unchanged)
             if self.chrome_manager.mongo_client:
                 try:
                     db = self.chrome_manager.mongo_client["messages_db"]
@@ -2078,199 +2073,34 @@ class AccountsPage:
             self.add_log(error_msg, "ERROR")
             return {"success": False, "error": error_msg}
 
-    # --------------------------------------------------------------------------
-    # Local Chrome session management with custom URL selection
-    # --------------------------------------------------------------------------
-    def _render_local_chrome_tab(self, accounts_df):
-        """Render Local Chrome session management with URL selection."""
-        st.subheader("🖥️ Local Chrome Session Management")
-        st.info("✓ Free • ✓ Persistent profiles • ✓ Account-based cookies • ✓ Custom start URLs")
-        
-        # Add info about the default URL
-        st.info("ℹ️ **Default URL:** All sessions will start at `https://mylocation.org/` if no custom URL is selected.")
-
-        if accounts_df.empty:
-            st.warning("No accounts available. Create an account first.")
-            return
-
-        local_accounts = accounts_df[accounts_df['profile_type'] == 'local_chrome']
-        if local_accounts.empty:
-            st.warning("No Local Chrome accounts found. Create one in the Overview tab.")
-            return
-
-        col1, col2 = st.columns([2, 1])
-
-        with col1:
-            st.subheader("Active Sessions")
-            local_sessions = st.session_state.get('local_chrome_sessions', {})
-
-            if local_sessions:
-                accounts_with_sessions = {}
-                for session_id, session_info in local_sessions.items():
-                    acc_user = session_info.get('account_username', 'Unknown')
-                    accounts_with_sessions.setdefault(acc_user, []).append((session_id, session_info))
-
-                for acc_user, sessions in accounts_with_sessions.items():
-                    with st.container():
-                        st.markdown(f"**👤 Account: {acc_user}**")
-                        st.caption(f"{len(sessions)} session(s)")
-
-                        for session_id, session_info in sessions:
-                            s1, s2, s3 = st.columns([3, 2, 1])
-                            with s1:
-                                st.write(f"**Session:** `{session_id[:12]}...`")
-                                if session_info.get('profile_path'):
-                                    st.caption(f"📁 {session_info['profile_path']}")
-                                if session_info.get('start_url'):
-                                    st.caption(f"🌐 URL: {session_info['start_url'][:50]}...")
-                                if session_info.get('debug_port'):
-                                    st.caption(f"🔌 Debug: port {session_info['debug_port']}")
-                            with s2:
-                                started_at = session_info.get('started_at')
-                                if started_at:
-                                    duration = datetime.now() - started_at
-                                    hours, remainder = divmod(duration.total_seconds(), 3600)
-                                    minutes, _ = divmod(remainder, 60)
-                                    st.write(f"**Duration:** {int(hours):02d}:{int(minutes):02d}")
-                                if session_info.get('browser_url'):
-                                    st.link_button("🖥️ VNC", session_info['browser_url'], use_container_width=True)
-                            with s3:
-                                if st.button("🛑", key=f"stop_local_{session_id[:8]}"):
-                                    result = self._stop_local_chrome_session(session_id)
-                                    if result.get('success'):
-                                        st.success("Stopped")
-                                        st.rerun()
-                                    else:
-                                        st.error(result.get('error'))
-                            st.divider()
-            else:
-                st.info("No active sessions")
-
-        with col2:
-            st.subheader("Start Session")
-            account_options = [
-                (f"{row['username']} (ID: {row['account_id']})", idx)
-                for idx, row in local_accounts.iterrows()
-            ]
-            selected = st.selectbox(
-                "Select Account",
-                [("Choose account...", None)] + account_options,
-                format_func=lambda x: x[0],
-                key="local_tab_select"
-            )
-
-            if selected[1] is not None:
-                row = local_accounts.iloc[selected[1]]
-                account_id = row['account_id']
-                
-                st.info(f"**👤 Account: {row['username']}**")
-                
-                # URL selection - clearly show default option
-                url_options = ["Default: https://mylocation.org/"]
-                url_mapping = {"Default: https://mylocation.org/": "https://mylocation.org/"}
-                
-                # Add saved URLs for this account
-                account_urls = self._get_account_urls(account_id, show_used=False)
-                
-                # Group URLs by site
-                urls_by_site = {}
-                for url_info in account_urls:
-                    site_name = url_info.get('site_name', 'Other')
-                    if site_name not in urls_by_site:
-                        urls_by_site[site_name] = []
-                    urls_by_site[site_name].append(url_info)
-                
-                # Add site URLs to options
-                for site_name, urls in urls_by_site.items():
-                    for url_info in urls:
-                        default_marker = "⭐ " if url_info.get('is_default') else ""
-                        label = f"{default_marker}{site_name}: {url_info['url'][:50]}..."
-                        url_mapping[label] = url_info['url']
-                        url_options.append(label)
-                
-                # Allow custom URL entry
-                url_options.append("Custom URL...")
-                
-                selected_url_option = st.selectbox(
-                    "Select Start URL:",
-                    options=url_options,
-                    key="start_url_select",
-                    help="Choose a URL or enter a custom one. If nothing is selected, the default https://mylocation.org/ will be used."
-                )
-                
-                start_url = None
-                if selected_url_option == "Custom URL...":
-                    start_url = st.text_input(
-                        "Enter Custom URL:",
-                        placeholder="https://example.com",
-                        key="custom_url_input",
-                        help="Enter any URL. If left blank, the default URL will be used."
-                    )
-                elif selected_url_option != "Choose account..." and selected_url_option in url_mapping:
-                    start_url = url_mapping.get(selected_url_option)
-                
-                # Show profile status
-                profile_path = self.chrome_manager.get_profile_path(row['username'])
-                default_dir = os.path.join(profile_path, 'Default')
-                if os.path.exists(default_dir):
-                    st.success("✓ Existing profile - state preserved")
-                else:
-                    st.info("📁 New profile will be created")
-
-                cookie_info = self._get_account_cookies(account_id)
-                if cookie_info['has_cookies']:
-                    st.success(f"✓ {cookie_info['cookie_count']} cookies stored")
-                else:
-                    st.warning("⚠️ No cookies stored")
-                    
-                # Display what URL will be used
-                if selected_url_option == "Custom URL..." and start_url and start_url.strip():
-                    st.info(f"🔗 Will open: {start_url}")
-                else:
-                    st.info("🔗 Will open default URL: https://mylocation.org/")
-
-                if st.button("▶️ Start Chrome Session", type="primary", use_container_width=True,
-                            key=f"start_local_{account_id}"):
-                    with st.spinner("Starting Chrome with 3 tabs..."):
-                        result = self._start_local_chrome_session(
-                            row['profile_id'],
-                            account_id,
-                            row['username'],
-                            start_url
-                        )
-                        if result.get('success'):
-                            st.success("✓ Chrome started!")
-                            time.sleep(1)
-                            st.rerun()
-                        else:
-                            st.error(f"Failed: {result.get('error')}")
-
     def _stop_local_chrome_session(self, session_id):
-        """Stop local Chrome session with proper cleanup."""
+        """Stop local Chrome session with graceful shutdown to preserve profile state."""
         try:
             self.add_log(f"=== STOPPING LOCAL SESSION ===")
             self.add_log(f"Session ID: {session_id}")
 
             local_sessions = st.session_state.get('local_chrome_sessions', {})
             if session_id not in local_sessions:
-                error_msg = f"Session {session_id} not found"
-                self.add_log(error_msg, "ERROR")
                 return {'success': False, 'error': 'Session not found'}
 
             session_info = local_sessions[session_id]
             profile_path = session_info.get('profile_path', 'Unknown')
+            self.add_log(f"Profile path: {profile_path}")
 
+            # Stop via chrome_manager (now triggers cookie sync)
             result = self.chrome_manager.stop_session(session_id)
-            if not result['success']:
-                self.add_log(f"Chrome manager stop failed: {result.get('error')}", "WARNING")
-                self.chrome_manager._force_kill_all_chrome_processes()
+
+            if result.get('success'):
+                self.add_log(f"✅ Chrome stopped gracefully — profile saved at: {profile_path}")
+            else:
+                self.add_log(f"⚠️ Stop had issues: {result.get('error')} — attempting cleanup", "WARNING")
 
             # Remove from session state
             if session_id in st.session_state.local_chrome_sessions:
                 del st.session_state.local_chrome_sessions[session_id]
-                self.add_log(f"✓ Removed from local_chrome_sessions")
+                self.add_log("✅ Removed from local_chrome_sessions")
 
-            # Update MongoDB
+            # Update MongoDB (already done in chrome_manager.stop_session, but ensure)
             if self.chrome_manager.mongo_client:
                 try:
                     db = self.chrome_manager.mongo_client['messages_db']
@@ -2282,14 +2112,16 @@ class AccountsPage:
                             'session_status': 'stopped'
                         }}
                     )
-                    self.add_log(f"✓ Updated MongoDB")
+                    self.add_log("✅ Updated MongoDB session status")
                 except Exception as e:
-                    self.add_log(f"⚠ MongoDB update failed: {e}", "WARNING")
+                    self.add_log(f"⚠️ MongoDB update failed: {e}", "WARNING")
 
-            success_msg = f"Session stopped. Profile saved at: {profile_path}"
-            self.add_log(f"✓ {success_msg}")
+            return {
+                'success': True,
+                'message': f"Session stopped. Profile saved at: {profile_path}",
+                'profile_path': profile_path
+            }
 
-            return {'success': True, 'message': success_msg, 'profile_path': profile_path}
         except Exception as e:
             error_msg = f"Failed to stop session: {str(e)}"
             self.add_log(error_msg, "ERROR")

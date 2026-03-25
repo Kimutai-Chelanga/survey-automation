@@ -4,10 +4,13 @@ import time
 import logging
 import tempfile
 import signal
+import sqlite3
+import json
+import shutil
+import datetime as dt
 from datetime import datetime
 from typing import Dict, Any, Optional
 import psutil
-import json
 from pathlib import Path
 import glob
 
@@ -32,23 +35,13 @@ class ChromeSessionManager:
     # =========================================================================
 
     def _cleanup_singleton_locks(self, profile_path: str = None):
-        """
-        Remove all Chrome Singleton lock files.
-
-        Clean up:
-          - <profile>/SingletonLock|Cookie|Socket
-          - <profile>/Default/SingletonLock|Cookie|Socket
-          - <profile>/lockfile  (Chrome's internal lock)
-          - <profile>/Default/Last Session|Last Tabs  (restore dialog blocker)
-          - Any .org.chromium.* / .com.google.Chrome.* temp lock files
-        """
+        """Remove all Chrome Singleton lock files."""
         dirs_to_clean = []
 
         if profile_path:
             dirs_to_clean.append(profile_path)
             dirs_to_clean.append(os.path.join(profile_path, 'Default'))
         else:
-            # Clean all profiles under base dir
             try:
                 for entry in os.listdir(self.base_profile_dir):
                     full = os.path.join(self.base_profile_dir, entry)
@@ -66,7 +59,6 @@ class ChromeSessionManager:
             if not os.path.isdir(directory):
                 continue
 
-            # Remove Singleton and lockfile entries
             for name in lock_filenames:
                 target = os.path.join(directory, name)
                 if os.path.exists(target) or os.path.islink(target):
@@ -82,7 +74,6 @@ class ChromeSessionManager:
                         except Exception as e2:
                             logger.warning(f"Could not remove {target}: {e2}")
 
-            # Remove session files from Default/ only (to suppress restore dialog)
             if directory.endswith('/Default') or directory.endswith('\\Default'):
                 for name in session_filenames:
                     target = os.path.join(directory, name)
@@ -94,7 +85,6 @@ class ChromeSessionManager:
                         except Exception as e:
                             logger.warning(f"Could not remove session file {target}: {e}")
 
-        # Remove stale .org.chromium / .com.google temp lock files anywhere under base_profile_dir
         try:
             patterns = [
                 os.path.join(self.base_profile_dir, '**', '.org.chromium.Chromium.*'),
@@ -117,10 +107,6 @@ class ChromeSessionManager:
             logger.info("Singleton lock cleanup: no lock files found")
 
         return removed
-
-    # =========================================================================
-    # INTERNAL HELPERS
-    # =========================================================================
 
     def _kill_all_chrome_everywhere(self):
         """Kill every Chrome-related process on this host."""
@@ -152,12 +138,8 @@ class ChromeSessionManager:
         logger.info("Cleaned up orphaned X11/VNC processes")
 
     def _force_kill_all_chrome_processes(self):
-        """
-        Force kill ALL Chrome processes (windows, tabs, helpers) and then
-        clean up the lock files they leave behind.
-        """
+        """Force kill ALL Chrome processes."""
         logger.info("Force killing ALL Chrome processes...")
-
         for attempt in range(3):
             killed_count = 0
             signals_to_try = [signal.SIGKILL] if attempt == 2 else [signal.SIGTERM]
@@ -189,10 +171,7 @@ class ChromeSessionManager:
 
             time.sleep(2)
 
-        # Clean up orphaned X11/VNC processes
         self._cleanup_x11_orphans()
-
-        # Remove lock files left behind
         self._cleanup_singleton_locks()
 
     # =========================================================================
@@ -259,7 +238,7 @@ class ChromeSessionManager:
         return os.path.join(self.base_profile_dir, f"account_{username}")
 
     # =========================================================================
-    # SESSION LIFECYCLE
+    # SESSION LIFECYCLE (with account_id)
     # =========================================================================
 
     def run_persistent_chrome(
@@ -267,32 +246,35 @@ class ChromeSessionManager:
         session_id: str,
         profile_path: str,
         username: str,
+        account_id: int,   # NEW: store account ID
         survey_url: str = None,
         show_terminal: bool = True,
     ) -> Dict[str, Any]:
-        """
-        Start Chrome with a single tab pointing to survey_url.
-        Uses a unique debug port for each session.
-        Default URL is https://mylocation.org/ if none provided.
-        """
-        # Set default URL if none provided
+        """Start Chrome with persistent profile, now storing account_id."""
         if not survey_url or survey_url.strip() == "":
             survey_url = "https://mylocation.org/"
             logger.info(f"No URL provided, using default: {survey_url}")
-        
-        # Stop any existing sessions first
-        for sid in list(self.active_processes.keys()):
-            self.stop_session(sid)
 
-        # Kill any lingering Chrome processes
-        self._kill_all_chrome_everywhere()
+        # Clean up previous session for this profile
+        for sid, info in list(self.active_processes.items()):
+            if info.get('profile_path') == profile_path:
+                logger.info(f"Stopping existing session for this profile: {sid}")
+                self.stop_session(sid)
 
-        # Clean singleton locks for this profile
-        self._cleanup_singleton_locks(profile_path)
+        # Kill only Chrome processes using this specific profile
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                if 'chrome' in (proc.info.get('name') or '').lower():
+                    if profile_path in ' '.join(proc.info.get('cmdline') or []):
+                        os.kill(proc.info['pid'], signal.SIGTERM)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
 
         time.sleep(2)
 
-        # Get a unique debug port for this session
+        self._cleanup_singleton_locks(profile_path)
+        time.sleep(1)
+
         debug_port = self._get_next_available_port(9222, 9322)
         logger.info(f"Allocated debug port {debug_port} for session {session_id}")
 
@@ -301,77 +283,80 @@ class ChromeSessionManager:
 
         bash_script = f"""#!/bin/bash
 
-    CHROME_PROFILE_DIR="{profile_path}"
-    SURVEY_URL="{survey_url}"
-    DEBUG_PORT={debug_port}
+CHROME_PROFILE_DIR="{profile_path}"
+SURVEY_URL="{survey_url}"
+DEBUG_PORT={debug_port}
 
-    # Use the already-running display from start.sh
-    export DISPLAY=:99
+export DISPLAY=:99
 
-    echo "=== Chrome Session Starting ==="
-    echo "Profile : $CHROME_PROFILE_DIR"
-    echo "URL     : $SURVEY_URL"
-    echo "Display : $DISPLAY"
-    echo "Debug   : $DEBUG_PORT"
-    echo "==============================="
+echo "=== Chrome Session Starting ==="
+echo "Profile : $CHROME_PROFILE_DIR"
+echo "URL     : $SURVEY_URL"
+echo "Display : $DISPLAY"
+echo "Debug   : $DEBUG_PORT"
+echo "==============================="
 
-    # Remove stale lock files
-    for lockfile in SingletonLock SingletonCookie SingletonSocket lockfile; do
-        for target in "$CHROME_PROFILE_DIR/$lockfile" "$CHROME_PROFILE_DIR/Default/$lockfile"; do
-            [ -e "$target" ] || [ -L "$target" ] && rm -f "$target" 2>/dev/null || true
-        done
+# Remove stale lock files
+for lockfile in SingletonLock SingletonCookie SingletonSocket lockfile; do
+    for target in "$CHROME_PROFILE_DIR/$lockfile" "$CHROME_PROFILE_DIR/Default/$lockfile"; do
+        [ -e "$target" ] || [ -L "$target" ] && rm -f "$target" 2>/dev/null || true
     done
+done
 
-    # Remove session restore files
-    for session_file in "Last Session" "Last Tabs" "Current Session" "Current Tabs"; do
-        target="$CHROME_PROFILE_DIR/Default/$session_file"
-        [ -e "$target" ] && rm -f "$target" 2>/dev/null || true
+# Remove session restore files
+for session_file in "Last Session" "Last Tabs" "Current Session" "Current Tabs"; do
+    target="$CHROME_PROFILE_DIR/Default/$session_file"
+    [ -e "$target" ] && rm -f "$target" 2>/dev/null || true
+done
+
+mkdir -p "$CHROME_PROFILE_DIR/Default"
+
+# Kill any existing Chrome using ONLY this profile
+pkill -f "chrome.*$CHROME_PROFILE_DIR" 2>/dev/null || true
+sleep 2
+
+# Start Chrome with unique debug port
+google-chrome-stable \\
+--no-sandbox \\
+--disable-setuid-sandbox \\
+--user-data-dir="$CHROME_PROFILE_DIR" \\
+--remote-debugging-port=$DEBUG_PORT \\
+--remote-debugging-address=0.0.0.0 \\
+--remote-allow-origins=* \\
+--no-first-run \\
+--disable-session-crashed-bubble \\
+--disable-restore-session-state \\
+--disable-sync \\
+--disable-default-apps \\
+--disable-notifications \\
+--disable-infobars \\
+--disable-breakpad \\
+--disable-dev-shm-usage \\
+--lang=en-KE,en-US,en \\
+--window-size=1280,720 \\
+--window-position=0,0 \\
+"$SURVEY_URL" &
+
+CHROME_PID=$!
+echo "Chrome PID : $CHROME_PID"
+echo "VNC        : http://localhost:6080/vnc.html"
+echo "Password   : secret"
+echo "Debug Port : $DEBUG_PORT"
+
+# Trap SIGTERM so Chrome can save state before exiting
+trap "echo 'Received SIGTERM — shutting down Chrome gracefully'; kill -TERM $CHROME_PID; wait $CHROME_PID" SIGTERM SIGINT
+
+wait $CHROME_PID
+
+# Cleanup lock files on exit
+for lockfile in SingletonLock SingletonCookie SingletonSocket lockfile; do
+    for target in "$CHROME_PROFILE_DIR/$lockfile" "$CHROME_PROFILE_DIR/Default/$lockfile"; do
+        [ -e "$target" ] || [ -L "$target" ] && rm -f "$target" 2>/dev/null || true
     done
+done
 
-    # Ensure profile directory exists
-    mkdir -p "$CHROME_PROFILE_DIR/Default"
-
-    # Kill any existing Chrome using this profile
-    pkill -f "chrome.*$CHROME_PROFILE_DIR" 2>/dev/null || true
-    sleep 2
-
-    # Start Chrome with unique debug port
-    google-chrome-stable \\
-    --no-sandbox \\
-    --disable-setuid-sandbox \\
-    --user-data-dir="$CHROME_PROFILE_DIR" \\
-    --remote-debugging-port=$DEBUG_PORT \\
-    --remote-debugging-address=0.0.0.0 \\
-    --remote-allow-origins=* \\
-    --no-first-run \\
-    --disable-session-crashed-bubble \\
-    --disable-restore-session-state \\
-    --disable-sync \\
-    --disable-default-apps \\
-    --disable-notifications \\
-    --disable-infobars \\
-    --disable-breakpad \\
-    --disable-dev-shm-usage \\
-    --lang=en-KE,en-US,en \\
-    --window-size=1280,720 \\
-    --window-position=0,0 \\
-    "$SURVEY_URL" &
-
-    CHROME_PID=$!
-    echo "Chrome PID : $CHROME_PID"
-    echo "VNC        : http://localhost:6080/vnc.html"
-    echo "Password   : secret"
-    echo "Debug Port : $DEBUG_PORT"
-
-    wait $CHROME_PID
-
-    # Cleanup lock files on exit
-    for lockfile in SingletonLock SingletonCookie SingletonSocket lockfile; do
-        for target in "$CHROME_PROFILE_DIR/$lockfile" "$CHROME_PROFILE_DIR/Default/$lockfile"; do
-            [ -e "$target" ] || [ -L "$target" ] && rm -f "$target" 2>/dev/null || true
-        done
-    done
-    """
+echo "Chrome exited cleanly."
+"""
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=".sh", mode="w") as f:
             f.write(bash_script)
@@ -390,16 +375,16 @@ class ChromeSessionManager:
             "process": proc,
             "profile_path": profile_path,
             "username": username,
+            "account_id": account_id,      # NEW: store account ID
             "script_path": script_path,
             "account_cookie_script": account_cookie_script,
             "started_at": datetime.now(),
             "has_terminal": show_terminal,
             "debug_port": debug_port,
             "startup_urls": [survey_url],
-            "session_url": survey_url,  # Store the URL for reference
+            "session_url": survey_url,
         }
 
-        # Give Chrome time to start
         time.sleep(5)
 
         logger.info(f"Chrome session started : {session_id}")
@@ -420,46 +405,181 @@ class ChromeSessionManager:
             "message": f"Chrome started — URL: {survey_url} — VNC: http://localhost:6080/vnc.html (password: secret)",
         }
 
-    
+    def _extract_cookies_from_profile(self, profile_path: str, account_id: int) -> Dict[str, Any]:
+        """
+        Extract all cookies from the Chrome profile's Cookies database.
+        Returns a dict with success status and the cookie JSON list.
+        """
+        try:
+            cookies_db = os.path.join(profile_path, 'Default', 'Cookies')
+            if not os.path.exists(cookies_db):
+                logger.warning(f"Cookie database not found: {cookies_db}")
+                return {'success': False, 'error': 'Cookie database not found'}
+
+            # Copy the database to avoid locking issues
+            temp_db = cookies_db + '.temp'
+            shutil.copy2(cookies_db, temp_db)
+
+            conn = sqlite3.connect(temp_db)
+            conn.text_factory = bytes
+            cursor = conn.cursor()
+            cursor.execute("SELECT name, value, host_key, path, is_secure, is_httponly, has_expires, expires_utc FROM cookies")
+            cookies = []
+            for row in cursor.fetchall():
+                name = row[0].decode('utf-8')
+                value = row[1].decode('utf-8')
+                domain = row[2].decode('utf-8')
+                path = row[3].decode('utf-8')
+                secure = bool(row[4])
+                http_only = bool(row[5])
+                expires_utc = row[7]
+
+                expiration_date = None
+                if expires_utc and expires_utc != 0:
+                    # Chrome time base: 1601-01-01 in microseconds
+                    seconds_since_1601 = expires_utc / 1_000_000
+                    # Convert to Unix timestamp
+                    chrome_epoch = dt.datetime(1601, 1, 1)
+                    unix_epoch = dt.datetime(1970, 1, 1)
+                    delta = (chrome_epoch - unix_epoch).total_seconds()
+                    expiration_date = seconds_since_1601 - delta
+
+                cookies.append({
+                    'name': name,
+                    'value': value,
+                    'domain': domain,
+                    'path': path,
+                    'secure': secure,
+                    'httpOnly': http_only,
+                    'sameSite': 'Lax',      # default; Chrome doesn't store in cookies table
+                    'expirationDate': expiration_date,
+                })
+            conn.close()
+            os.remove(temp_db)
+
+            logger.info(f"Extracted {len(cookies)} cookies from profile {profile_path}")
+            return {'success': True, 'cookies': cookies, 'count': len(cookies)}
+
+        except Exception as e:
+            logger.error(f"Cookie extraction failed: {e}")
+            return {'success': False, 'error': str(e)}
+
+    def _store_cookies_via_db_manager(self, account_id: int, cookies: list) -> Dict[str, Any]:
+        """Store cookies in the account_cookies table using db_manager."""
+        if not self.db_manager:
+            return {'success': False, 'error': 'No db_manager available'}
+
+        try:
+            # Deactivate previous cookies
+            deactivate_query = """
+            UPDATE account_cookies
+            SET is_active = FALSE, updated_at = CURRENT_TIMESTAMP
+            WHERE account_id = %s AND is_active = TRUE
+            """
+            self.db_manager.execute_query(deactivate_query, (account_id,))
+
+            cookie_json_string = json.dumps(cookies)
+            cookie_count = len(cookies)
+
+            insert_query = """
+            INSERT INTO account_cookies (
+                account_id, cookie_data, cookie_count,
+                uploaded_at, updated_at, is_active, cookie_source
+            )
+            VALUES (%s, %s::jsonb, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, TRUE, 'auto_sync')
+            RETURNING cookie_id
+            """
+            result = self.db_manager.execute_query(insert_query, (account_id, cookie_json_string, cookie_count), fetch=True)
+
+            if not result:
+                raise Exception("INSERT returned no rows")
+
+            first_row = result[0]
+            cookie_id = first_row[0] if isinstance(first_row, tuple) else first_row.get('cookie_id')
+
+            # Update accounts table
+            update_account_query = """
+            UPDATE accounts
+            SET has_cookies = TRUE, cookies_last_updated = CURRENT_TIMESTAMP
+            WHERE account_id = %s
+            """
+            self.db_manager.execute_query(update_account_query, (account_id,))
+
+            logger.info(f"Stored {cookie_count} cookies for account {account_id} (auto-sync)")
+            return {'success': True, 'cookie_id': cookie_id, 'cookie_count': cookie_count}
+
+        except Exception as e:
+            logger.error(f"Failed to store cookies: {e}")
+            return {'success': False, 'error': str(e)}
+
     def stop_session(self, session_id: str) -> Dict[str, Any]:
         """
-        Stop a Chrome session and ensure ALL windows/tabs are closed and
-        ALL lock files are cleaned up.
+        Stop a Chrome session gracefully, then extract and store cookies.
         """
         proc_info = self.active_processes.get(session_id)
         if not proc_info:
             return {"success": False, "error": "Session not found"}
 
-        logger.info(f"Stopping Chrome session: {session_id}")
         profile_path = proc_info.get('profile_path', '')
+        debug_port = proc_info.get('debug_port', 9222)
+        account_id = proc_info.get('account_id')   # NEW: get stored account ID
+
+        logger.info(f"Stopping Chrome session gracefully: {session_id}")
 
         try:
-            proc = proc_info['process']
+            # 1. Ask Chrome to close gracefully via CDP
+            try:
+                import urllib.request
+                urllib.request.urlopen(
+                    f"http://localhost:{debug_port}/json/close",
+                    timeout=3
+                )
+            except Exception:
+                pass
 
-            # Terminate the bash script's process group
+            # 2. Send SIGTERM to the process group
+            proc = proc_info['process']
             if proc.poll() is None:
                 try:
                     os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-                    logger.info(f"Sent SIGTERM to process group {proc.pid}")
+                    logger.info("Sent SIGTERM to process group")
                 except ProcessLookupError:
                     pass
 
-            # Give the trap handler a moment to run
-            time.sleep(3)
+            # 3. Wait up to 10 seconds for Chrome to save and exit gracefully
+            deadline = time.time() + 10
+            while time.time() < deadline:
+                chrome_still_running = False
+                for p in psutil.process_iter(['name', 'cmdline']):
+                    try:
+                        if 'chrome' in (p.info.get('name') or '').lower():
+                            if profile_path in ' '.join(p.info.get('cmdline') or []):
+                                chrome_still_running = True
+                                break
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+                if not chrome_still_running:
+                    logger.info("Chrome exited gracefully ✅")
+                    break
+                time.sleep(0.5)
+            else:
+                # 4. Force kill if still running
+                logger.warning("Chrome did not exit gracefully — force killing")
+                for proc_item in psutil.process_iter(['pid', 'name', 'cmdline']):
+                    try:
+                        if 'chrome' in (proc_item.info.get('name') or '').lower():
+                            if profile_path in ' '.join(proc_item.info.get('cmdline') or []):
+                                os.kill(proc_item.info['pid'], signal.SIGKILL)
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+                time.sleep(2)
 
-            # Force kill any surviving Chrome processes
-            self._force_kill_all_chrome_processes()
-
-            # Explicit lock cleanup for THIS profile
+            # 5. Clean up lock files
             if profile_path:
                 removed = self._cleanup_singleton_locks(profile_path)
-                if removed:
-                    logger.info(
-                        f"Explicit lock cleanup for {profile_path}: "
-                        f"removed {len(removed)} file(s)"
-                    )
+                logger.info(f"Lock cleanup: removed {len(removed)} file(s)")
 
-            # Clean up the temp bash script
+            # 6. Remove temp script
             script_path = proc_info.get('script_path', '')
             if script_path and os.path.exists(script_path):
                 try:
@@ -467,30 +587,44 @@ class ChromeSessionManager:
                 except Exception as e:
                     logger.warning(f"Could not remove script {script_path}: {e}")
 
-            # Remove from active processes
+            # 7. Extract and store cookies if we have account_id
+            if account_id and profile_path:
+                logger.info(f"Extracting cookies from profile for account {account_id}")
+                extract_result = self._extract_cookies_from_profile(profile_path, account_id)
+                if extract_result['success']:
+                    store_result = self._store_cookies_via_db_manager(account_id, extract_result['cookies'])
+                    if store_result['success']:
+                        logger.info(f"✅ Auto-synced {store_result['cookie_count']} cookies for account {account_id}")
+                    else:
+                        logger.warning(f"Failed to store extracted cookies: {store_result.get('error')}")
+                else:
+                    logger.warning(f"Cookie extraction failed: {extract_result.get('error')}")
+            else:
+                logger.info("No account_id or profile_path, skipping cookie sync")
+
+            # 8. Update MongoDB
+            if self.mongo_client:
+                try:
+                    db = self.mongo_client['messages_db']
+                    db.browser_sessions.update_one(
+                        {'session_id': session_id},
+                        {'$set': {
+                            'is_active': False,
+                            'ended_at': datetime.now(),
+                            'session_status': 'stopped'
+                        }}
+                    )
+                except Exception as e:
+                    logger.warning(f"MongoDB update failed: {e}")
+
+            # 9. Remove from active processes
             del self.active_processes[session_id]
 
-            # Verify no lock files remain
-            remaining = []
-            if profile_path:
-                for check_dir in [profile_path, os.path.join(profile_path, 'Default')]:
-                    for name in ['SingletonLock', 'SingletonCookie', 'SingletonSocket']:
-                        target = os.path.join(check_dir, name)
-                        if os.path.exists(target) or os.path.islink(target):
-                            remaining.append(target)
-
-            if remaining:
-                logger.warning(
-                    f"⚠ {len(remaining)} lock file(s) still present after cleanup: {remaining}"
-                )
-            else:
-                logger.info(f"✅ Session {session_id} stopped — no lock files remain")
-
+            logger.info(f"✅ Session {session_id} stopped — profile saved at {profile_path}")
             return {
                 "success": True,
-                "message": "All Chrome windows closed and lock files cleaned up",
+                "message": "Chrome closed gracefully — profile state saved",
                 "profile_path": profile_path,
-                "lock_files_remaining": remaining,
             }
 
         except Exception as e:
@@ -522,6 +656,7 @@ class ChromeSessionManager:
                 'session_id': sid,
                 'profile_path': info['profile_path'],
                 'username': info.get('username'),
+                'account_id': info.get('account_id'),  # NEW: include account ID
                 'debug_port': info.get('debug_port', 9222),
                 'has_terminal': info.get('has_terminal', False),
                 'startup_urls': info.get('startup_urls', []),
