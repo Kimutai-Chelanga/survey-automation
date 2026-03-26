@@ -1,6 +1,6 @@
 """
 PostgreSQL Database Initialization - SURVEY AUTOMATION ARCHITECTURE
-Updated: 2026-03-23
+Updated: 2026-03-26
 Complete schema with:
   - Accounts with demographic fields
   - Proxy configurations per account
@@ -14,6 +14,7 @@ Complete schema with:
   - Extraction state tracking
   - Workflow generation logs
   - Screening results tracking
+  - Account cookies (simplified per-domain storage)
 """
 
 import logging
@@ -102,22 +103,19 @@ def create_postgres_tables():
                 """)
                 logger.info("✓ proxy_configs table ready")
 
-                # ACCOUNT COOKIES TABLE
+                # ACCOUNT COOKIES TABLE (UPDATED SIMPLIFIED STRUCTURE)
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS account_cookies (
                         cookie_id SERIAL PRIMARY KEY,
                         account_id INTEGER NOT NULL REFERENCES accounts(account_id) ON DELETE CASCADE,
-                        cookie_data JSONB NOT NULL,
-                        cookie_count INTEGER NOT NULL DEFAULT 0,
-                        uploaded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        domain VARCHAR(255) NOT NULL DEFAULT 'google.com',
+                        cookies_json TEXT NOT NULL,
+                        captured_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                        is_active BOOLEAN NOT NULL DEFAULT TRUE,
-                        cookie_source VARCHAR(100) DEFAULT 'editthiscookie',
-                        notes TEXT,
-                        CONSTRAINT unique_active_cookie_per_account UNIQUE (account_id, is_active)
+                        UNIQUE (account_id, domain)
                     )
                 """)
-                logger.info("✓ account_cookies table ready")
+                logger.info("✓ account_cookies table ready (simplified per-domain storage)")
 
                 # SURVEY SITES TABLE - BY NAME, NOT URL
                 cursor.execute("""
@@ -1227,6 +1225,7 @@ def create_postgres_tables():
                 logger.info("  • 60+ indexes")
                 logger.info("  • Cloud profile support (browser-use SDK)")
                 logger.info("  • Proxy configuration support")
+                logger.info("  • Simplified per-domain cookie storage")
                 logger.info("=" * 60)
 
                 return True

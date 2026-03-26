@@ -1,6 +1,6 @@
 -- =====================================================
 -- PostgreSQL Schema - SURVEY AUTOMATION ARCHITECTURE
--- Updated: 2026-03-23
+-- Updated: 2026-03-26 (with new account_cookies table)
 -- Complete schema for survey automation with:
 --   - Accounts with demographic fields
 --   - Survey sites by name
@@ -13,6 +13,7 @@
 --   - Workflow generation logs
 --   - Screening results tracking (pass/fail per survey attempt)
 --   - Proxy configurations per account
+--   - Account cookies (new simplified structure)
 -- =====================================================
 
 -- ============= ACCOUNTS TABLE =============
@@ -80,19 +81,23 @@ CREATE TABLE IF NOT EXISTS proxy_configs (
 COMMENT ON TABLE proxy_configs IS 'Proxy configurations per account';
 COMMENT ON COLUMN proxy_configs.proxy_type IS 'Proxy protocol: http, https, socks4, socks5';
 
--- ============= ACCOUNT COOKIES TABLE =============
+-- ============= ACCOUNT COOKIES TABLE (UPDATED) =============
 CREATE TABLE IF NOT EXISTS account_cookies (
-    cookie_id SERIAL PRIMARY KEY,
-    account_id INTEGER NOT NULL REFERENCES accounts(account_id) ON DELETE CASCADE,
-    cookie_data JSONB NOT NULL,
-    cookie_count INTEGER NOT NULL DEFAULT 0,
-    uploaded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    cookie_source VARCHAR(100) DEFAULT 'editthiscookie',
-    notes TEXT,
-    CONSTRAINT unique_active_cookie_per_account UNIQUE (account_id, is_active)
+    cookie_id    SERIAL PRIMARY KEY,
+    account_id   INTEGER NOT NULL
+                 REFERENCES accounts(account_id) ON DELETE CASCADE,
+    domain       VARCHAR(255) NOT NULL DEFAULT 'google.com',
+    cookies_json TEXT        NOT NULL,
+    captured_at  TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at   TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (account_id, domain)
 );
+
+CREATE INDEX IF NOT EXISTS idx_account_cookies_account_id
+    ON account_cookies(account_id);
+
+COMMENT ON TABLE account_cookies IS 'Stores cookie data per account and domain';
+COMMENT ON COLUMN account_cookies.cookies_json IS 'JSON string of cookie data';
 
 -- ============= SURVEY SITES TABLE =============
 CREATE TABLE IF NOT EXISTS survey_sites (
@@ -326,7 +331,7 @@ CREATE INDEX IF NOT EXISTS idx_proxy_account ON proxy_configs(account_id);
 CREATE INDEX IF NOT EXISTS idx_proxy_active ON proxy_configs(is_active) WHERE is_active = TRUE;
 
 -- Account cookies
-CREATE INDEX IF NOT EXISTS idx_account_cookies_account ON account_cookies(account_id);
+-- Index already created with table
 
 -- Survey sites
 CREATE INDEX IF NOT EXISTS idx_survey_sites_name ON survey_sites(site_name);

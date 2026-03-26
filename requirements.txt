@@ -24,7 +24,7 @@ asyncpg>=0.28.0
 # BROWSER AUTOMATION - UPDATED
 # =====================================================
 # Browser-Use with Browserless (replaces browser-use-sdk)
-browser-use>=0.1.0
+browser-use==0.1.40
 playwright>=1.40.0
 webdriver-manager>=4.0.0
 browser-cookie3>=0.19.1
