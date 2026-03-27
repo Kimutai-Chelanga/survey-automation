@@ -959,18 +959,27 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
                 except Exception:
                     pass
 
+            # TopSurveys shows surveys as clickable cards (no "Start" button).
+            # Detect the card grid by looking for USD reward text or time labels.
             survey_item_selectors = [
+                # TopSurveys card grid
+                "text=USD",                          # every card shows "$ X.XX USD"
+                ":text-matches('\\$\\s*\\d+\\.\\d+\\s*USD')",
+                ".survey-card", ".survey-item",
+                "[class*='survey']",
+                # Generic fallbacks
                 "button:has-text('Start')", "a:has-text('Start')",
                 "button:has-text('Take Survey')", "a:has-text('Take Survey')",
-                "button:has-text('Begin')", ".survey-item", "[data-type='survey']",
-                "text='Start Survey'",
+                "button:has-text('Begin')", "text='Start Survey'",
             ]
             surveys_found = False
             for reload_attempt in range(1, 4):
                 for sel in survey_item_selectors:
                     try:
-                        if await page.locator(sel).first.is_visible(timeout=2000):
+                        loc = page.locator(sel).first
+                        if await loc.is_visible(timeout=2000):
                             surveys_found = True
+                            self.log(f"✅ Survey cards detected via: {sel}", batch_id=batch_id)
                             break
                     except Exception:
                         pass
@@ -1019,39 +1028,118 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
                         task=f"""
 {persona}
 
-The browser is ALREADY LOGGED IN and on the surveys page.
+════════════════════════════════════════════════
+CONTEXT
+════════════════════════════════════════════════
+You are logged into TopSurveys (topsurveys.app). The page currently shows a
+GRID OF SURVEY CARDS. Each card displays:
+  • An estimated time  (e.g. "4 min", "15 min")
+  • A cash reward      (e.g. "$ 0.17 USD", "$ 2.88 USD")
+  • A star rating      (e.g. "4.5 (110)")
 
-YOUR TASK: Complete ONE survey as the persona described above.
+════════════════════════════════════════════════
+CRITICAL — HOW TO START A SURVEY
+════════════════════════════════════════════════
+There is NO "Start" button. To begin a survey you must CLICK THE CARD ITSELF.
+  1. Locate the first survey card in the grid.
+  2. Click anywhere on that card (the time, the amount, or the star area).
+  3. Wait up to 8 seconds for the survey to open.
+  4. If nothing loads after 8 seconds, click a different card.
+  DO NOT look for a "Start", "Begin", or "Take Survey" button — they do not exist here.
+  DO NOT navigate to Google or any other website.
 
-STEPS:
-1. Find a survey listed on the page with a "Start", "Take Survey", or "Begin" button. Click it.
-2. Answer every question:
-   - Match answers to the persona profile above.
-   - Free-text fields: write 1–2 natural sentences.
-   - Never leave required fields blank.
-3. Click Next/Continue after each page.
-4. Continue until:
-   - "Thank You" / completion page → report SUCCESS
-   - Disqualification / screen-out page → report DISQUALIFIED
+════════════════════════════════════════════════
+ONCE INSIDE THE SURVEY
+════════════════════════════════════════════════
+Answer every question as the persona described below:
+  • Multiple-choice / radio: pick the option that best matches the persona.
+  • Checkboxes: select all that apply for the persona.
+  • Dropdowns: choose the matching option.
+  • Free-text / open-ended: write 1–2 natural sentences in the persona's voice.
+  • Never leave a required field blank.
+  • After each page, click the "Next", "Continue", or "Submit" button.
 
-RULES:
-- Pause 2–4 seconds between actions (behave like a human).
-- Obey attention-check instructions exactly.
-- Never give contradictory answers across the survey.
+════════════════════════════════════════════════
+FINISH CONDITIONS
+════════════════════════════════════════════════
+  • "Thank You" / completion page → you are done, report SUCCESS.
+  • Disqualification / "screen out" / "not eligible" page → report DISQUALIFIED.
+  • If you reach a dead end after trying 3 different cards → report ERROR.
+
+════════════════════════════════════════════════
+RULES
+════════════════════════════════════════════════
+  • Pause 2–4 seconds between actions (human-like pacing).
+  • Follow attention-check instructions exactly.
+  • Never contradict yourself across different survey pages.
+  • Stay on topsurveys.app at all times.
 """,
                         llm=llm,
                         browser=bu_browser,
                     )
 
-                    # Run agent; grab mid-survey screenshot ~15 s in
+                    # ── Mid-survey screenshot ──────────────────────────────────
+                    # Poll until the agent has clearly entered a survey:
+                    #   • URL changes away from the dashboard, OR
+                    #   • Page contains typical survey question indicators
+                    # Then wait a few seconds for the first question to render
+                    # and take the screenshot.
+                    dashboard_url = page.url  # captured before agent starts
+
+                    # Indicators that we're inside an actual survey question
+                    survey_in_progress_selectors = [
+                        "input[type='radio']",
+                        "input[type='checkbox']",
+                        "button:has-text('Next')",
+                        "button:has-text('Continue')",
+                        "button:has-text('Submit')",
+                        "[class*='question']",
+                        "[class*='Question']",
+                        "textarea",
+                    ]
+
                     async def _run_with_midshot():
                         run_task = asyncio.create_task(agent.run())
-                        await asyncio.sleep(15)
-                        # SCREENSHOT 3: mid_survey
-                        try:
-                            await self._screenshot(page, "03_mid_survey", batch_id, survey_num)
-                        except Exception:
-                            pass
+                        mid_taken = False
+                        for _ in range(80):          # poll up to 4 min (80 × 3 s)
+                            await asyncio.sleep(3)
+                            if mid_taken:
+                                pass  # still wait for task to finish
+                            else:
+                                try:
+                                    current_url = page.url
+                                    url_changed = (current_url != dashboard_url)
+
+                                    # Check for survey question elements
+                                    question_visible = False
+                                    for sel in survey_in_progress_selectors:
+                                        try:
+                                            if await page.locator(sel).first.is_visible(timeout=500):
+                                                question_visible = True
+                                                break
+                                        except Exception:
+                                            pass
+
+                                    if url_changed or question_visible:
+                                        await asyncio.sleep(3)   # let question fully render
+                                        await self._screenshot(page, "03_mid_survey", batch_id, survey_num)
+                                        mid_taken = True
+                                        self.log(
+                                            f"📸 Mid-survey shot taken "
+                                            f"({'URL changed' if url_changed else 'question visible'})",
+                                            batch_id=batch_id,
+                                        )
+                                except Exception:
+                                    pass
+                            if run_task.done():
+                                break
+                        if not mid_taken:
+                            # Fallback: take wherever we ended up
+                            try:
+                                await self._screenshot(page, "03_mid_survey", batch_id, survey_num)
+                                self.log("📸 Mid-survey shot taken (fallback)", batch_id=batch_id)
+                            except Exception:
+                                pass
                         return await run_task
 
                     result = await _run_with_midshot()
