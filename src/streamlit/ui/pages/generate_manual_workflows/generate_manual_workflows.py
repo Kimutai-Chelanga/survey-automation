@@ -869,16 +869,62 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
             page = context.pages[0] if context.pages else await context.new_page()
             self.log("✅ Connected to Chrome via CDP", batch_id=batch_id)
 
+            # Wait for browser to be usable — skip readyState check on blank/chrome:// tabs
+            try:
+                await page.wait_for_function(
+                    "() => document.readyState === 'complete'", timeout=10_000
+                )
+                self.log("Browser ready – document complete", batch_id=batch_id)
+            except Exception:
+                self.log(
+                    "⚠️ readyState timeout (blank/chrome tab) — proceeding anyway",
+                    "WARNING", batch_id=batch_id,
+                )
+            await asyncio.sleep(1)
+
             # ------------------------------------------------------------------
             # STEP 3 – Verify / perform Google login
             # SCREENSHOT 1: before_login — captured right before we check login state
             # ------------------------------------------------------------------
             await self._screenshot(page, "01_before_login", batch_id)
 
-            await page.goto("https://accounts.google.com/", wait_until="domcontentloaded", timeout=20_000)
-            await page.wait_for_timeout(2000)
+            # Navigate to Google and check whether we are already logged in.
+            # If the profile is authenticated, Google redirects away from the
+            # sign-in page immediately — we must NOT wait for an email input that
+            # will never appear.
+            self.log("Navigating to Google to verify login state...", batch_id=batch_id)
+            MAX_RETRIES = 3
+            google_nav_ok = False
+            for attempt in range(MAX_RETRIES):
+                try:
+                    await page.goto(
+                        "https://accounts.google.com/",
+                        wait_until="domcontentloaded",
+                        timeout=45_000,
+                    )
+                    await asyncio.sleep(3)   # let redirects settle
+                    google_nav_ok = True
+                    break
+                except Exception as e:
+                    if attempt == MAX_RETRIES - 1:
+                        raise
+                    self.log(
+                        f"Google nav attempt {attempt+1} failed: {e}, retrying...",
+                        "WARNING", batch_id=batch_id,
+                    )
+                    await asyncio.sleep(5)
 
-            if "signin" in page.url or "identifier" in page.url:
+            current_url = page.url
+            self.log(f"Google landing URL: {current_url}", batch_id=batch_id)
+
+            # Determine login state purely from the URL
+            needs_login = (
+                "accounts.google.com/signin" in current_url
+                or "accounts.google.com/v3/signin" in current_url
+                or "identifier" in current_url
+            )
+
+            if needs_login:
                 self.log("⚠️ Not logged into Google – performing one-time login", batch_id=batch_id)
                 if not google_email or not google_password:
                     raise Exception(
@@ -887,7 +933,10 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
                     )
                 await self._perform_google_login(page, google_email, google_password, batch_id)
             else:
-                self.log("✅ Already logged into Google via profile", batch_id=batch_id)
+                self.log(
+                    f"✅ Already logged into Google via profile (landed on: {current_url})",
+                    batch_id=batch_id,
+                )
 
             # SCREENSHOT 2: after_login — confirmed logged in
             await self._screenshot(page, "02_after_login", batch_id)
@@ -925,7 +974,7 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
 
             if not google_clicked:
                 self.log("⚠️ No 'Continue with Google' button — may already be logged in",
-                         "WARNING", batch_id=batch_id)
+                        "WARNING", batch_id=batch_id)
 
             try:
                 picker = page.locator(f"[data-email='{google_email}']").first
@@ -959,15 +1008,11 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
                 except Exception:
                     pass
 
-            # TopSurveys shows surveys as clickable cards (no "Start" button).
-            # Detect the card grid by looking for USD reward text or time labels.
             survey_item_selectors = [
-                # TopSurveys card grid
-                "text=USD",                          # every card shows "$ X.XX USD"
+                "text=USD",
                 ":text-matches('\\$\\s*\\d+\\.\\d+\\s*USD')",
                 ".survey-card", ".survey-item",
                 "[class*='survey']",
-                # Generic fallbacks
                 "button:has-text('Start')", "a:has-text('Start')",
                 "button:has-text('Take Survey')", "a:has-text('Take Survey')",
                 "button:has-text('Begin')", "text='Start Survey'",
@@ -992,7 +1037,7 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
 
             if not surveys_found:
                 self.log("⚠️ No surveys found after 3 reloads — proceeding anyway",
-                         "WARNING", batch_id=batch_id)
+                        "WARNING", batch_id=batch_id)
 
             # ------------------------------------------------------------------
             # STEP 6 – LLM setup
@@ -1026,67 +1071,60 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
                     bu_browser = Browser(config=BrowserConfig(cdp_url=ws_url, headless=False))
                     agent = Agent(
                         task=f"""
-{persona}
+    {persona}
 
-════════════════════════════════════════════════
-CONTEXT
-════════════════════════════════════════════════
-You are logged into TopSurveys (topsurveys.app). The page currently shows a
-GRID OF SURVEY CARDS. Each card displays:
-  • An estimated time  (e.g. "4 min", "15 min")
-  • A cash reward      (e.g. "$ 0.17 USD", "$ 2.88 USD")
-  • A star rating      (e.g. "4.5 (110)")
+    ════════════════════════════════════════════════
+    CONTEXT
+    ════════════════════════════════════════════════
+    You are logged into TopSurveys (topsurveys.app). The page currently shows a
+    GRID OF SURVEY CARDS. Each card displays:
+    - An estimated time  (e.g. "4 min", "15 min")
+    - A cash reward      (e.g. "$ 0.17 USD", "$ 2.88 USD")
+    - A star rating      (e.g. "4.5 (110)")
 
-════════════════════════════════════════════════
-CRITICAL — HOW TO START A SURVEY
-════════════════════════════════════════════════
-There is NO "Start" button. To begin a survey you must CLICK THE CARD ITSELF.
-  1. Locate the first survey card in the grid.
-  2. Click anywhere on that card (the time, the amount, or the star area).
-  3. Wait up to 8 seconds for the survey to open.
-  4. If nothing loads after 8 seconds, click a different card.
-  DO NOT look for a "Start", "Begin", or "Take Survey" button — they do not exist here.
-  DO NOT navigate to Google or any other website.
+    ════════════════════════════════════════════════
+    CRITICAL — HOW TO START A SURVEY
+    ════════════════════════════════════════════════
+    There is NO "Start" button. To begin a survey you must CLICK THE CARD ITSELF.
+    1. Locate the first survey card in the grid.
+    2. Click anywhere on that card (the time, the amount, or the star area).
+    3. Wait up to 8 seconds for the survey to open.
+    4. If nothing loads after 8 seconds, click a different card.
+    DO NOT look for a "Start", "Begin", or "Take Survey" button — they do not exist here.
+    DO NOT navigate to Google or any other website.
 
-════════════════════════════════════════════════
-ONCE INSIDE THE SURVEY
-════════════════════════════════════════════════
-Answer every question as the persona described below:
-  • Multiple-choice / radio: pick the option that best matches the persona.
-  • Checkboxes: select all that apply for the persona.
-  • Dropdowns: choose the matching option.
-  • Free-text / open-ended: write 1–2 natural sentences in the persona's voice.
-  • Never leave a required field blank.
-  • After each page, click the "Next", "Continue", or "Submit" button.
+    ════════════════════════════════════════════════
+    ONCE INSIDE THE SURVEY
+    ════════════════════════════════════════════════
+    Answer every question as the persona described below:
+    - Multiple-choice / radio: pick the option that best matches the persona.
+    - Checkboxes: select all that apply for the persona.
+    - Dropdowns: choose the matching option.
+    - Free-text / open-ended: write 1–2 natural sentences in the persona's voice.
+    - Never leave a required field blank.
+    - After each page, click the "Next", "Continue", or "Submit" button.
 
-════════════════════════════════════════════════
-FINISH CONDITIONS
-════════════════════════════════════════════════
-  • "Thank You" / completion page → you are done, report SUCCESS.
-  • Disqualification / "screen out" / "not eligible" page → report DISQUALIFIED.
-  • If you reach a dead end after trying 3 different cards → report ERROR.
+    ════════════════════════════════════════════════
+    FINISH CONDITIONS
+    ════════════════════════════════════════════════
+    - "Thank You" / completion page → you are done, report SUCCESS.
+    - Disqualification / "screen out" / "not eligible" page → report DISQUALIFIED.
+    - If you reach a dead end after trying 3 different cards → report ERROR.
 
-════════════════════════════════════════════════
-RULES
-════════════════════════════════════════════════
-  • Pause 2–4 seconds between actions (human-like pacing).
-  • Follow attention-check instructions exactly.
-  • Never contradict yourself across different survey pages.
-  • Stay on topsurveys.app at all times.
-""",
+    ════════════════════════════════════════════════
+    RULES
+    ════════════════════════════════════════════════
+    - Pause 2–4 seconds between actions (human-like pacing).
+    - Follow attention-check instructions exactly.
+    - Never contradict yourself across different survey pages.
+    - Stay on topsurveys.app at all times.
+    """,
                         llm=llm,
                         browser=bu_browser,
                     )
 
-                    # ── Mid-survey screenshot ──────────────────────────────────
-                    # Poll until the agent has clearly entered a survey:
-                    #   • URL changes away from the dashboard, OR
-                    #   • Page contains typical survey question indicators
-                    # Then wait a few seconds for the first question to render
-                    # and take the screenshot.
-                    dashboard_url = page.url  # captured before agent starts
+                    dashboard_url = page.url
 
-                    # Indicators that we're inside an actual survey question
                     survey_in_progress_selectors = [
                         "input[type='radio']",
                         "input[type='checkbox']",
@@ -1101,16 +1139,13 @@ RULES
                     async def _run_with_midshot():
                         run_task = asyncio.create_task(agent.run())
                         mid_taken = False
-                        for _ in range(80):          # poll up to 4 min (80 × 3 s)
+                        for _ in range(80):
                             await asyncio.sleep(3)
-                            if mid_taken:
-                                pass  # still wait for task to finish
-                            else:
+                            if not mid_taken:
                                 try:
                                     current_url = page.url
                                     url_changed = (current_url != dashboard_url)
 
-                                    # Check for survey question elements
                                     question_visible = False
                                     for sel in survey_in_progress_selectors:
                                         try:
@@ -1121,7 +1156,7 @@ RULES
                                             pass
 
                                     if url_changed or question_visible:
-                                        await asyncio.sleep(3)   # let question fully render
+                                        await asyncio.sleep(3)
                                         await self._screenshot(page, "03_mid_survey", batch_id, survey_num)
                                         mid_taken = True
                                         self.log(
@@ -1134,7 +1169,6 @@ RULES
                             if run_task.done():
                                 break
                         if not mid_taken:
-                            # Fallback: take wherever we ended up
                             try:
                                 await self._screenshot(page, "03_mid_survey", batch_id, survey_num)
                                 self.log("📸 Mid-survey shot taken (fallback)", batch_id=batch_id)
@@ -1157,7 +1191,7 @@ RULES
                     survey_status  = STATUS_ERROR
                     result_snippet = str(se)[:300]
 
-                # SCREENSHOT 4: survey_complete — taken after every survey finishes
+                # SCREENSHOT 4: survey_complete
                 try:
                     await self._screenshot(page, "04_survey_complete", batch_id, survey_num)
                 except Exception as sse:
@@ -1194,7 +1228,7 @@ RULES
 
             progress_ph.progress(1.0, text="Done!")
             summary = (f"✅ {complete_count} complete  🟡 {passed_count} passed  "
-                       f"❌ {failed_count} failed  ⚠️ {error_count} error")
+                    f"❌ {failed_count} failed  ⚠️ {error_count} error")
             self.log(f"🏁 {summary}", batch_id=batch_id)
             status_ph.success(f"🏁 {summary}")
 
