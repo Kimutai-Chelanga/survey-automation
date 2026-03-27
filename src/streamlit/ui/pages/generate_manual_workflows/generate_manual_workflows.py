@@ -6,15 +6,18 @@ PERSISTENT PROFILE-BASED AUTHENTICATION (Replaces cookie injection)
 Instead of injecting cookies (which are not portable), this version uses
 Playwright attached to a persistent Chrome profile managed by ChromeSessionManager:
 
-  1. START  — Launch Chrome with the account’s user-data-dir.
+  1. START  — Launch Chrome with the account's user-data-dir.
   2. ATTACH — Connect via CDP using the remote debugging port.
   3. VERIFY — Check if already logged into Google; if not, perform one‑time login.
   4. NAVIGATE — Go to survey site, click "Continue with Google".
   5. SURVEY  — AI Agent answers surveys as the persona.
   6. STOP   — Gracefully shut down Chrome; cookies are saved automatically.
 
-This approach preserves full browser state (cookies, localStorage, device fingerprint)
-and avoids Google’s security challenges.
+Screenshots (4 only):
+  01_before_login    — State of browser before Google login attempt
+  02_after_login     — Confirmed logged in to Google
+  03_mid_survey      — Taken ~15 s into the agent run (mid survey)
+  04_survey_complete — Taken after each survey finishes
 ═══════════════════════════════════════════════════════════════════════════════
 """
 
@@ -43,7 +46,6 @@ from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-# Import the ChromeSessionManager
 from src.streamlit.ui.pages.accounts.chrome_session_manager import ChromeSessionManager
 
 logger = logging.getLogger(__name__)
@@ -146,8 +148,6 @@ class GenerateManualWorkflowsPage:
         self.orchestrator = SurveySiteOrchestrator(db_manager)
         self._ensure_tables()
 
-        # ── Initialise ChromeSessionManager ────────────────────────────────
-        # Try to get MongoDB client (if needed for session storage)
         try:
             from ..hyperbrowser_utils import get_mongodb_client
             client, _ = get_mongodb_client()
@@ -155,7 +155,6 @@ class GenerateManualWorkflowsPage:
             client = None
         self.chrome_manager = ChromeSessionManager(db_manager, client)
 
-        # Session state defaults
         for k, v in {
             "generation_in_progress": False,
             "generation_results": None,
@@ -174,11 +173,9 @@ class GenerateManualWorkflowsPage:
     # DB schema bootstrap
     # ─────────────────────────────────────────────────────────────────────────
     def _ensure_tables(self):
-        """Create proxy_configs and account_cookies tables if missing."""
         try:
             with self._pg() as conn:
                 with conn.cursor() as c:
-                    # proxy_configs
                     c.execute("""
                         SELECT EXISTS (
                             SELECT 1 FROM information_schema.tables
@@ -201,7 +198,6 @@ class GenerateManualWorkflowsPage:
                             )
                         """)
 
-                    # active_proxy_id column on accounts
                     c.execute("""
                         SELECT column_name FROM information_schema.columns
                         WHERE table_name = 'accounts' AND column_name = 'active_proxy_id'
@@ -212,7 +208,6 @@ class GenerateManualWorkflowsPage:
                             ADD COLUMN active_proxy_id INTEGER REFERENCES proxy_configs(proxy_id)
                         """)
 
-                    # account_cookies  ← NEW
                     c.execute("""
                         SELECT EXISTS (
                             SELECT 1 FROM information_schema.tables
@@ -237,7 +232,7 @@ class GenerateManualWorkflowsPage:
             logger.error(f"_ensure_tables: {e}")
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Cookie DB helpers (kept for compatibility but not used in new flow)
+    # Cookie DB helpers
     # ─────────────────────────────────────────────────────────────────────────
     def _load_cookies_from_db(self, account_id: int, domain: str = "google.com") -> Optional[List[Dict]]:
         try:
@@ -250,9 +245,7 @@ class GenerateManualWorkflowsPage:
                         (account_id, domain),
                     )
                     row = c.fetchone()
-                    if row:
-                        return json.loads(row["cookies_json"])
-                    return None
+                    return json.loads(row["cookies_json"]) if row else None
         except Exception as e:
             logger.error(f"_load_cookies_from_db: {e}")
             return None
@@ -260,13 +253,9 @@ class GenerateManualWorkflowsPage:
     def _save_cookies_to_db(self, account_id: int, cookies: List[Dict],
                             domain: str = "google.com") -> bool:
         try:
-            relevant = [
-                c for c in cookies
-                if domain.lstrip(".") in c.get("domain", "").lstrip(".")
-            ]
+            relevant = [c for c in cookies if domain.lstrip(".") in c.get("domain", "").lstrip(".")]
             if not relevant:
                 relevant = cookies
-            payload = json.dumps(relevant)
             with self._pg() as conn:
                 with conn.cursor() as c:
                     c.execute("""
@@ -275,7 +264,7 @@ class GenerateManualWorkflowsPage:
                         ON CONFLICT (account_id, domain)
                         DO UPDATE SET cookies_json = EXCLUDED.cookies_json,
                                       updated_at   = CURRENT_TIMESTAMP
-                    """, (account_id, domain, payload))
+                    """, (account_id, domain, json.dumps(relevant)))
                     conn.commit()
             return True
         except Exception as e:
@@ -312,106 +301,37 @@ class GenerateManualWorkflowsPage:
             return []
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Playwright cookie helpers (kept for fallback if needed)
+    # Screenshot helper — ONLY 4 named checkpoints are ever saved
     # ─────────────────────────────────────────────────────────────────────────
-    async def _inject_cookies(self, context, cookies: List[Dict], batch_id: str) -> int:
-        if not cookies:
-            return 0
-        sanitized = []
-        for ck in cookies:
-            entry: Dict[str, Any] = {
-                "name":  ck["name"],
-                "value": ck["value"],
-            }
-            if ck.get("domain"):
-                entry["domain"] = ck["domain"]
-                entry["path"]   = ck.get("path", "/")
-            elif ck.get("url"):
-                entry["url"] = ck["url"]
-            else:
-                entry["domain"] = ".google.com"
-                entry["path"]   = "/"
+    _ALLOWED_SCREENSHOTS = frozenset({
+        "01_before_login",
+        "02_after_login",
+        "03_mid_survey",
+        "04_survey_complete",
+    })
 
-            if ck.get("secure") is not None:
-                entry["secure"]   = bool(ck["secure"])
-            if ck.get("httpOnly") is not None:
-                entry["httpOnly"] = bool(ck["httpOnly"])
-            if ck.get("sameSite") in ("Strict", "Lax", "None"):
-                entry["sameSite"] = ck["sameSite"]
-            if ck.get("expires") and ck["expires"] > 0:
-                entry["expires"]  = int(ck["expires"])
+    _SCREENSHOT_LABELS = {
+        "01_before_login":    "1️⃣ Before Login",
+        "02_after_login":     "2️⃣ After Login",
+        "03_mid_survey":      "3️⃣ Mid Survey",
+        "04_survey_complete": "4️⃣ Survey Complete",
+    }
 
-            sanitized.append(entry)
-
+    async def _screenshot(self, page, label: str, batch_id: str,
+                          survey_num: int = 0) -> Optional[bytes]:
+        """Capture a screenshot only for the 4 designated checkpoints; silently skip all others."""
+        if label not in self._ALLOWED_SCREENSHOTS:
+            return None
         try:
-            await context.add_cookies(sanitized)
-            self.log(f"🍪 Injected {len(sanitized)} cookies into browser context", batch_id=batch_id)
-            return len(sanitized)
-        except Exception as e:
-            self.log(f"⚠️ Cookie injection error: {e}", "WARNING", batch_id=batch_id)
-            return 0
-
-    async def _extract_and_save_cookies(self, context, account_id: int,
-                                        domain: str, batch_id: str) -> int:
-        try:
-            all_cookies = await context.cookies()
-            if not all_cookies:
-                self.log("⚠️ No cookies found in context to save", "WARNING", batch_id=batch_id)
-                return 0
-            ok = self._save_cookies_to_db(account_id, all_cookies, domain)
-            count = len(all_cookies)
-            if ok:
-                self.log(f"💾 Saved {count} cookies to DB (domain: {domain})", batch_id=batch_id)
-            else:
-                self.log("⚠️ Failed to save cookies to DB", "WARNING", batch_id=batch_id)
-            return count if ok else 0
-        except Exception as e:
-            self.log(f"⚠️ Cookie extraction error: {e}", "WARNING", batch_id=batch_id)
-            return 0
-
-    async def _verify_google_auth(self, page, batch_id: str) -> bool:
-        try:
-            await page.goto(
-                "https://accounts.google.com/",
-                wait_until="domcontentloaded",
-                timeout=20_000,
+            img = await page.screenshot(type="png", full_page=False)
+            self.log(f"📸 Screenshot: {self._SCREENSHOT_LABELS[label]}", batch_id=batch_id)
+            st.session_state.batches[batch_id].setdefault("screenshots", []).append(
+                (survey_num, img, label)
             )
-            await page.wait_for_timeout(2000)
-            current_url = page.url
-            self.log(f"🔍 Auth check URL: {current_url}", batch_id=batch_id)
-
-            if (
-                "myaccount.google.com" in current_url
-                or "accounts.google.com/b/0" in current_url
-                or "accounts.google.com/SignOutOptions" in current_url
-                or "/u/0/" in current_url
-            ):
-                self.log("✅ Cookie auth verified — already logged into Google", batch_id=batch_id)
-                return True
-
-            if "signin" in current_url or "identifier" in current_url:
-                self.log("🔄 Cookie auth failed — sign-in page shown, will do password login",
-                         "WARNING", batch_id=batch_id)
-                return False
-
-            try:
-                content = await page.content()
-                if any(indicator in content for indicator in [
-                    "myaccount.google.com", "SignOut", "Sign out",
-                    "accounts.google.com/Logout",
-                ]):
-                    self.log("✅ Cookie auth verified via page content", batch_id=batch_id)
-                    return True
-            except Exception:
-                pass
-
-            self.log("⚠️ Cookie auth status unclear — attempting password login as fallback",
-                     "WARNING", batch_id=batch_id)
-            return False
-
+            return img
         except Exception as e:
-            self.log(f"⚠️ Auth verification error: {e}", "WARNING", batch_id=batch_id)
-            return False
+            self.log(f"Screenshot failed ({label}): {e}", "WARNING", batch_id=batch_id)
+            return None
 
     # ─────────────────────────────────────────────────────────────────────────
     # DB schema helpers (proxy / screening)
@@ -501,21 +421,6 @@ class GenerateManualWorkflowsPage:
         st.session_state.generation_logs = []
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Screenshot helper
-    # ─────────────────────────────────────────────────────────────────────────
-    async def _screenshot(self, page, label: str, batch_id: str, survey_num: int = 0) -> Optional[bytes]:
-        try:
-            img = await page.screenshot(type="png", full_page=False)
-            self.log(f"📸 Screenshot: {label}", batch_id=batch_id)
-            st.session_state.batches[batch_id].setdefault("screenshots", []).append(
-                (survey_num, img, label)
-            )
-            return img
-        except Exception as e:
-            self.log(f"Screenshot failed ({label}): {e}", "WARNING", batch_id=batch_id)
-            return None
-
-    # ─────────────────────────────────────────────────────────────────────────
     # Batch details display
     # ─────────────────────────────────────────────────────────────────────────
     def _display_batch_details(self, batch_id: str):
@@ -527,20 +432,20 @@ class GenerateManualWorkflowsPage:
         st.session_state.batch_details_counter += 1
         ctr = st.session_state.batch_details_counter
 
-        meta = (f"🕐 {batch.get('timestamp','?')}  |  "
-                f"👤 {batch.get('account','?')}  |  "
-                f"🌐 {batch.get('site','?')}")
-        st.caption(meta)
+        st.caption(
+            f"🕐 {batch.get('timestamp','?')}  |  "
+            f"👤 {batch.get('account','?')}  |  "
+            f"🌐 {batch.get('site','?')}"
+        )
 
-        tab_logs, tab_shots = st.tabs(["📝 Logs", "📸 Screenshots"])
+        tab_logs, tab_shots = st.tabs(["📝 Logs", "📸 Screenshots (4)"])
 
         with tab_logs:
             logs = batch.get("logs", [])
             if logs:
                 st.code("\n".join(logs), language="log")
                 st.download_button(
-                    "⬇️ Download logs",
-                    "\n".join(logs),
+                    "⬇️ Download logs", "\n".join(logs),
                     f"logs_{batch_id}.txt",
                     key=f"dl_log_{batch_id}_{ctr}",
                 )
@@ -551,10 +456,11 @@ class GenerateManualWorkflowsPage:
             shots = batch.get("screenshots", [])
             if shots:
                 for i, (num, img_bytes, label) in enumerate(shots):
-                    st.markdown(f"**Step: `{label}`**")
+                    display_label = self._SCREENSHOT_LABELS.get(label, label)
+                    st.markdown(f"**{display_label}**")
                     st.image(img_bytes, use_container_width=True)
                     st.download_button(
-                        f"⬇️ {label}.png",
+                        f"⬇️ {display_label}.png",
                         img_bytes,
                         f"ss_{batch_id}_{i}_{label}.png",
                         mime="image/png",
@@ -573,13 +479,11 @@ class GenerateManualWorkflowsPage:
         <div style='background:#1e3a5f;padding:18px;border-radius:10px;margin-bottom:18px;'>
         <h3 style='color:white;margin:0;'>AI-Powered Survey Answering</h3>
         <p style='color:#a0c4ff;margin:8px 0 0;'>
-        🍪 <b>Step 1</b> — Inject stored Google cookies (skips login if valid).<br>
-        🔐 <b>Step 2</b> — Fallback to email+password if cookies are stale/missing.<br>
-        💾 <b>Step 3</b> — Save fresh cookies after every successful login.<br>
-        🌐 <b>Step 4</b> — Navigate to survey site, click "Continue with Google".<br>
-        📋 <b>Step 5</b> — Find surveys tab, reload until surveys appear.<br>
-        🤖 <b>Step 6</b> — AI Agent answers surveys as your persona.<br>
-        📸 <b>Diagnostics</b> — Screenshot at every key step.
+        🔐 <b>Step 1</b> — Launch Chrome with persistent profile; fallback to email+password login if needed.<br>
+        🌐 <b>Step 2</b> — Navigate to survey site, click "Continue with Google".<br>
+        📋 <b>Step 3</b> — Find surveys tab, reload until surveys appear.<br>
+        🤖 <b>Step 4</b> — AI Agent answers surveys as your persona.<br>
+        📸 <b>Diagnostics</b> — 4 screenshots only: before login · after login · mid survey · survey complete.
         </p>
         </div>""", unsafe_allow_html=True)
 
@@ -635,14 +539,11 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
             st.caption(f"Extractor v{si.get('extractor_version','?')} | Creator v{si.get('creator_version','?')}")
 
         st.markdown("---")
-
-        # ── Cookie status panel ───────────────────────────────────────────────
         self._render_cookie_status(acct)
 
         st.markdown("---")
         self._tab_answer_direct(acct, site, acct_prompt)
 
-        # Live progress
         if st.session_state.survey_progress:
             st.markdown("---")
             st.subheader("📊 Run Progress")
@@ -686,13 +587,11 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
         self._tab_screening_results(acct, site)
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Cookie status panel (shown in the main render area)
+    # Cookie status panel
     # ─────────────────────────────────────────────────────────────────────────
     def _render_cookie_status(self, acct: Dict):
-        """Display the current cookie status for this account with management options."""
         st.subheader("🍪 Google Session Cookies")
         records = self._get_all_cookie_records(acct["account_id"])
-
         google_record = next((r for r in records if "google" in r["domain"].lower()), None)
 
         col_status, col_actions = st.columns([3, 2])
@@ -705,15 +604,11 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
                     f"✅ **Cookies stored** for `{google_record['domain']}`  \n"
                     f"Last updated: `{updated_str}` | Size: `{size_kb:.1f} KB`"
                 )
-                st.caption(
-                    "Cookies will be injected automatically on the next run. "
-                    "If login fails, delete them and re-run with your password."
-                )
+                st.caption("Cookies will be injected automatically on the next run. "
+                           "If login fails, delete them and re-run with your password.")
             else:
-                st.warning(
-                    "⚠️ **No cookies stored** for this account.  \n"
-                    "Enter Google credentials below and run — cookies will be saved automatically after login."
-                )
+                st.warning("⚠️ **No cookies stored** for this account.  \n"
+                           "Enter Google credentials below and run — cookies will be saved automatically after login.")
 
         with col_actions:
             if google_record:
@@ -723,12 +618,9 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
                     st.success("Cookies deleted.")
                     st.rerun()
 
-            # Manual cookie import (paste raw JSON from browser DevTools)
             with st.expander("📋 Paste cookies manually (JSON)"):
-                st.caption(
-                    "Export cookies from your browser using a cookie-export extension "
-                    "(e.g. EditThisCookie → Export), then paste the JSON array here."
-                )
+                st.caption("Export cookies from your browser using a cookie-export extension "
+                           "(e.g. EditThisCookie → Export), then paste the JSON array here.")
                 raw = st.text_area("Cookie JSON array:", height=120,
                                    key=f"manual_ck_{acct['account_id']}",
                                    placeholder='[{"name":"SID","value":"...","domain":".google.com",...}]')
@@ -780,13 +672,10 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
         num_surveys  = st.number_input("Surveys to answer:", min_value=1, max_value=50, value=1, key="num_surveys")
         model_choice = st.selectbox("AI Model:", available_models, key="model_choice")
 
-        # ── Google credentials ────────────────────────────────────────────────
         st.markdown("---")
         st.subheader("🔑 Google Account Credentials")
-        st.caption(
-            "Used as **fallback** if the persistent profile is not yet logged in. "
-            "After a successful login, the profile will stay authenticated for future runs."
-        )
+        st.caption("Used as **fallback** if the persistent profile is not yet logged in. "
+                   "After a successful login the profile stays authenticated for future runs.")
 
         col_e, col_p = st.columns(2)
         with col_e:
@@ -800,7 +689,6 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
                 key="google_password", placeholder="your Google password",
             )
 
-        # ── Proxy ─────────────────────────────────────────────────────────────
         st.markdown("---")
         st.subheader("🌐 Proxy Settings")
         DEFAULT_PROXY = {
@@ -878,7 +766,6 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
             f"**Prompt:** {prompt['prompt_name']}  |  **Email:** {google_email or '⚠️ not set'}"
         )
 
-        # Show profile status
         profile_path = self.chrome_manager.get_profile_path(acct['username'])
         if os.path.exists(os.path.join(profile_path, 'Default')):
             st.success("✅ Persistent Chrome profile exists — will reuse existing login state.")
@@ -983,9 +870,11 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
             self.log("✅ Connected to Chrome via CDP", batch_id=batch_id)
 
             # ------------------------------------------------------------------
-            # STEP 3 – Verify Google login (if needed, perform one‑time login)
+            # STEP 3 – Verify / perform Google login
+            # SCREENSHOT 1: before_login — captured right before we check login state
             # ------------------------------------------------------------------
-            await self._screenshot(page, "01_google_home", batch_id)
+            await self._screenshot(page, "01_before_login", batch_id)
+
             await page.goto("https://accounts.google.com/", wait_until="domcontentloaded", timeout=20_000)
             await page.wait_for_timeout(2000)
 
@@ -1000,6 +889,9 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
             else:
                 self.log("✅ Already logged into Google via profile", batch_id=batch_id)
 
+            # SCREENSHOT 2: after_login — confirmed logged in
+            await self._screenshot(page, "02_after_login", batch_id)
+
             # ------------------------------------------------------------------
             # STEP 4 – Navigate to survey site and click Continue with Google
             # ------------------------------------------------------------------
@@ -1007,7 +899,6 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
             self.log(f"→ Navigating to: {start_url}", batch_id=batch_id)
             await page.goto(start_url, wait_until="domcontentloaded", timeout=30_000)
             await page.wait_for_timeout(3000)
-            await self._screenshot(page, "10_survey_site_loaded", batch_id)
             self.log(f"Survey site URL: {page.url}", batch_id=batch_id)
 
             google_btn_selectors = [
@@ -1024,19 +915,17 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
                 try:
                     btn = page.locator(sel).first
                     if await btn.is_visible(timeout=3000):
-                        await self._screenshot(page, "11_before_google_oauth_btn", batch_id)
                         await btn.click()
                         self.log(f"✅ Clicked Google OAuth: {sel}", batch_id=batch_id)
                         google_clicked = True
                         await page.wait_for_timeout(5000)
-                        await self._screenshot(page, "12_after_google_oauth_btn", batch_id)
                         break
                 except Exception:
                     pass
 
             if not google_clicked:
-                self.log("⚠️ No 'Continue with Google' button — may already be logged in", "WARNING", batch_id=batch_id)
-                await self._screenshot(page, "11_no_google_btn_found", batch_id)
+                self.log("⚠️ No 'Continue with Google' button — may already be logged in",
+                         "WARNING", batch_id=batch_id)
 
             try:
                 picker = page.locator(f"[data-email='{google_email}']").first
@@ -1044,12 +933,10 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
                     await picker.click()
                     self.log(f"✅ Selected account from picker: {google_email}", batch_id=batch_id)
                     await page.wait_for_timeout(4000)
-                    await self._screenshot(page, "13_account_picker_selected", batch_id)
             except Exception:
                 pass
 
             await page.wait_for_timeout(3000)
-            await self._screenshot(page, "14_post_oauth_redirect", batch_id)
             self.log(f"Post-OAuth URL: {page.url}", batch_id=batch_id)
 
             # ------------------------------------------------------------------
@@ -1072,8 +959,6 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
                 except Exception:
                     pass
 
-            await self._screenshot(page, "15_surveys_tab_opened", batch_id)
-
             survey_item_selectors = [
                 "button:has-text('Start')", "a:has-text('Start')",
                 "button:has-text('Take Survey')", "a:has-text('Take Survey')",
@@ -1093,13 +978,12 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
                     self.log(f"✅ Surveys visible (attempt {reload_attempt})", batch_id=batch_id)
                     break
                 self.log(f"No surveys yet — reload {reload_attempt}/3", "WARNING", batch_id=batch_id)
-                await self._screenshot(page, f"16_no_surveys_reload_{reload_attempt}", batch_id)
                 await page.reload(wait_until="domcontentloaded")
                 await page.wait_for_timeout(5000)
 
-            await self._screenshot(page, "17_surveys_tab_final", batch_id)
             if not surveys_found:
-                self.log("⚠️ No surveys found after 3 reloads — proceeding anyway", "WARNING", batch_id=batch_id)
+                self.log("⚠️ No surveys found after 3 reloads — proceeding anyway",
+                         "WARNING", batch_id=batch_id)
 
             # ------------------------------------------------------------------
             # STEP 6 – LLM setup
@@ -1114,7 +998,7 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
             persona = self._build_persona_system_message(prompt, acct)
 
             # ------------------------------------------------------------------
-            # STEP 7 – Survey loop using browser-use attached to the same Chrome
+            # STEP 7 – Survey loop
             # ------------------------------------------------------------------
             for i in range(num_surveys):
                 survey_num = i + 1
@@ -1130,13 +1014,7 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
                 result_snippet = ""
 
                 try:
-                    # Attach browser-use to the existing Chrome instance
-                    bu_browser = Browser(
-                        config=BrowserConfig(
-                            cdp_url=ws_url,
-                            headless=False,
-                        )
-                    )
+                    bu_browser = Browser(config=BrowserConfig(cdp_url=ws_url, headless=False))
                     agent = Agent(
                         task=f"""
 {persona}
@@ -1164,7 +1042,19 @@ RULES:
                         llm=llm,
                         browser=bu_browser,
                     )
-                    result = await agent.run()
+
+                    # Run agent; grab mid-survey screenshot ~15 s in
+                    async def _run_with_midshot():
+                        run_task = asyncio.create_task(agent.run())
+                        await asyncio.sleep(15)
+                        # SCREENSHOT 3: mid_survey
+                        try:
+                            await self._screenshot(page, "03_mid_survey", batch_id, survey_num)
+                        except Exception:
+                            pass
+                        return await run_task
+
+                    result = await _run_with_midshot()
                     result_snippet = str(result)[:500]
 
                     if hasattr(result, "history") and result.history:
@@ -1179,13 +1069,9 @@ RULES:
                     survey_status  = STATUS_ERROR
                     result_snippet = str(se)[:300]
 
-                # Post-survey screenshot
+                # SCREENSHOT 4: survey_complete — taken after every survey finishes
                 try:
-                    ss = await page.screenshot(type="png")
-                    st.session_state.batches[batch_id]["screenshots"].append(
-                        (survey_num, ss, f"survey_{survey_num}_{survey_status}")
-                    )
-                    self.log("📸 Post-survey screenshot saved", batch_id=batch_id)
+                    await self._screenshot(page, "04_survey_complete", batch_id, survey_num)
                 except Exception as sse:
                     self.log(f"Post-survey screenshot failed: {sse}", "WARNING", batch_id=batch_id)
 
@@ -1209,7 +1095,7 @@ RULES:
                 )
 
             # ------------------------------------------------------------------
-            # STEP 8 – Stop Chrome session (cookies are synced automatically)
+            # STEP 8 – Stop Chrome session
             # ------------------------------------------------------------------
             self.log("Stopping Chrome session – cookies will be synced", batch_id=batch_id)
             stop_result = self.chrome_manager.stop_session(session_id)
@@ -1218,9 +1104,6 @@ RULES:
             else:
                 self.log(f"⚠️ Stop had issues: {stop_result.get('error')}", "WARNING", batch_id=batch_id)
 
-            # ------------------------------------------------------------------
-            # Summary and result
-            # ------------------------------------------------------------------
             progress_ph.progress(1.0, text="Done!")
             summary = (f"✅ {complete_count} complete  🟡 {passed_count} passed  "
                        f"❌ {failed_count} failed  ⚠️ {error_count} error")
@@ -1241,8 +1124,6 @@ RULES:
             err_msg = f"{type(e).__name__}: {e}"
             self.log(err_msg, "ERROR", batch_id=batch_id)
             self.log(traceback.format_exc(), "ERROR", batch_id=batch_id)
-            if page:
-                await self._screenshot(page, "XX_exception_state", batch_id)
             status_ph.error(f"❌ {err_msg}")
             st.session_state.generation_results = {
                 "action": "direct_answering", "status": "failed",
@@ -1250,7 +1131,6 @@ RULES:
             }
 
         finally:
-            # Clean up playwright resources
             for obj in (page, context, pw_browser, playwright_instance):
                 if obj:
                     try:
@@ -1260,7 +1140,6 @@ RULES:
                             await obj.stop()
                     except Exception:
                         pass
-            # If the session wasn't stopped by the normal flow, try to stop it
             if session_id and session_id in self.chrome_manager.active_processes:
                 try:
                     self.chrome_manager.stop_session(session_id)
@@ -1273,14 +1152,12 @@ RULES:
     # Helper: perform Google login (once)
     # =========================================================================
     async def _perform_google_login(self, page, email: str, password: str, batch_id: str):
-        """Perform Google login using email and password (used only when profile not logged in)."""
         self.log("→ Navigating to Google sign-in", batch_id=batch_id)
         await page.goto(
             "https://accounts.google.com/signin/v2/identifier",
             wait_until="domcontentloaded", timeout=30_000,
         )
         await page.wait_for_timeout(2000)
-        await self._screenshot(page, "03_google_signin_loaded", batch_id)
 
         # Email
         try:
@@ -1288,20 +1165,15 @@ RULES:
             await page.wait_for_selector(email_sel, timeout=15_000)
             await page.fill(email_sel, email)
             self.log(f"✅ Email filled: {email}", batch_id=batch_id)
-            await self._screenshot(page, "04_email_filled", batch_id)
             await page.keyboard.press("Enter")
             await page.wait_for_timeout(4000)
-            await self._screenshot(page, "05_after_email_enter", batch_id)
         except Exception as e:
-            await self._screenshot(page, "04_email_error", batch_id)
             raise Exception(f"Google email step failed: {e}")
 
         # Password
         try:
             self.log("Waiting for password input...", batch_id=batch_id)
             pwd_sel = 'input[type="password"], input[name="Passwd"]'
-            await self._screenshot(page, "05b_pre_password_screen", batch_id)
-            # Check for security challenge
             challenge_texts = [
                 "Verify it's you", "Confirm it's you",
                 "This extra step", "Get a verification code",
@@ -1310,7 +1182,6 @@ RULES:
             for ct in challenge_texts:
                 try:
                     if await page.locator(f"text='{ct}'").first.is_visible(timeout=1500):
-                        await self._screenshot(page, "05c_security_challenge", batch_id)
                         raise Exception(
                             f"Google security challenge detected: '{ct}'. "
                             "Use the manual login in a real browser once."
@@ -1318,16 +1189,12 @@ RULES:
                 except Exception as ce:
                     if "security challenge" in str(ce):
                         raise
-                    # Not found – continue
             await page.wait_for_selector(pwd_sel, timeout=20_000)
             await page.fill(pwd_sel, password)
             self.log("✅ Password filled", batch_id=batch_id)
-            await self._screenshot(page, "06_password_filled", batch_id)
             await page.keyboard.press("Enter")
             await page.wait_for_timeout(5000)
-            await self._screenshot(page, "07_after_password_enter", batch_id)
         except Exception as e:
-            await self._screenshot(page, "06_password_error", batch_id)
             raise Exception(f"Google password step failed: {e}")
 
         # Post-login prompts
@@ -1338,14 +1205,12 @@ RULES:
                     await btn.click()
                     self.log(f"Clicked post-login prompt: '{btn_text}'", batch_id=batch_id)
                     await page.wait_for_timeout(2000)
-                    await self._screenshot(page, f"08_prompt_{btn_text.replace(' ','_')}", batch_id)
                     break
             except Exception:
                 pass
 
         final_url = page.url
         self.log(f"Post-login URL: {final_url}", batch_id=batch_id)
-        await self._screenshot(page, "09_post_login_state", batch_id)
 
         if "accounts.google.com/signin" in final_url and "challenge" not in final_url:
             raise Exception(
