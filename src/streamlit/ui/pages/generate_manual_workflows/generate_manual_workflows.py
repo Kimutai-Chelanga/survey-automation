@@ -787,6 +787,112 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
     # Core async logic — persistent Chrome profile
     # =========================================================================
 
+    async def _open_survey_card(self, page, batch_id):
+        """
+        Reliably opens a survey card on TopSurveys using the exact CSS selectors
+        confirmed to work via Automa workflow inspection.
+
+        Flow (mirrors the Automa click-survey workflow):
+          1. Click the "Surveys" left-nav item
+          2. Wait for survey list to render
+          3. Click the first survey card via .p-ripple-wrapper
+          4. Fallback: click the reward amount label (.list-item:nth-child(1) .reward-amount)
+          5. Detect open: new tab → return new page; same-tab URL change → return page
+        """
+        self.log("🔍 Opening survey using confirmed Automa selectors...", batch_id=batch_id)
+
+        # ── STEP A: Navigate to Surveys tab ───────────────────────────────────
+        # Automa uses: div:nth-child(2) > .p-nav-wrapper > .p-nav-item
+        surveys_nav_selectors = [
+            "div:nth-child(2) > .p-nav-wrapper > .p-nav-item",   # exact Automa selector
+            ".p-nav-item:has-text('Surveys')",
+            "a:has-text('Surveys')",
+            "nav a:has-text('Surveys')",
+        ]
+        nav_clicked = False
+        for sel in surveys_nav_selectors:
+            try:
+                loc = page.locator(sel).first
+                if await loc.is_visible(timeout=4000):
+                    await loc.scroll_into_view_if_needed()
+                    await asyncio.sleep(0.5)
+                    await page.evaluate("(el) => el.click()", await loc.element_handle())
+                    self.log(f"✅ Clicked Surveys nav: {sel}", batch_id=batch_id)
+                    nav_clicked = True
+                    await asyncio.sleep(3)
+                    break
+            except Exception as e:
+                self.log(f"⚠️ Nav selector failed [{sel}]: {e}", "WARNING", batch_id=batch_id)
+
+        if not nav_clicked:
+            self.log("⚠️ Could not click Surveys nav — trying from current page", "WARNING", batch_id=batch_id)
+
+        # ── STEP B: Wait for survey list ──────────────────────────────────────
+        await asyncio.sleep(2)
+        self.log(f"Current URL after nav: {page.url}", batch_id=batch_id)
+
+        # ── STEP C: Click the first survey card ───────────────────────────────
+        # Automa uses two selectors in sequence:
+        #   1st click: div.p-ripple-wrapper          (the card wrapper)
+        #   2nd click: .list-item:nth-child(1) .reward-amount  (the $ amount label)
+        card_selectors = [
+            "div.p-ripple-wrapper",                              # Automa primary
+            ".list-item:nth-child(1) .reward-amount",           # Automa fallback
+            ".list-item:nth-child(1)",                          # full first list item
+            "[class*='list-item']:nth-child(1)",
+            "[class*='reward-amount']",
+        ]
+
+        for attempt, sel in enumerate(card_selectors):
+            try:
+                loc = page.locator(sel).first
+                if not await loc.is_visible(timeout=4000):
+                    self.log(f"  Selector not visible: {sel}", batch_id=batch_id)
+                    continue
+
+                self.log(f"🖱️ Clicking card (attempt {attempt+1}): {sel}", batch_id=batch_id)
+                await loc.scroll_into_view_if_needed()
+                await asyncio.sleep(1)
+
+                prev_url = page.url
+
+                # JS-forced click (bypasses pointer-events overlays)
+                await page.evaluate("(el) => el.click()", await loc.element_handle())
+                self.log(f"URL after click: {page.url}", batch_id=batch_id)
+
+                # ── Detect: new tab ──────────────────────────────────────────
+                try:
+                    new_page = await page.context.wait_for_event("page", timeout=8000)
+                    await new_page.wait_for_load_state("domcontentloaded")
+                    self.log(f"✅ Survey opened in NEW TAB: {new_page.url}", batch_id=batch_id)
+                    return new_page
+                except Exception:
+                    pass
+
+                # ── Detect: same-tab URL change ──────────────────────────────
+                await asyncio.sleep(5)
+                if page.url != prev_url:
+                    self.log(f"✅ Survey opened in SAME TAB: {page.url}", batch_id=batch_id)
+                    return page
+
+                # ── Detect: iframe with survey content ───────────────────────
+                for frame in page.frames:
+                    frame_url = frame.url.lower()
+                    if frame_url and frame_url not in ("about:blank", "") and "topsurveys.app" not in frame_url:
+                        self.log(f"✅ Survey iframe detected: {frame.url}", batch_id=batch_id)
+                        return page
+
+                self.log(f"❌ Selector {sel} did not open survey, trying next...", batch_id=batch_id)
+
+            except Exception as e:
+                self.log(f"⚠️ Card click failed [{sel}]: {e}", "WARNING", batch_id=batch_id)
+
+        raise Exception(
+            "All survey card click attempts failed. "
+            "Check screenshots — the page structure may have changed."
+        )
+
+
     async def _do_direct_answering(
         self, acct, site, prompt, start_url, num_surveys, model_choice,
         google_email: str, google_password: str, proxy_cfg: Optional[Dict],
@@ -888,10 +994,6 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
             # ------------------------------------------------------------------
             await self._screenshot(page, "01_before_login", batch_id)
 
-            # Navigate to Google and check whether we are already logged in.
-            # If the profile is authenticated, Google redirects away from the
-            # sign-in page immediately — we must NOT wait for an email input that
-            # will never appear.
             self.log("Navigating to Google to verify login state...", batch_id=batch_id)
             MAX_RETRIES = 3
             google_nav_ok = False
@@ -902,7 +1004,7 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
                         wait_until="domcontentloaded",
                         timeout=45_000,
                     )
-                    await asyncio.sleep(3)   # let redirects settle
+                    await asyncio.sleep(3)
                     google_nav_ok = True
                     break
                 except Exception as e:
@@ -917,7 +1019,6 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
             current_url = page.url
             self.log(f"Google landing URL: {current_url}", batch_id=batch_id)
 
-            # Determine login state purely from the URL
             needs_login = (
                 "accounts.google.com/signin" in current_url
                 or "accounts.google.com/v3/signin" in current_url
@@ -992,21 +1093,28 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
             # STEP 5 – Navigate to surveys tab, reload until surveys appear
             # ------------------------------------------------------------------
             status_ph.info("📋 Finding surveys...")
-            survey_nav_selectors = [
-                "a:has-text('Surveys')", "button:has-text('Surveys')",
-                "a:has-text('Available Surveys')", "a:has-text('Take Surveys')",
-                "[href*='survey']", "[data-tab='surveys']",
-            ]
-            for sel in survey_nav_selectors:
+
+            surveys_tab_clicked = False
+            for sel in [
+                "a:has-text('Surveys')",
+                "nav a:has-text('Surveys')",
+                "li a:has-text('Surveys')",
+                "[href*='survey']",
+            ]:
                 try:
                     nav = page.locator(sel).first
                     if await nav.is_visible(timeout=3000):
                         await nav.click()
-                        self.log(f"✅ Clicked surveys nav: {sel}", batch_id=batch_id)
+                        self.log(f"✅ Clicked Surveys nav tab: {sel}", batch_id=batch_id)
+                        surveys_tab_clicked = True
                         await page.wait_for_timeout(4000)
                         break
                 except Exception:
                     pass
+
+            if not surveys_tab_clicked:
+                self.log("⚠️ Could not click Surveys tab — staying on Earn/dashboard page",
+                        "WARNING", batch_id=batch_id)
 
             survey_item_selectors = [
                 "text=USD",
@@ -1068,57 +1176,59 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
                 result_snippet = ""
 
                 try:
+                    # ----------------------------------------------------------
+                    # 🔥 OPEN SURVEY BEFORE AGENT TAKES OVER
+                    # ----------------------------------------------------------
+                    try:
+                        survey_page = await self._open_survey_card(page, batch_id)
+
+                        # If a new tab opened, switch to it
+                        if survey_page != page:
+                            page = survey_page
+                            context = page.context
+
+                        self.log(f"🌐 Active survey URL: {page.url}", batch_id=batch_id)
+
+                    except Exception as e:
+                        self.log(f"❌ Could not open survey: {e}", "ERROR", batch_id=batch_id)
+                        raise
+
                     bu_browser = Browser(config=BrowserConfig(cdp_url=ws_url, headless=False))
                     agent = Agent(
                         task=f"""
-    {persona}
+{persona}
 
-    ════════════════════════════════════════════════
-    CONTEXT
-    ════════════════════════════════════════════════
-    You are logged into TopSurveys (topsurveys.app). The page currently shows a
-    GRID OF SURVEY CARDS. Each card displays:
-    - An estimated time  (e.g. "4 min", "15 min")
-    - A cash reward      (e.g. "$ 0.17 USD", "$ 2.88 USD")
-    - A star rating      (e.g. "4.5 (110)")
+════════════════════════════════════════════════
+CONTEXT — YOU ARE ALREADY INSIDE A SURVEY
+════════════════════════════════════════════════
+A survey has already been opened for you.
 
-    ════════════════════════════════════════════════
-    CRITICAL — HOW TO START A SURVEY
-    ════════════════════════════════════════════════
-    There is NO "Start" button. To begin a survey you must CLICK THE CARD ITSELF.
-    1. Locate the first survey card in the grid.
-    2. Click anywhere on that card (the time, the amount, or the star area).
-    3. Wait up to 8 seconds for the survey to open.
-    4. If nothing loads after 8 seconds, click a different card.
-    DO NOT look for a "Start", "Begin", or "Take Survey" button — they do not exist here.
-    DO NOT navigate to Google or any other website.
+DO NOT try to go back to the dashboard.
+DO NOT click another survey card.
+DO NOT navigate away from the current survey page.
 
-    ════════════════════════════════════════════════
-    ONCE INSIDE THE SURVEY
-    ════════════════════════════════════════════════
-    Answer every question as the persona described below:
-    - Multiple-choice / radio: pick the option that best matches the persona.
-    - Checkboxes: select all that apply for the persona.
-    - Dropdowns: choose the matching option.
-    - Free-text / open-ended: write 1–2 natural sentences in the persona's voice.
-    - Never leave a required field blank.
-    - After each page, click the "Next", "Continue", or "Submit" button.
+════════════════════════════════════════════════
+YOUR TASK — ANSWER THE SURVEY
+════════════════════════════════════════════════
+Focus ONLY on answering the survey questions on the current page.
 
-    ════════════════════════════════════════════════
-    FINISH CONDITIONS
-    ════════════════════════════════════════════════
-    - "Thank You" / completion page → you are done, report SUCCESS.
-    - Disqualification / "screen out" / "not eligible" page → report DISQUALIFIED.
-    - If you reach a dead end after trying 3 different cards → report ERROR.
+- Multiple-choice / radio: pick the option that best matches the persona.
+- Checkboxes: select all that apply for the persona.
+- Dropdowns: choose the matching option.
+- Free-text / open-ended: write 1–2 natural sentences in the persona's voice.
+- Never leave a required field blank.
+- After each page click the "Next", "Continue", or "Submit" button.
+- Pause 2–4 seconds between actions (human-like pacing).
+- Follow attention-check instructions exactly.
+- Never contradict yourself across different survey pages.
 
-    ════════════════════════════════════════════════
-    RULES
-    ════════════════════════════════════════════════
-    - Pause 2–4 seconds between actions (human-like pacing).
-    - Follow attention-check instructions exactly.
-    - Never contradict yourself across different survey pages.
-    - Stay on topsurveys.app at all times.
-    """,
+════════════════════════════════════════════════
+FINISH CONDITIONS
+════════════════════════════════════════════════
+- "Thank You" / completion page → report SUCCESS.
+- Disqualification / "screen out" / "not eligible" page → report DISQUALIFIED.
+- Dead end with no more questions → report ERROR.
+""",
                         llm=llm,
                         browser=bu_browser,
                     )
@@ -1269,6 +1379,79 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
                     pass
             st.session_state.generation_in_progress = False
             st.rerun()
+
+    # =========================================================================
+    # Helper: perform Google login (once)
+    # =========================================================================
+    async def _perform_google_login(self, page, email: str, password: str, batch_id: str):
+        self.log("→ Navigating to Google sign-in", batch_id=batch_id)
+        await page.goto(
+            "https://accounts.google.com/signin/v2/identifier",
+            wait_until="domcontentloaded", timeout=30_000,
+        )
+        await page.wait_for_timeout(2000)
+
+        # Email
+        try:
+            email_sel = 'input[type="email"], input[name="identifier"]'
+            await page.wait_for_selector(email_sel, timeout=15_000)
+            await page.fill(email_sel, email)
+            self.log(f"✅ Email filled: {email}", batch_id=batch_id)
+            await page.keyboard.press("Enter")
+            await page.wait_for_timeout(4000)
+        except Exception as e:
+            raise Exception(f"Google email step failed: {e}")
+
+        # Password
+        try:
+            self.log("Waiting for password input...", batch_id=batch_id)
+            pwd_sel = 'input[type="password"], input[name="Passwd"]'
+            challenge_texts = [
+                "Verify it's you", "Confirm it's you",
+                "This extra step", "Get a verification code",
+                "Check your phone", "Try another way",
+            ]
+            for ct in challenge_texts:
+                try:
+                    if await page.locator(f"text='{ct}'").first.is_visible(timeout=1500):
+                        raise Exception(
+                            f"Google security challenge detected: '{ct}'. "
+                            "Use the manual login in a real browser once."
+                        )
+                except Exception as ce:
+                    if "security challenge" in str(ce):
+                        raise
+            await page.wait_for_selector(pwd_sel, timeout=20_000)
+            await page.fill(pwd_sel, password)
+            self.log("✅ Password filled", batch_id=batch_id)
+            await page.keyboard.press("Enter")
+            await page.wait_for_timeout(5000)
+        except Exception as e:
+            raise Exception(f"Google password step failed: {e}")
+
+        # Post-login prompts
+        for btn_text in ["Stay signed in", "Yes", "Continue", "Not now", "Remind me later"]:
+            try:
+                btn = page.locator(f"button:has-text('{btn_text}')").first
+                if await btn.is_visible(timeout=2000):
+                    await btn.click()
+                    self.log(f"Clicked post-login prompt: '{btn_text}'", batch_id=batch_id)
+                    await page.wait_for_timeout(2000)
+                    break
+            except Exception:
+                pass
+
+        final_url = page.url
+        self.log(f"Post-login URL: {final_url}", batch_id=batch_id)
+
+        if "accounts.google.com/signin" in final_url and "challenge" not in final_url:
+            raise Exception(
+                "Still on Google sign-in page after password attempt. "
+                "The password may be wrong, or a security challenge is blocking login. "
+                "Try manual login in a real browser and then reuse the profile."
+            )
+
+        self.log("✅ Password login successful", batch_id=batch_id)
 
     # =========================================================================
     # Helper: perform Google login (once)
