@@ -96,18 +96,9 @@ DISQUALIFIED_KEYWORDS = [
 ]
 
 
-def _detect_survey_outcome(result) -> str:
-    try:
-        combined = str(result).lower()
-        if hasattr(result, "history") and result.history:
-            combined += " " + " ".join(str(h) for h in result.history[-5:]).lower()
-        if any(kw in combined for kw in DISQUALIFIED_KEYWORDS):
-            return STATUS_FAILED
-        if any(kw in combined for kw in COMPLETE_KEYWORDS):
-            return STATUS_COMPLETE
-        return STATUS_ERROR
-    except Exception:
-        return STATUS_ERROR
+
+
+
 
 
 def run_async(coro):
@@ -787,24 +778,151 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
     # Core async logic — persistent Chrome profile
     # =========================================================================
 
+    async def _detect_survey_modal(self, page, batch_id: str) -> bool:
+        """
+        Checks whether a survey modal/dialog has appeared on the current page
+        after clicking a survey card.
+
+        TopSurveys opens qualification questions and survey entry points as
+        modal overlays without changing the URL or opening a new tab.
+
+        Returns True if a modal is detected, False otherwise.
+        """
+        modal_selectors = [
+            "[role='dialog']",
+            "[role='alertdialog']",
+            ".modal",
+            "[class*='modal']",
+            "[class*='dialog']",
+            "[class*='qualification']",
+            "[class*='Qualification']",
+            "[class*='overlay']",
+            "[class*='popup']",
+            "[class*='Popup']",
+            # TopSurveys specific — qualification question container
+            "div.p-dialog",
+            "div.p-dialog-content",
+            ".p-dialog-mask",
+        ]
+
+        for ms in modal_selectors:
+            try:
+                loc = page.locator(ms).first
+                if await loc.is_visible(timeout=2000):
+                    self.log(
+                        f"✅ Survey opened as MODAL overlay: {ms}",
+                        batch_id=batch_id,
+                    )
+                    return True
+            except Exception:
+                pass
+
+        # Secondary check: look for survey question content keywords
+        # that would appear inside a modal (input fields, qualification text)
+        content_selectors = [
+            "text=Just a few questions before the survey",
+            "text=Qualification",
+            "text=household earns",
+            "text=per year",
+            "input[type='number']",
+            "input[placeholder='Enter a number']",
+            "[class*='qualification'] input",
+        ]
+
+        for cs in content_selectors:
+            try:
+                loc = page.locator(cs).first
+                if await loc.is_visible(timeout=2000):
+                    self.log(
+                        f"✅ Survey qualification content detected: {cs}",
+                        batch_id=batch_id,
+                    )
+                    return True
+            except Exception:
+                pass
+
+        return False
+
+    # ─────────────────────────────────────────────────────────────────────────────
+    # NEW METHOD — add this to the class
+    # ─────────────────────────────────────────────────────────────────────────────
+    async def _dismiss_abandonment_modal(self, page, batch_id: str) -> bool:
+        """Dismiss TopSurveys' 'What happened?' recovery modal if present."""
+        try:
+            title = page.locator("text='What happened?'").first
+            if not await title.is_visible(timeout=3000):
+                return False
+
+            self.log("⚠️ 'What happened?' modal detected — dismissing...", batch_id=batch_id)
+
+            # Option 1: X close button
+            close_btn = page.locator(
+                "button.p-dialog-header-close, button[aria-label='Close'], .p-dialog-header button"
+            ).first
+            if await close_btn.is_visible(timeout=2000):
+                await close_btn.click()
+                self.log("✅ Closed modal via X button", batch_id=batch_id)
+                await asyncio.sleep(2)
+                return True
+
+            # Option 2: pick "Other" then Submit
+            other = page.locator("text='Other'").first
+            if await other.is_visible(timeout=2000):
+                await other.click()
+                await asyncio.sleep(0.5)
+                submit = page.locator("button:has-text('Submit')").first
+                if await submit.is_visible(timeout=2000):
+                    await submit.click()
+                    self.log("✅ Dismissed modal via Other + Submit", batch_id=batch_id)
+                    await asyncio.sleep(2)
+                    return True
+
+            # Option 3: any visible dismiss/cancel button
+            for txt in ["Skip", "Cancel", "No thanks", "Close"]:
+                try:
+                    btn = page.locator(f"button:has-text('{txt}')").first
+                    if await btn.is_visible(timeout=1000):
+                        await btn.click()
+                        self.log(f"✅ Dismissed modal via '{txt}'", batch_id=batch_id)
+                        await asyncio.sleep(2)
+                        return True
+                except Exception:
+                    pass
+
+        except Exception as e:
+            self.log(f"_dismiss_abandonment_modal error: {e}", "WARNING", batch_id=batch_id)
+
+        return False
+
+
+    # ─────────────────────────────────────────────────────────────────────────────
+    # UPDATED METHOD — replaces existing _open_survey_card
+    # ─────────────────────────────────────────────────────────────────────────────
     async def _open_survey_card(self, page, batch_id):
         """
         Reliably opens a survey card on TopSurveys using the exact CSS selectors
         confirmed to work via Automa workflow inspection.
 
-        Flow (mirrors the Automa click-survey workflow):
-          1. Click the "Surveys" left-nav item
-          2. Wait for survey list to render
-          3. Click the first survey card via .p-ripple-wrapper
-          4. Fallback: click the reward amount label (.list-item:nth-child(1) .reward-amount)
-          5. Detect open: new tab → return new page; same-tab URL change → return page
+        Flow:
+        0. Dismiss any 'What happened?' abandonment modal first.
+        1. Click the "Surveys" left-nav item.
+        2. Wait for survey list to render.
+        3. Click the first survey card via .p-ripple-wrapper.
+        4. Fallback: click the reward amount label.
+        5. Detect open: new tab → return new page; same-tab URL change → return page;
+        modal/dialog overlay → return page.
         """
         self.log("🔍 Opening survey using confirmed Automa selectors...", batch_id=batch_id)
 
-        # ── STEP A: Navigate to Surveys tab ───────────────────────────────────
-        # Automa uses: div:nth-child(2) > .p-nav-wrapper > .p-nav-item
+        # ── STEP 0: Dismiss abandonment modal if present ──────────────────────────
+        dismissed = await self._dismiss_abandonment_modal(page, batch_id)
+        if dismissed:
+            self.log("Abandonment modal cleared — proceeding to survey list", batch_id=batch_id)
+            await asyncio.sleep(1)
+
+        # ── STEP A: Navigate to Surveys tab ──────────────────────────────────────
         surveys_nav_selectors = [
-            "div:nth-child(2) > .p-nav-wrapper > .p-nav-item",   # exact Automa selector
+            "div:nth-child(2) > .p-nav-wrapper > .p-nav-item",
             ".p-nav-item:has-text('Surveys')",
             "a:has-text('Surveys')",
             "nav a:has-text('Surveys')",
@@ -827,18 +945,18 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
         if not nav_clicked:
             self.log("⚠️ Could not click Surveys nav — trying from current page", "WARNING", batch_id=batch_id)
 
-        # ── STEP B: Wait for survey list ──────────────────────────────────────
+        # ── STEP A1: Check again for abandonment modal after nav click ────────────
+        await self._dismiss_abandonment_modal(page, batch_id)
+
+        # ── STEP B: Wait for survey list ──────────────────────────────────────────
         await asyncio.sleep(2)
         self.log(f"Current URL after nav: {page.url}", batch_id=batch_id)
 
-        # ── STEP C: Click the first survey card ───────────────────────────────
-        # Automa uses two selectors in sequence:
-        #   1st click: div.p-ripple-wrapper          (the card wrapper)
-        #   2nd click: .list-item:nth-child(1) .reward-amount  (the $ amount label)
+        # ── STEP C: Click the first survey card ───────────────────────────────────
         card_selectors = [
-            "div.p-ripple-wrapper",                              # Automa primary
-            ".list-item:nth-child(1) .reward-amount",           # Automa fallback
-            ".list-item:nth-child(1)",                          # full first list item
+            "div.p-ripple-wrapper",
+            ".list-item:nth-child(1) .reward-amount",
+            ".list-item:nth-child(1)",
             "[class*='list-item']:nth-child(1)",
             "[class*='reward-amount']",
         ]
@@ -850,17 +968,27 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
                     self.log(f"  Selector not visible: {sel}", batch_id=batch_id)
                     continue
 
-                self.log(f"🖱️ Clicking card (attempt {attempt+1}): {sel}", batch_id=batch_id)
+                self.log(f"🖱️ Clicking card (attempt {attempt + 1}): {sel}", batch_id=batch_id)
                 await loc.scroll_into_view_if_needed()
                 await asyncio.sleep(1)
 
                 prev_url = page.url
-
-                # JS-forced click (bypasses pointer-events overlays)
                 await page.evaluate("(el) => el.click()", await loc.element_handle())
                 self.log(f"URL after click: {page.url}", batch_id=batch_id)
 
-                # ── Detect: new tab ──────────────────────────────────────────
+                # ── Check: abandonment modal appeared instead of survey ───────────
+                await asyncio.sleep(1)
+                if await page.locator("text='What happened?'").first.is_visible(timeout=2000):
+                    self.log(
+                        "⚠️ Abandonment modal appeared after card click — dismissing and retrying",
+                        "WARNING", batch_id=batch_id,
+                    )
+                    await self._dismiss_abandonment_modal(page, batch_id)
+                    await asyncio.sleep(2)
+                    # Re-try with next selector after dismissal
+                    continue
+
+                # ── Detect: new tab ───────────────────────────────────────────────
                 try:
                     new_page = await page.context.wait_for_event("page", timeout=8000)
                     await new_page.wait_for_load_state("domcontentloaded")
@@ -869,18 +997,23 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
                 except Exception:
                     pass
 
-                # ── Detect: same-tab URL change ──────────────────────────────
+                # ── Detect: same-tab URL change ───────────────────────────────────
                 await asyncio.sleep(5)
                 if page.url != prev_url:
                     self.log(f"✅ Survey opened in SAME TAB: {page.url}", batch_id=batch_id)
                     return page
 
-                # ── Detect: iframe with survey content ───────────────────────
+                # ── Detect: iframe with survey content ────────────────────────────
                 for frame in page.frames:
                     frame_url = frame.url.lower()
                     if frame_url and frame_url not in ("about:blank", "") and "topsurveys.app" not in frame_url:
                         self.log(f"✅ Survey iframe detected: {frame.url}", batch_id=batch_id)
                         return page
+
+                # ── Detect: modal/dialog overlay (legitimate survey modal) ─────────
+                modal_opened = await self._detect_survey_modal(page, batch_id)
+                if modal_opened:
+                    return page
 
                 self.log(f"❌ Selector {sel} did not open survey, trying next...", batch_id=batch_id)
 
@@ -892,6 +1025,60 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
             "Check screenshots — the page structure may have changed."
         )
 
+
+    # ─────────────────────────────────────────────────────────────────────────────
+    # UPDATED METHOD — replaces the standalone _detect_survey_outcome function
+    # (was incorrectly defined outside the class with a `self` param)
+    # Move inside the class and call as self._detect_survey_outcome(result)
+    # ─────────────────────────────────────────────────────────────────────────────
+
+        
+    def _detect_survey_outcome(self, result) -> str:
+        try:
+            combined = str(result).lower()
+
+            agent_brain_dq_phrases = [
+                "disqualified - i was disqualified",
+                "disqualified - the survey",
+                "evaluation_previous_goal=\"disqualified",
+                "evaluation_previous_goal='disqualified",
+                "i was disqualified from",
+                "disqualified from the previous survey",
+                "disqualified from this survey",
+                "screen out",
+                "screened out",
+            ]
+            agent_brain_complete_phrases = [
+                "evaluation_previous_goal=\"success",
+                "evaluation_previous_goal='success",
+                "success - i successfully completed",
+                "survey is complete",
+                "survey has been completed",
+                "successfully submitted",
+                "successfully completed the survey",
+            ]
+
+            if hasattr(result, "history") and result.history:
+                history_str = " ".join(str(h) for h in result.history[-5:]).lower()
+                combined += " " + history_str
+
+                for phrase in agent_brain_dq_phrases:
+                    if phrase in combined:
+                        return STATUS_FAILED
+
+                for phrase in agent_brain_complete_phrases:
+                    if phrase in combined:
+                        return STATUS_COMPLETE
+
+            if any(kw in combined for kw in DISQUALIFIED_KEYWORDS):
+                return STATUS_FAILED
+            if any(kw in combined for kw in COMPLETE_KEYWORDS):
+                return STATUS_COMPLETE
+
+            return STATUS_ERROR
+
+        except Exception:
+            return STATUS_ERROR
 
     async def _do_direct_answering(
         self, acct, site, prompt, start_url, num_surveys, model_choice,
@@ -1201,17 +1388,30 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
 ════════════════════════════════════════════════
 CONTEXT — YOU ARE ALREADY INSIDE A SURVEY
 ════════════════════════════════════════════════
-A survey has already been opened for you.
+A survey or qualification modal has already been opened for you.
+The page may show a modal/dialog overlay with qualification questions
+(e.g. household income, age, demographics, webcam ownership) BEFORE
+the main survey begins.
 
 DO NOT try to go back to the dashboard.
 DO NOT click another survey card.
+DO NOT close any modal or dialog that appears.
 DO NOT navigate away from the current survey page.
+DO NOT keep trying if you have been disqualified — stop immediately.
 
 ════════════════════════════════════════════════
-YOUR TASK — ANSWER THE SURVEY
+YOUR TASK — ANSWER ALL QUESTIONS
 ════════════════════════════════════════════════
-Focus ONLY on answering the survey questions on the current page.
+PHASE 1 — QUALIFICATION MODAL (if present):
+- A dialog/modal may appear first with pre-survey questions.
+- Answer all qualification questions honestly as the persona.
+- For numeric inputs (income, age etc): type the number directly,
+  do not use currency symbols.
+- After answering each question click Next, Continue, or Submit
+  within the modal.
+- Do NOT close the modal — complete it fully.
 
+PHASE 2 — MAIN SURVEY:
 - Multiple-choice / radio: pick the option that best matches the persona.
 - Checkboxes: select all that apply for the persona.
 - Dropdowns: choose the matching option.
@@ -1223,14 +1423,18 @@ Focus ONLY on answering the survey questions on the current page.
 - Never contradict yourself across different survey pages.
 
 ════════════════════════════════════════════════
-FINISH CONDITIONS
+FINISH CONDITIONS — STOP IMMEDIATELY WHEN ANY OF THESE OCCUR
 ════════════════════════════════════════════════
-- "Thank You" / completion page → report SUCCESS.
-- Disqualification / "screen out" / "not eligible" page → report DISQUALIFIED.
-- Dead end with no more questions → report ERROR.
+- "Thank You" / completion page → report SUCCESS and STOP.
+- Disqualification / "screen out" / "not eligible" / "sorry" page
+  → report DISQUALIFIED and STOP. Do NOT navigate further.
+- Returned to the dashboard/survey list after a survey attempt
+  → report DISQUALIFIED and STOP. Do NOT click another survey.
+- Dead end with no more questions and no completion message → report ERROR and STOP.
 """,
                         llm=llm,
                         browser=bu_browser,
+                        max_actions_per_step=5,
                     )
 
                     dashboard_url = page.url
@@ -1244,12 +1448,17 @@ FINISH CONDITIONS
                         "[class*='question']",
                         "[class*='Question']",
                         "textarea",
+                        # Qualification modal indicators
+                        "[role='dialog']",
+                        "[class*='modal']",
+                        "[class*='qualification']",
+                        "text=Just a few questions before the survey",
                     ]
 
                     async def _run_with_midshot():
-                        run_task = asyncio.create_task(agent.run())
+                        run_task = asyncio.create_task(agent.run(max_steps=50))
                         mid_taken = False
-                        for _ in range(80):
+                        for _ in range(120):  # max 6 minutes polling
                             await asyncio.sleep(3)
                             if not mid_taken:
                                 try:
@@ -1267,7 +1476,9 @@ FINISH CONDITIONS
 
                                     if url_changed or question_visible:
                                         await asyncio.sleep(3)
-                                        await self._screenshot(page, "03_mid_survey", batch_id, survey_num)
+                                        await self._screenshot(
+                                            page, "03_mid_survey", batch_id, survey_num
+                                        )
                                         mid_taken = True
                                         self.log(
                                             f"📸 Mid-survey shot taken "
@@ -1280,8 +1491,13 @@ FINISH CONDITIONS
                                 break
                         if not mid_taken:
                             try:
-                                await self._screenshot(page, "03_mid_survey", batch_id, survey_num)
-                                self.log("📸 Mid-survey shot taken (fallback)", batch_id=batch_id)
+                                await self._screenshot(
+                                    page, "03_mid_survey", batch_id, survey_num
+                                )
+                                self.log(
+                                    "📸 Mid-survey shot taken (fallback)",
+                                    batch_id=batch_id,
+                                )
                             except Exception:
                                 pass
                         return await run_task
@@ -1293,7 +1509,7 @@ FINISH CONDITIONS
                         for idx, h in enumerate(result.history[-5:]):
                             self.log(f"  agent[-{5-idx}]: {str(h)[:200]}", batch_id=batch_id)
 
-                    survey_status = _detect_survey_outcome(result)
+                    survey_status = self._detect_survey_outcome(result)
                     self.log(f"Survey {survey_num} → {survey_status}", batch_id=batch_id)
 
                 except Exception as se:
