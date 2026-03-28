@@ -291,21 +291,23 @@ class GenerateManualWorkflowsPage:
             logger.error(f"_get_all_cookie_records: {e}")
             return []
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # Screenshot helper — ONLY 4 named checkpoints are ever saved
-    # ─────────────────────────────────────────────────────────────────────────
+    
+    # UPDATE — replace the _ALLOWED_SCREENSHOTS and _SCREENSHOT_LABELS class vars
+    # ─────────────────────────────────────────────────────────────────────────────
     _ALLOWED_SCREENSHOTS = frozenset({
-        "01_before_login",
-        "02_after_login",
-        "03_mid_survey",
-        "04_survey_complete",
+        "01_survey_tab_open",
+        "02_qualification_start",
+        "03_qualification_done",
+        "04_survey_started",
+        "05_survey_complete",
     })
 
     _SCREENSHOT_LABELS = {
-        "01_before_login":    "1️⃣ Before Login",
-        "02_after_login":     "2️⃣ After Login",
-        "03_mid_survey":      "3️⃣ Mid Survey",
-        "04_survey_complete": "4️⃣ Survey Complete",
+        "01_survey_tab_open":      "1️⃣ Survey Tab Open",
+        "02_qualification_start":  "2️⃣ Qualification Started",
+        "03_qualification_done":   "3️⃣ Qualification Done",
+        "04_survey_started":       "4️⃣ Survey Started",
+        "05_survey_complete":      "5️⃣ Survey Complete",
     }
 
     async def _screenshot(self, page, label: str, batch_id: str,
@@ -414,6 +416,68 @@ class GenerateManualWorkflowsPage:
     # ─────────────────────────────────────────────────────────────────────────
     # Batch details display
     # ─────────────────────────────────────────────────────────────────────────
+
+    async def _wait_for_surveys_to_load(
+        self,
+        page,
+        batch_id: str,
+        max_reloads: int = 5,
+        reload_wait: float = 6.0,
+        poll_interval: float = 2.0,
+        max_polls_per_load: int = 10,
+    ) -> bool:
+        selectors = [
+            "div.p-ripple-wrapper",
+            ".list-item .reward-amount",
+            "[class*='list-item']",
+            "[class*='reward-amount']",
+            "text=USD",
+            ".survey-card",
+            "button:has-text('Start')",
+        ]
+
+        for reload_attempt in range(max_reloads):
+            self.log(
+                f"🔄 Waiting for surveys — attempt {reload_attempt + 1}/{max_reloads}",
+                batch_id=batch_id,
+            )
+
+            for poll in range(max_polls_per_load):
+                for sel in selectors:
+                    try:
+                        if await page.locator(sel).first.is_visible(timeout=2000):
+                            self.log(f"✅ Surveys visible via: {sel}", batch_id=batch_id)
+                            return True
+                    except Exception:
+                        pass
+                self.log(f"  ⏳ Poll {poll + 1}/{max_polls_per_load} — not yet visible", batch_id=batch_id)
+                await asyncio.sleep(poll_interval)
+
+            if reload_attempt < max_reloads - 1:
+                self.log(f"↩️ Reloading page...", batch_id=batch_id)
+                try:
+                    await page.reload(wait_until="domcontentloaded", timeout=30_000)
+                    await asyncio.sleep(reload_wait)
+                    # Re-click surveys nav after reload
+                    for nav_sel in [
+                        "div:nth-child(2) > .p-nav-wrapper > .p-nav-item",
+                        ".p-nav-item:has-text('Surveys')",
+                        "a:has-text('Surveys')",
+                    ]:
+                        try:
+                            loc = page.locator(nav_sel).first
+                            if await loc.is_visible(timeout=3000):
+                                await loc.click()
+                                await asyncio.sleep(3)
+                                break
+                        except Exception:
+                            pass
+                except Exception as e:
+                    self.log(f"Reload error: {e}", "WARNING", batch_id=batch_id)
+                    await asyncio.sleep(reload_wait)
+
+        self.log("⚠️ Surveys never loaded after all attempts", "WARNING", batch_id=batch_id)
+        return False
     def _display_batch_details(self, batch_id: str):
         batch = st.session_state.batches.get(batch_id)
         if not batch:
@@ -1080,6 +1144,77 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
         except Exception:
             return STATUS_ERROR
 
+    # ─────────────────────────────────────────────────────────────────────────────
+    # NEW METHOD — add to class
+    # Detects and clicks the "Participate" / "Get Started" qualification bridge modal
+    # ─────────────────────────────────────────────────────────────────────────────
+    async def _click_participate_if_present(self, page, batch_id: str) -> bool:
+        """
+        TopSurveys shows a 'You've qualified for this survey!' modal with a
+        'Participate' button after the qualification questions pass.
+        This must be clicked before the actual survey begins.
+        Returns True if the button was found and clicked.
+        """
+        qualified_texts = [
+            "text=You've qualified for this survey!",
+            "text=You've qualified",
+            "text=qualified for this survey",
+            "text=Click below to get started",
+        ]
+
+        qualified_found = False
+        for sel in qualified_texts:
+            try:
+                if await page.locator(sel).first.is_visible(timeout=3000):
+                    qualified_found = True
+                    self.log(f"✅ Qualification success modal detected: {sel}", batch_id=batch_id)
+                    break
+            except Exception:
+                pass
+
+        if not qualified_found:
+            return False
+
+        # Take screenshot 03 — the "qualified" bridge modal
+        await self._screenshot(page, "03_mid_survey", batch_id)
+
+        # Click Participate / Get Started / Begin
+        participate_selectors = [
+            "button:has-text('Participate')",
+            "a:has-text('Participate')",
+            "button:has-text('Get Started')",
+            "button:has-text('Begin Survey')",
+            "button:has-text('Start Survey')",
+            "button:has-text('Start')",
+            "[class*='participate']",
+            # The green button at the bottom of the modal
+            ".p-dialog button:last-of-type",
+            "[role='dialog'] button:last-of-type",
+        ]
+
+        for sel in participate_selectors:
+            try:
+                btn = page.locator(sel).first
+                if await btn.is_visible(timeout=2000):
+                    await btn.scroll_into_view_if_needed()
+                    await asyncio.sleep(0.5)
+                    await page.evaluate("(el) => el.click()", await btn.element_handle())
+                    self.log(f"✅ Clicked Participate button: {sel}", batch_id=batch_id)
+                    await asyncio.sleep(4)  # wait for survey to load
+
+                    # Take screenshot 04 — participation just started
+                    await self._screenshot(page, "04_participation_start", batch_id)
+                    return True
+            except Exception as e:
+                self.log(f"  Participate selector failed [{sel}]: {e}", "WARNING", batch_id=batch_id)
+
+        self.log("⚠️ Qualified modal found but could not click Participate", "WARNING", batch_id=batch_id)
+        return False
+
+    # ─────────────────────────────────────────────────────────────────────────────
+    # UPDATED METHOD — replaces existing _do_direct_answering survey loop (STEP 7)
+    # Full method provided — only the survey loop internals change
+    # ─────────────────────────────────────────────────────────────────────────────
     async def _do_direct_answering(
         self, acct, site, prompt, start_url, num_surveys, model_choice,
         google_email: str, google_password: str, proxy_cfg: Optional[Dict],
@@ -1162,7 +1297,6 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
             page = context.pages[0] if context.pages else await context.new_page()
             self.log("✅ Connected to Chrome via CDP", batch_id=batch_id)
 
-            # Wait for browser to be usable — skip readyState check on blank/chrome:// tabs
             try:
                 await page.wait_for_function(
                     "() => document.readyState === 'complete'", timeout=10_000
@@ -1177,13 +1311,9 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
 
             # ------------------------------------------------------------------
             # STEP 3 – Verify / perform Google login
-            # SCREENSHOT 1: before_login — captured right before we check login state
             # ------------------------------------------------------------------
-            await self._screenshot(page, "01_before_login", batch_id)
-
             self.log("Navigating to Google to verify login state...", batch_id=batch_id)
             MAX_RETRIES = 3
-            google_nav_ok = False
             for attempt in range(MAX_RETRIES):
                 try:
                     await page.goto(
@@ -1192,15 +1322,12 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
                         timeout=45_000,
                     )
                     await asyncio.sleep(3)
-                    google_nav_ok = True
                     break
                 except Exception as e:
                     if attempt == MAX_RETRIES - 1:
                         raise
-                    self.log(
-                        f"Google nav attempt {attempt+1} failed: {e}, retrying...",
-                        "WARNING", batch_id=batch_id,
-                    )
+                    self.log(f"Google nav attempt {attempt+1} failed: {e}, retrying...",
+                            "WARNING", batch_id=batch_id)
                     await asyncio.sleep(5)
 
             current_url = page.url
@@ -1221,16 +1348,11 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
                     )
                 await self._perform_google_login(page, google_email, google_password, batch_id)
             else:
-                self.log(
-                    f"✅ Already logged into Google via profile (landed on: {current_url})",
-                    batch_id=batch_id,
-                )
-
-            # SCREENSHOT 2: after_login — confirmed logged in
-            await self._screenshot(page, "02_after_login", batch_id)
+                self.log(f"✅ Already logged into Google via profile (landed on: {current_url})",
+                        batch_id=batch_id)
 
             # ------------------------------------------------------------------
-            # STEP 4 – Navigate to survey site and click Continue with Google
+            # STEP 4 – Navigate to survey site
             # ------------------------------------------------------------------
             status_ph.info("🌐 Navigating to survey site...")
             self.log(f"→ Navigating to: {start_url}", batch_id=batch_id)
@@ -1277,12 +1399,14 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
             self.log(f"Post-OAuth URL: {page.url}", batch_id=batch_id)
 
             # ------------------------------------------------------------------
-            # STEP 5 – Navigate to surveys tab, reload until surveys appear
+            # STEP 5 – Navigate to surveys tab, then wait until surveys appear
             # ------------------------------------------------------------------
-            status_ph.info("📋 Finding surveys...")
+            status_ph.info("📋 Finding surveys tab...")
 
             surveys_tab_clicked = False
             for sel in [
+                "div:nth-child(2) > .p-nav-wrapper > .p-nav-item",
+                ".p-nav-item:has-text('Surveys')",
                 "a:has-text('Surveys')",
                 "nav a:has-text('Surveys')",
                 "li a:has-text('Surveys')",
@@ -1300,39 +1424,28 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
                     pass
 
             if not surveys_tab_clicked:
-                self.log("⚠️ Could not click Surveys tab — staying on Earn/dashboard page",
+                self.log("⚠️ Could not click Surveys tab — staying on current page",
                         "WARNING", batch_id=batch_id)
 
-            survey_item_selectors = [
-                "text=USD",
-                ":text-matches('\\$\\s*\\d+\\.\\d+\\s*USD')",
-                ".survey-card", ".survey-item",
-                "[class*='survey']",
-                "button:has-text('Start')", "a:has-text('Start')",
-                "button:has-text('Take Survey')", "a:has-text('Take Survey')",
-                "button:has-text('Begin')", "text='Start Survey'",
-            ]
-            surveys_found = False
-            for reload_attempt in range(1, 4):
-                for sel in survey_item_selectors:
-                    try:
-                        loc = page.locator(sel).first
-                        if await loc.is_visible(timeout=2000):
-                            surveys_found = True
-                            self.log(f"✅ Survey cards detected via: {sel}", batch_id=batch_id)
-                            break
-                    except Exception:
-                        pass
-                if surveys_found:
-                    self.log(f"✅ Surveys visible (attempt {reload_attempt})", batch_id=batch_id)
-                    break
-                self.log(f"No surveys yet — reload {reload_attempt}/3", "WARNING", batch_id=batch_id)
-                await page.reload(wait_until="domcontentloaded")
-                await page.wait_for_timeout(5000)
+            # Wait robustly until survey cards actually appear
+            status_ph.info("⏳ Waiting for surveys to load...")
+            surveys_found = await asyncio.wait_for(
+                self._wait_for_surveys_to_load(
+                    page,
+                    batch_id,
+                    max_reloads=5,
+                    reload_wait=6.0,
+                    poll_interval=2.0,
+                    max_polls_per_load=10,
+                ),
+                timeout=180.0,
+            )
 
             if not surveys_found:
-                self.log("⚠️ No surveys found after 3 reloads — proceeding anyway",
-                        "WARNING", batch_id=batch_id)
+                raise Exception("Surveys never loaded after exhausting all reload attempts.")
+
+            # ── SCREENSHOT 1: Survey tab open and cards visible ───────────────
+            await self._screenshot(page, "01_survey_tab_open", batch_id)
 
             # ------------------------------------------------------------------
             # STEP 6 – LLM setup
@@ -1363,146 +1476,159 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
                 result_snippet = ""
 
                 try:
-                    # ----------------------------------------------------------
-                    # 🔥 OPEN SURVEY BEFORE AGENT TAKES OVER
-                    # ----------------------------------------------------------
+                    # ── Open survey card ─────────────────────────────────────
                     try:
-                        survey_page = await self._open_survey_card(page, batch_id)
-
-                        # If a new tab opened, switch to it
+                        survey_page = await asyncio.wait_for(
+                            self._open_survey_card(page, batch_id),
+                            timeout=60.0,
+                        )
                         if survey_page != page:
                             page = survey_page
                             context = page.context
-
                         self.log(f"🌐 Active survey URL: {page.url}", batch_id=batch_id)
+                    except asyncio.TimeoutError:
+                        raise Exception("Timed out opening survey card after 60s")
 
-                    except Exception as e:
-                        self.log(f"❌ Could not open survey: {e}", "ERROR", batch_id=batch_id)
-                        raise
+                    # ── SCREENSHOT 2: Qualification modal open ────────────────
+                    await asyncio.sleep(2)
+                    await self._screenshot(page, "02_qualification_start", batch_id, survey_num)
 
+                    # ── Agent: qualification phase only ───────────────────────
                     bu_browser = Browser(config=BrowserConfig(cdp_url=ws_url, headless=False))
-                    agent = Agent(
+
+                    qual_agent = Agent(
                         task=f"""
-{persona}
+    {persona}
 
-════════════════════════════════════════════════
-CONTEXT — YOU ARE ALREADY INSIDE A SURVEY
-════════════════════════════════════════════════
-A survey or qualification modal has already been opened for you.
-The page may show a modal/dialog overlay with qualification questions
-(e.g. household income, age, demographics, webcam ownership) BEFORE
-the main survey begins.
+    ════════════════════════════════════
+    QUALIFICATION PHASE ONLY
+    ════════════════════════════════════
+    A qualification modal is open with short screening questions.
 
-DO NOT try to go back to the dashboard.
-DO NOT click another survey card.
-DO NOT close any modal or dialog that appears.
-DO NOT navigate away from the current survey page.
-DO NOT keep trying if you have been disqualified — stop immediately.
+    - Answer every question honestly as the persona.
+    - Numeric fields: type number only, no symbols.
+    - Click Next / Continue after each question.
 
-════════════════════════════════════════════════
-YOUR TASK — ANSWER ALL QUESTIONS
-════════════════════════════════════════════════
-PHASE 1 — QUALIFICATION MODAL (if present):
-- A dialog/modal may appear first with pre-survey questions.
-- Answer all qualification questions honestly as the persona.
-- For numeric inputs (income, age etc): type the number directly,
-  do not use currency symbols.
-- After answering each question click Next, Continue, or Submit
-  within the modal.
-- Do NOT close the modal — complete it fully.
+    STOP immediately when ONE of these happens:
+    a) Qualification modal closes and a full survey loads → report QUALIFIED
+    b) You see disqualification / "sorry" / "not eligible" → report DISQUALIFIED
+    c) You are returned to the survey list → report DISQUALIFIED
 
-PHASE 2 — MAIN SURVEY:
-- Multiple-choice / radio: pick the option that best matches the persona.
-- Checkboxes: select all that apply for the persona.
-- Dropdowns: choose the matching option.
-- Free-text / open-ended: write 1–2 natural sentences in the persona's voice.
-- Never leave a required field blank.
-- After each page click the "Next", "Continue", or "Submit" button.
-- Pause 2–4 seconds between actions (human-like pacing).
-- Follow attention-check instructions exactly.
-- Never contradict yourself across different survey pages.
-
-════════════════════════════════════════════════
-FINISH CONDITIONS — STOP IMMEDIATELY WHEN ANY OF THESE OCCUR
-════════════════════════════════════════════════
-- "Thank You" / completion page → report SUCCESS and STOP.
-- Disqualification / "screen out" / "not eligible" / "sorry" page
-  → report DISQUALIFIED and STOP. Do NOT navigate further.
-- Returned to the dashboard/survey list after a survey attempt
-  → report DISQUALIFIED and STOP. Do NOT click another survey.
-- Dead end with no more questions and no completion message → report ERROR and STOP.
-""",
+    Do NOT start answering main survey questions.
+    """,
                         llm=llm,
                         browser=bu_browser,
                         max_actions_per_step=5,
                     )
 
-                    dashboard_url = page.url
+                    try:
+                        qual_result = await asyncio.wait_for(
+                            qual_agent.run(max_steps=20),
+                            timeout=180.0,
+                        )
+                    except asyncio.TimeoutError:
+                        raise Exception("Qualification timed out after 3 minutes")
 
-                    survey_in_progress_selectors = [
+                    qual_outcome = self._detect_survey_outcome(qual_result)
+                    self.log(f"Qualification result: {qual_outcome}", batch_id=batch_id)
+
+                    # ── SCREENSHOT 3: Qualification done (pass or fail) ───────
+                    await asyncio.sleep(2)
+                    await self._screenshot(page, "03_qualification_done", batch_id, survey_num)
+
+                    # ── If failed — record and move on ────────────────────────
+                    if qual_outcome == STATUS_FAILED:
+                        self.log("❌ Disqualified — stopping survey here", batch_id=batch_id)
+                        survey_status  = STATUS_FAILED
+                        result_snippet = "Disqualified during qualification"
+
+                        st.session_state.survey_progress[-1] = {
+                            "num": survey_num, "status": survey_status, "note": result_snippet,
+                        }
+                        failed_count += 1
+                        survey_details.append({
+                            "survey_number": survey_num,
+                            "outcome":        survey_status,
+                            "output_snippet": result_snippet,
+                        })
+                        self._record_survey_attempt(
+                            account_id=acct["account_id"], site_id=site["site_id"],
+                            survey_name=f"Survey_{survey_num}_{batch_id}",
+                            batch_id=batch_id, status=survey_status,
+                            notes=result_snippet[:300],
+                        )
+                        if i < num_surveys - 1:
+                            self.log("⏳ Waiting for survey list before next survey...", batch_id=batch_id)
+                            await asyncio.sleep(3)
+                            await self._wait_for_surveys_to_load(page, batch_id, max_reloads=3)
+                        continue
+
+                    # ── Passed — wait for first survey question to appear ─────
+                    self.log("✅ Qualified — waiting for main survey to load...", batch_id=batch_id)
+                    main_survey_selectors = [
                         "input[type='radio']",
                         "input[type='checkbox']",
+                        "textarea",
                         "button:has-text('Next')",
                         "button:has-text('Continue')",
-                        "button:has-text('Submit')",
                         "[class*='question']",
                         "[class*='Question']",
-                        "textarea",
-                        # Qualification modal indicators
-                        "[role='dialog']",
-                        "[class*='modal']",
-                        "[class*='qualification']",
-                        "text=Just a few questions before the survey",
                     ]
-
-                    async def _run_with_midshot():
-                        run_task = asyncio.create_task(agent.run(max_steps=50))
-                        mid_taken = False
-                        for _ in range(120):  # max 6 minutes polling
-                            await asyncio.sleep(3)
-                            if not mid_taken:
-                                try:
-                                    current_url = page.url
-                                    url_changed = (current_url != dashboard_url)
-
-                                    question_visible = False
-                                    for sel in survey_in_progress_selectors:
-                                        try:
-                                            if await page.locator(sel).first.is_visible(timeout=500):
-                                                question_visible = True
-                                                break
-                                        except Exception:
-                                            pass
-
-                                    if url_changed or question_visible:
-                                        await asyncio.sleep(3)
-                                        await self._screenshot(
-                                            page, "03_mid_survey", batch_id, survey_num
-                                        )
-                                        mid_taken = True
-                                        self.log(
-                                            f"📸 Mid-survey shot taken "
-                                            f"({'URL changed' if url_changed else 'question visible'})",
-                                            batch_id=batch_id,
-                                        )
-                                except Exception:
-                                    pass
-                            if run_task.done():
-                                break
-                        if not mid_taken:
+                    survey_started = False
+                    for _ in range(15):
+                        for sel in main_survey_selectors:
                             try:
-                                await self._screenshot(
-                                    page, "03_mid_survey", batch_id, survey_num
-                                )
-                                self.log(
-                                    "📸 Mid-survey shot taken (fallback)",
-                                    batch_id=batch_id,
-                                )
+                                if await page.locator(sel).first.is_visible(timeout=1000):
+                                    survey_started = True
+                                    self.log(f"✅ Main survey question visible: {sel}", batch_id=batch_id)
+                                    break
                             except Exception:
                                 pass
-                        return await run_task
+                        if survey_started:
+                            break
+                        await asyncio.sleep(2)
 
-                    result = await _run_with_midshot()
+                    # ── SCREENSHOT 4: First question of actual survey ──────────
+                    await self._screenshot(page, "04_survey_started", batch_id, survey_num)
+
+                    # ── Agent: main survey ────────────────────────────────────
+                    main_agent = Agent(
+                        task=f"""
+    {persona}
+
+    ════════════════════════════════════
+    MAIN SURVEY
+    ════════════════════════════════════
+    You have passed qualification. Answer all survey questions.
+
+    - Radio / multiple choice: pick best match for the persona.
+    - Checkboxes: select all that apply.
+    - Dropdowns: choose matching option.
+    - Free-text: 1–2 natural sentences in the persona's voice.
+    - Never leave required fields blank.
+    - Click Next / Continue / Submit after each page.
+    - Pause 2–4 seconds between actions.
+    - Follow attention checks exactly.
+    - Never contradict yourself.
+
+    STOP when:
+    - "Thank You" / completion page → report SUCCESS
+    - Disqualification page → report DISQUALIFIED
+    - Dead end → report ERROR
+    """,
+                        llm=llm,
+                        browser=bu_browser,
+                        max_actions_per_step=5,
+                    )
+
+                    try:
+                        result = await asyncio.wait_for(
+                            main_agent.run(max_steps=50),
+                            timeout=480.0,
+                        )
+                    except asyncio.TimeoutError:
+                        raise Exception("Main survey timed out after 8 minutes")
+
                     result_snippet = str(result)[:500]
 
                     if hasattr(result, "history") and result.history:
@@ -1517,14 +1643,15 @@ FINISH CONDITIONS — STOP IMMEDIATELY WHEN ANY OF THESE OCCUR
                     survey_status  = STATUS_ERROR
                     result_snippet = str(se)[:300]
 
-                # SCREENSHOT 4: survey_complete
+                # ── SCREENSHOT 5: Final state (complete, failed, or error) ────
                 try:
-                    await self._screenshot(page, "04_survey_complete", batch_id, survey_num)
+                    await self._screenshot(page, "05_survey_complete", batch_id, survey_num)
                 except Exception as sse:
-                    self.log(f"Post-survey screenshot failed: {sse}", "WARNING", batch_id=batch_id)
+                    self.log(f"Final screenshot failed: {sse}", "WARNING", batch_id=batch_id)
 
+                # ── Record result ─────────────────────────────────────────────
                 st.session_state.survey_progress[-1] = {
-                    "num": survey_num, "status": survey_status, "note": result_snippet[:100]
+                    "num": survey_num, "status": survey_status, "note": result_snippet[:100],
                 }
                 if survey_status == STATUS_COMPLETE:  complete_count += 1
                 elif survey_status == STATUS_PASSED:  passed_count   += 1
@@ -1533,14 +1660,21 @@ FINISH CONDITIONS — STOP IMMEDIATELY WHEN ANY OF THESE OCCUR
 
                 survey_details.append({
                     "survey_number": survey_num,
-                    "outcome": survey_status,
+                    "outcome":        survey_status,
                     "output_snippet": result_snippet,
                 })
                 self._record_survey_attempt(
                     account_id=acct["account_id"], site_id=site["site_id"],
                     survey_name=f"Survey_{survey_num}_{batch_id}",
-                    batch_id=batch_id, status=survey_status, notes=result_snippet[:300],
+                    batch_id=batch_id, status=survey_status,
+                    notes=result_snippet[:300],
                 )
+
+                # ── Wait for survey list before next survey ───────────────────
+                if i < num_surveys - 1:
+                    self.log("⏳ Waiting for survey list to reload...", batch_id=batch_id)
+                    await asyncio.sleep(3)
+                    await self._wait_for_surveys_to_load(page, batch_id, max_reloads=3)
 
             # ------------------------------------------------------------------
             # STEP 8 – Stop Chrome session
