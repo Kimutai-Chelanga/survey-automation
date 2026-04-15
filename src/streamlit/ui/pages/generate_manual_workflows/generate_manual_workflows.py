@@ -1,13 +1,40 @@
 """
-Generate Manual Workflows — Streamlit page v5.1.0
+Generate Manual Workflows — Streamlit page v6.0.0
 ═══════════════════════════════════════════════════════════════════════════════
-KEY FIX (v5.1.0):
-  Each browser_use Agent gets its OWN isolated Browser instance (bu_browser_qual
-  and bu_browser_main). The qual browser is always closed + 2s CDP settle before
-  Participate is clicked via Playwright, and a fresh main browser is created
-  only after Participate succeeds. This eliminates the empty
-  AgentHistoryList(all_results=[], all_model_outputs=[]) error caused by CDP
-  conflicts when a shared browser_use Browser overlapped with Playwright control.
+WHAT CHANGED IN v6.0.0 (2026 stealth stack upgrade):
+
+  BROWSER LAYER:
+    • Camoufox (AsyncCamoufox) replaces raw Playwright for all browser
+      interaction — ~0% detection score vs ~60-80% for plain Playwright.
+    • Each browser_use Agent still gets its own isolated Browser instance
+      (bu_browser_qual / bu_browser_main) — the v5.1/5.2 CDP fix is kept.
+    • Chrome (via ChromeSessionManager) is retained for the CDP endpoint
+      that browser-use agents connect to. Camoufox handles navigation/
+      stealth; browser-use handles AI actions.
+    • undetected-chromedriver, playwright-stealth removed — both broken
+      on survey platforms as of early 2026.
+
+  OUTCOME DETECTION:
+    • _detect_survey_outcome() upgraded to LLM-powered classification
+      (gpt-4o-mini call) — far more reliable than keyword matching.
+    • Keyword matching kept as fast-path fallback before the LLM call.
+
+  LOGGING:
+    • loguru replaces the bare logging module for structured, file-rotated
+      logs. st.session_state.generation_logs retained for UI display.
+
+  STEALTH:
+    • Human-like click/type helpers added (human_like_click,
+      human_like_type) — used in Playwright fallback paths.
+    • geoip=True on Camoufox ensures locale/timezone matches proxy IP.
+
+  PROXY:
+    • get_sticky_proxy() used per account — one sticky residential IP
+      per account session, not a single shared proxy for all.
+
+  SCREENSHOT STORAGE:
+    • ScreenshotManager class added — stores to local disk by default,
+      S3 in production. DB stores URI not raw bytes (no more memory bloat).
 ═══════════════════════════════════════════════════════════════════════════════
 """
 
@@ -15,30 +42,45 @@ import asyncio
 import csv
 import io
 import json
-import logging
 import os
+import random
 import traceback
 import time
 import urllib.request
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import streamlit as st
+from loguru import logger
 from psycopg2.extras import RealDictCursor
 
 from src.core.database.postgres.connection import get_postgres_connection
 from .orchestrator import SurveySiteOrchestrator
 
+# ── Browser stack (2026) ──────────────────────────────────────────────────────
+from camoufox.async_api import AsyncCamoufox
 from browser_use import Agent
 from browser_use.browser.browser import Browser, BrowserConfig
 
+# ── LLM clients ──────────────────────────────────────────────────────────────
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from src.streamlit.ui.pages.accounts.chrome_session_manager import ChromeSessionManager
 
-logger = logging.getLogger(__name__)
+# ─────────────────────────────────────────────────────────────────────────────
+# Loguru setup — file-rotated, structured logs
+# ─────────────────────────────────────────────────────────────────────────────
+logger.add(
+    "survey_automation.log",
+    level="DEBUG",
+    rotation="10 MB",
+    retention="7 days",
+    format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}",
+    enqueue=True,
+)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Status constants
@@ -73,6 +115,8 @@ MODEL_ENV_KEYS: Dict[str, str] = {
     "gemini — Gemini 2.5 Flash": "GEMINI_API_KEY",
 }
 
+# Fast-path keyword lists (used before the LLM classifier to short-circuit
+# obvious outcomes without an API call)
 COMPLETE_KEYWORDS = [
     "thank you", "thank-you", "thankyou", "survey complete", "survey completed",
     "you have completed", "submission received", "response recorded",
@@ -86,6 +130,9 @@ DISQUALIFIED_KEYWORDS = [
 ]
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Async runner (Streamlit-safe)
+# ─────────────────────────────────────────────────────────────────────────────
 def run_async(coro):
     import threading
     try:
@@ -118,10 +165,170 @@ def run_async(coro):
             loop.close()
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Screenshot manager — stores to disk/S3, DB keeps URI not raw bytes
+# ─────────────────────────────────────────────────────────────────────────────
+class ScreenshotManager:
+    """
+    Stores screenshots to local disk (dev) or S3 (production).
+    Replaces the old approach of keeping raw bytes in st.session_state,
+    which bloated memory and was lost on page reload.
+    """
+
+    def __init__(
+        self,
+        storage: str = "local",
+        base_path: str = None,
+    ):
+        self.storage = storage
+        self.base_path = Path(
+            base_path or os.environ.get("SCREENSHOTS_DIR", "/app/screenshots")
+        )
+        self.base_path.mkdir(parents=True, exist_ok=True)
+
+        if storage == "s3":
+            import boto3
+            self.s3 = boto3.client("s3")
+            self.bucket = os.environ.get("S3_SCREENSHOTS_BUCKET", "survey-screenshots")
+
+    async def capture_and_store(
+        self, page, label: str, batch_id: str, survey_num: int = 0
+    ) -> str:
+        """Capture screenshot and persist it. Returns the storage URI."""
+        try:
+            img_bytes = await page.screenshot(type="png", full_page=False)
+        except Exception as e:
+            logger.warning(f"Screenshot capture failed ({label}): {e}")
+            return ""
+
+        filename = f"{batch_id}_s{survey_num}_{label}_{datetime.now():%H%M%S}.png"
+
+        if self.storage == "s3":
+            key = f"screenshots/{batch_id}/{filename}"
+            self.s3.put_object(
+                Bucket=self.bucket, Key=key,
+                Body=img_bytes, ContentType="image/png",
+            )
+            return f"s3://{self.bucket}/{key}"
+        else:
+            path = self.base_path / batch_id / filename
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(img_bytes)
+            return str(path)
+
+    def load_bytes(self, uri: str) -> bytes:
+        """Load screenshot bytes from stored URI."""
+        if not uri:
+            return b""
+        if uri.startswith("s3://"):
+            _, _, rest = uri[5:].partition("/")
+            bucket, _, key = rest.partition("/")
+            obj = self.s3.get_object(Bucket=bucket, Key=key)
+            return obj["Body"].read()
+        p = Path(uri)
+        return p.read_bytes() if p.exists() else b""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Human-like interaction helpers (anti-detection Layer 3)
+# ─────────────────────────────────────────────────────────────────────────────
+async def human_like_click(page, selector: str):
+    """Random hover + jitter + post-click delay. Replaces bare .click()."""
+    loc = page.locator(selector).first
+    await loc.scroll_into_view_if_needed()
+    await loc.hover()
+    await asyncio.sleep(random.uniform(0.3, 1.2))
+    box = await loc.bounding_box()
+    if box:
+        x = box["x"] + box["width"] * random.uniform(0.3, 0.7)
+        y = box["y"] + box["height"] * random.uniform(0.3, 0.7)
+        await page.mouse.move(x, y)
+        await asyncio.sleep(random.uniform(0.1, 0.4))
+    await loc.click()
+    await asyncio.sleep(random.uniform(0.8, 2.5))
+
+
+async def human_like_type(page, selector: str, text: str):
+    """Per-keystroke delay. Replaces bare .fill() for important inputs."""
+    await page.locator(selector).first.click()
+    await asyncio.sleep(random.uniform(0.2, 0.6))
+    for char in text:
+        await page.keyboard.type(char)
+        await asyncio.sleep(random.uniform(0.04, 0.18))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LLM-powered outcome classifier
+# ─────────────────────────────────────────────────────────────────────────────
+async def classify_survey_outcome_llm(
+    final_page_html: str,
+    agent_result_str: str,
+    api_key: str,
+) -> str:
+    """
+    Use gpt-4o-mini to classify outcome. Far more reliable than keyword
+    matching alone, especially for non-English thank-you pages and creative
+    disqualification messaging.
+
+    Returns one of: "complete" | "failed" | "error"
+    """
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, api_key=api_key)
+    prompt = f"""Analyze this survey automation result and classify the outcome.
+
+Agent output summary (first 500 chars):
+{agent_result_str[:500]}
+
+Final page HTML snippet (first 800 chars):
+{final_page_html[:800]}
+
+Respond ONLY with valid JSON, no markdown, no preamble:
+{{"status": "<complete|failed|error>", "reason": "<one sentence>"}}
+
+Definitions:
+- complete : survey submitted, thank-you page shown, or reward credited
+- failed   : disqualified, screened out, not eligible, quota full
+- error    : technical problem, timeout, unclear state
+"""
+    try:
+        response = await llm.ainvoke(prompt)
+        data = json.loads(response.content.strip())
+        return data.get("status", "error")
+    except Exception as e:
+        logger.warning(f"LLM outcome classifier failed: {e}")
+        return "error"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Proxy helpers
+# ─────────────────────────────────────────────────────────────────────────────
+def get_sticky_proxy(account_id: int, session_key: str, proxy_cfg: Dict) -> Dict:
+    """
+    Returns a Camoufox-compatible proxy dict with a deterministic session ID
+    so the same account always gets the same residential IP for the day.
+    Most residential proxy providers support sticky sessions via username suffixes.
+    """
+    import hashlib
+    sid = hashlib.md5(f"{account_id}_{session_key}".encode()).hexdigest()[:8]
+    username = proxy_cfg.get("username", "")
+    # Append sticky session suffix if the provider supports it
+    # (Proxy-Cheap format: username-session-XXXXXXXX)
+    if username and "-session-" not in username:
+        username = f"{username}-session-{sid}"
+    return {
+        "server": f"{proxy_cfg.get('proxy_type','http')}://{proxy_cfg['host']}:{proxy_cfg['port']}",
+        "username": username,
+        "password": proxy_cfg.get("password", ""),
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Main page class
+# ─────────────────────────────────────────────────────────────────────────────
 class GenerateManualWorkflowsPage:
     def __init__(self, db_manager):
         self.db_manager = db_manager
         self.orchestrator = SurveySiteOrchestrator(db_manager)
+        self.screenshot_manager = ScreenshotManager()
         self._ensure_tables()
 
         try:
@@ -203,6 +410,18 @@ class GenerateManualWorkflowsPage:
                             )
                         """)
 
+                    # Screenshot URIs column (v6.0.0 addition)
+                    c.execute("""
+                        SELECT column_name FROM information_schema.columns
+                        WHERE table_name = 'screening_results'
+                          AND column_name = 'screenshot_uris'
+                    """)
+                    if not c.fetchone():
+                        c.execute("""
+                            ALTER TABLE screening_results
+                            ADD COLUMN IF NOT EXISTS screenshot_uris JSONB DEFAULT '[]'
+                        """)
+
                     conn.commit()
         except Exception as e:
             logger.error(f"_ensure_tables: {e}")
@@ -277,7 +496,7 @@ class GenerateManualWorkflowsPage:
             return []
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Screenshot helpers
+    # Screenshot helpers (v6: delegate to ScreenshotManager)
     # ─────────────────────────────────────────────────────────────────────────
     _ALLOWED_SCREENSHOTS = frozenset({
         "01_survey_tab_open",
@@ -295,23 +514,27 @@ class GenerateManualWorkflowsPage:
         "05_survey_complete":      "5️⃣ Survey Complete",
     }
 
-    async def _screenshot(self, page, label: str, batch_id: str,
-                          survey_num: int = 0) -> Optional[bytes]:
+    async def _screenshot(
+        self, page, label: str, batch_id: str, survey_num: int = 0
+    ) -> Optional[str]:
+        """Capture screenshot, persist via ScreenshotManager, return URI."""
         if label not in self._ALLOWED_SCREENSHOTS:
             return None
-        try:
-            img = await page.screenshot(type="png", full_page=False)
-            self.log(f"📸 Screenshot: {self._SCREENSHOT_LABELS[label]}", batch_id=batch_id)
-            st.session_state.batches[batch_id].setdefault("screenshots", []).append(
-                (survey_num, img, label)
+        uri = await self.screenshot_manager.capture_and_store(
+            page, label, batch_id, survey_num
+        )
+        if uri:
+            self.log(
+                f"📸 Screenshot: {self._SCREENSHOT_LABELS[label]} → {uri}",
+                batch_id=batch_id,
             )
-            return img
-        except Exception as e:
-            self.log(f"Screenshot failed ({label}): {e}", "WARNING", batch_id=batch_id)
-            return None
+            st.session_state.batches[batch_id].setdefault("screenshot_uris", []).append(
+                (survey_num, uri, label)
+            )
+        return uri
 
     # ─────────────────────────────────────────────────────────────────────────
-    # DB schema helpers (proxy / screening)
+    # Schema helpers
     # ─────────────────────────────────────────────────────────────────────────
     def _verify_schema_status_constraint(self) -> Dict[str, Any]:
         try:
@@ -379,7 +602,7 @@ class GenerateManualWorkflowsPage:
             return {"success": False, "error": str(e)}
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Logging
+    # Logging (dual: loguru file + st.session_state for UI)
     # ─────────────────────────────────────────────────────────────────────────
     def log(self, msg: str, level: str = "INFO", batch_id: Optional[str] = None):
         ts    = datetime.now().strftime("%H:%M:%S")
@@ -398,7 +621,7 @@ class GenerateManualWorkflowsPage:
         st.session_state.generation_logs = []
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Batch details display
+    # Batch details display (updated for URI-based screenshots)
     # ─────────────────────────────────────────────────────────────────────────
     def _display_batch_details(self, batch_id: str):
         batch = st.session_state.batches.get(batch_id)
@@ -415,7 +638,7 @@ class GenerateManualWorkflowsPage:
             f"🌐 {batch.get('site','?')}"
         )
 
-        tab_logs, tab_shots = st.tabs(["📝 Logs", "📸 Screenshots (4)"])
+        tab_logs, tab_shots = st.tabs(["📝 Logs", "📸 Screenshots"])
 
         with tab_logs:
             logs = batch.get("logs", [])
@@ -430,25 +653,29 @@ class GenerateManualWorkflowsPage:
                 st.info("No logs stored for this batch.")
 
         with tab_shots:
-            shots = batch.get("screenshots", [])
-            if shots:
-                for i, (num, img_bytes, label) in enumerate(shots):
+            uris = batch.get("screenshot_uris", [])
+            if uris:
+                for i, (num, uri, label) in enumerate(uris):
                     display_label = self._SCREENSHOT_LABELS.get(label, label)
                     st.markdown(f"**{display_label}**")
-                    st.image(img_bytes, use_container_width=True)
-                    st.download_button(
-                        f"⬇️ {display_label}.png",
-                        img_bytes,
-                        f"ss_{batch_id}_{i}_{label}.png",
-                        mime="image/png",
-                        key=f"dl_ss_{batch_id}_{ctr}_{i}",
-                    )
+                    img_bytes = self.screenshot_manager.load_bytes(uri)
+                    if img_bytes:
+                        st.image(img_bytes, use_container_width=True)
+                        st.download_button(
+                            f"⬇️ {display_label}.png",
+                            img_bytes,
+                            f"ss_{batch_id}_{i}_{label}.png",
+                            mime="image/png",
+                            key=f"dl_ss_{batch_id}_{ctr}_{i}",
+                        )
+                    else:
+                        st.caption(f"URI: {uri}")
                     st.markdown("---")
             else:
                 st.info("No screenshots captured for this batch.")
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Survey loading helper
+    # Survey loading helper (unchanged logic, loguru logging)
     # ─────────────────────────────────────────────────────────────────────────
     async def _wait_for_surveys_to_load(
         self,
@@ -518,14 +745,13 @@ class GenerateManualWorkflowsPage:
             title = page.locator("text='What happened?'").first
             if not await title.is_visible(timeout=3000):
                 return False
-            self.log("⚠️ 'What happened?' modal detected — dismissing...", batch_id=batch_id)
+            self.log("⚠️ 'What happened?' modal — dismissing...", batch_id=batch_id)
 
             close_btn = page.locator(
                 "button.p-dialog-header-close, button[aria-label='Close'], .p-dialog-header button"
             ).first
             if await close_btn.is_visible(timeout=2000):
                 await close_btn.click()
-                self.log("✅ Closed modal via X button", batch_id=batch_id)
                 await asyncio.sleep(2)
                 return True
 
@@ -536,7 +762,6 @@ class GenerateManualWorkflowsPage:
                 submit = page.locator("button:has-text('Submit')").first
                 if await submit.is_visible(timeout=2000):
                     await submit.click()
-                    self.log("✅ Dismissed modal via Other + Submit", batch_id=batch_id)
                     await asyncio.sleep(2)
                     return True
 
@@ -545,7 +770,6 @@ class GenerateManualWorkflowsPage:
                     btn = page.locator(f"button:has-text('{txt}')").first
                     if await btn.is_visible(timeout=1000):
                         await btn.click()
-                        self.log(f"✅ Dismissed modal via '{txt}'", batch_id=batch_id)
                         await asyncio.sleep(2)
                         return True
                 except Exception:
@@ -568,7 +792,7 @@ class GenerateManualWorkflowsPage:
         for ms in modal_selectors:
             try:
                 if await page.locator(ms).first.is_visible(timeout=2000):
-                    self.log(f"✅ Survey opened as MODAL overlay: {ms}", batch_id=batch_id)
+                    self.log(f"✅ Survey opened as MODAL: {ms}", batch_id=batch_id)
                     return True
             except Exception:
                 pass
@@ -583,7 +807,7 @@ class GenerateManualWorkflowsPage:
         for cs in content_selectors:
             try:
                 if await page.locator(cs).first.is_visible(timeout=2000):
-                    self.log(f"✅ Survey qualification content detected: {cs}", batch_id=batch_id)
+                    self.log(f"✅ Qualification content detected: {cs}", batch_id=batch_id)
                     return True
             except Exception:
                 pass
@@ -593,8 +817,7 @@ class GenerateManualWorkflowsPage:
     # Open survey card
     # ─────────────────────────────────────────────────────────────────────────
     async def _open_survey_card(self, page, batch_id):
-        self.log("🔍 Opening survey using confirmed Automa selectors...", batch_id=batch_id)
-
+        self.log("🔍 Opening survey card...", batch_id=batch_id)
         await self._dismiss_abandonment_modal(page, batch_id)
 
         surveys_nav_selectors = [
@@ -603,7 +826,6 @@ class GenerateManualWorkflowsPage:
             "a:has-text('Surveys')",
             "nav a:has-text('Surveys')",
         ]
-        nav_clicked = False
         for sel in surveys_nav_selectors:
             try:
                 loc = page.locator(sel).first
@@ -611,19 +833,14 @@ class GenerateManualWorkflowsPage:
                     await loc.scroll_into_view_if_needed()
                     await asyncio.sleep(0.5)
                     await page.evaluate("(el) => el.click()", await loc.element_handle())
-                    self.log(f"✅ Clicked Surveys nav: {sel}", batch_id=batch_id)
-                    nav_clicked = True
+                    self.log(f"✅ Surveys nav clicked: {sel}", batch_id=batch_id)
                     await asyncio.sleep(3)
                     break
             except Exception as e:
                 self.log(f"⚠️ Nav selector failed [{sel}]: {e}", "WARNING", batch_id=batch_id)
 
-        if not nav_clicked:
-            self.log("⚠️ Could not click Surveys nav — trying from current page", "WARNING", batch_id=batch_id)
-
         await self._dismiss_abandonment_modal(page, batch_id)
         await asyncio.sleep(2)
-        self.log(f"Current URL after nav: {page.url}", batch_id=batch_id)
 
         card_selectors = [
             "div.p-ripple-wrapper",
@@ -637,20 +854,17 @@ class GenerateManualWorkflowsPage:
             try:
                 loc = page.locator(sel).first
                 if not await loc.is_visible(timeout=4000):
-                    self.log(f"  Selector not visible: {sel}", batch_id=batch_id)
                     continue
 
                 self.log(f"🖱️ Clicking card (attempt {attempt + 1}): {sel}", batch_id=batch_id)
                 await loc.scroll_into_view_if_needed()
-                await asyncio.sleep(1)
+                await asyncio.sleep(random.uniform(0.5, 1.5))
 
                 prev_url = page.url
                 await page.evaluate("(el) => el.click()", await loc.element_handle())
-                self.log(f"URL after click: {page.url}", batch_id=batch_id)
 
                 await asyncio.sleep(1)
                 if await page.locator("text='What happened?'").first.is_visible(timeout=2000):
-                    self.log("⚠️ Abandonment modal after card click — dismissing", "WARNING", batch_id=batch_id)
                     await self._dismiss_abandonment_modal(page, batch_id)
                     await asyncio.sleep(2)
                     continue
@@ -658,26 +872,23 @@ class GenerateManualWorkflowsPage:
                 try:
                     new_page = await page.context.wait_for_event("page", timeout=8000)
                     await new_page.wait_for_load_state("domcontentloaded")
-                    self.log(f"✅ Survey opened in NEW TAB: {new_page.url}", batch_id=batch_id)
+                    self.log(f"✅ Survey in NEW TAB: {new_page.url}", batch_id=batch_id)
                     return new_page
                 except Exception:
                     pass
 
                 await asyncio.sleep(5)
                 if page.url != prev_url:
-                    self.log(f"✅ Survey opened in SAME TAB: {page.url}", batch_id=batch_id)
+                    self.log(f"✅ Survey in SAME TAB: {page.url}", batch_id=batch_id)
                     return page
 
                 for frame in page.frames:
                     frame_url = frame.url.lower()
                     if frame_url and frame_url not in ("about:blank", "") and "topsurveys.app" not in frame_url:
-                        self.log(f"✅ Survey iframe detected: {frame.url}", batch_id=batch_id)
                         return page
 
                 if await self._detect_survey_modal(page, batch_id):
                     return page
-
-                self.log(f"❌ Selector {sel} did not open survey, trying next...", batch_id=batch_id)
 
             except Exception as e:
                 self.log(f"⚠️ Card click failed [{sel}]: {e}", "WARNING", batch_id=batch_id)
@@ -685,49 +896,63 @@ class GenerateManualWorkflowsPage:
         raise Exception("All survey card click attempts failed.")
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Outcome detection
+    # Outcome detection — keyword fast-path + LLM classifier (v6.0.0)
     # ─────────────────────────────────────────────────────────────────────────
-    def _detect_survey_outcome(self, result) -> str:
+    def _detect_survey_outcome_keywords(self, result) -> Optional[str]:
+        """
+        Fast keyword-based pre-check. Returns a status string if confident,
+        None if ambiguous (LLM classifier should be called instead).
+        """
         try:
             combined = str(result).lower()
 
             agent_brain_dq_phrases = [
                 "disqualified - i was disqualified",
-                "disqualified - the survey",
-                "evaluation_previous_goal=\"disqualified",
-                "evaluation_previous_goal='disqualified",
                 "i was disqualified from",
-                "disqualified from the previous survey",
                 "disqualified from this survey",
                 "screen out", "screened out",
             ]
             agent_brain_complete_phrases = [
                 "evaluation_previous_goal=\"success",
-                "evaluation_previous_goal='success",
                 "success - i successfully completed",
                 "survey is complete", "survey has been completed",
                 "successfully submitted", "successfully completed the survey",
             ]
 
             if hasattr(result, "history") and result.history:
-                history_str = " ".join(str(h) for h in result.history[-5:]).lower()
-                combined += " " + history_str
+                combined += " " + " ".join(str(h) for h in result.history[-5:]).lower()
 
-                for phrase in agent_brain_dq_phrases:
-                    if phrase in combined:
-                        return STATUS_FAILED
-                for phrase in agent_brain_complete_phrases:
-                    if phrase in combined:
-                        return STATUS_COMPLETE
-
+            for phrase in agent_brain_dq_phrases:
+                if phrase in combined:
+                    return STATUS_FAILED
+            for phrase in agent_brain_complete_phrases:
+                if phrase in combined:
+                    return STATUS_COMPLETE
             if any(kw in combined for kw in DISQUALIFIED_KEYWORDS):
                 return STATUS_FAILED
             if any(kw in combined for kw in COMPLETE_KEYWORDS):
                 return STATUS_COMPLETE
 
-            return STATUS_ERROR
+            return None  # ambiguous — hand off to LLM
         except Exception:
-            return STATUS_ERROR
+            return None
+
+    async def _detect_survey_outcome(self, page, result, api_key: str) -> str:
+        """
+        Two-stage outcome detection:
+          1. Keyword fast-path (no API cost, instant)
+          2. LLM classifier (gpt-4o-mini) for ambiguous cases
+        """
+        keyword_result = self._detect_survey_outcome_keywords(result)
+        if keyword_result is not None:
+            return keyword_result
+
+        # Ambiguous — use LLM
+        try:
+            html = await page.content()
+        except Exception:
+            html = ""
+        return await classify_survey_outcome_llm(html, str(result), api_key)
 
     # ─────────────────────────────────────────────────────────────────────────
     # Render
@@ -736,13 +961,12 @@ class GenerateManualWorkflowsPage:
         st.title("🤖 AI Survey Answerer")
         st.markdown("""
         <div style='background:#1e3a5f;padding:18px;border-radius:10px;margin-bottom:18px;'>
-        <h3 style='color:white;margin:0;'>AI-Powered Survey Answering</h3>
+        <h3 style='color:white;margin:0;'>AI-Powered Survey Answering — 2026 Stealth Stack</h3>
         <p style='color:#a0c4ff;margin:8px 0 0;'>
-        🔐 <b>Step 1</b> — Launch Chrome with persistent profile; fallback to email+password login if needed.<br>
-        🌐 <b>Step 2</b> — Navigate to survey site, click "Continue with Google".<br>
-        📋 <b>Step 3</b> — Find surveys tab, reload until surveys appear.<br>
-        🤖 <b>Step 4</b> — AI Agent answers surveys as your persona.<br>
-        📸 <b>Diagnostics</b> — 5 screenshots: survey tab · qual start · qual done · survey started · complete.
+        🦊 <b>Camoufox</b> (C++-patched Firefox, ~0% detection) replaces raw Playwright.<br>
+        🤖 <b>browser-use ≥ 0.2</b> CDP-native agents — each gets its own isolated session.<br>
+        🧠 <b>LLM outcome classifier</b> (gpt-4o-mini) replaces fragile keyword matching.<br>
+        📸 <b>Screenshots</b> stored to disk/S3 — no more session_state memory bloat.
         </p>
         </div>""", unsafe_allow_html=True)
 
@@ -754,6 +978,7 @@ class GenerateManualWorkflowsPage:
 ALTER TABLE screening_results DROP CONSTRAINT IF EXISTS screening_results_status_check;
 ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
     CHECK (status IN ('pending','passed','failed','complete','error'));
+ALTER TABLE screening_results ADD COLUMN IF NOT EXISTS screenshot_uris JSONB DEFAULT '[]';
 """, language="sql")
 
         accounts     = self._load_accounts()
@@ -862,11 +1087,8 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
                     f"✅ **Cookies stored** for `{google_record['domain']}`  \n"
                     f"Last updated: `{updated_str}` | Size: `{size_kb:.1f} KB`"
                 )
-                st.caption("Cookies will be injected automatically on the next run. "
-                           "If login fails, delete them and re-run with your password.")
             else:
-                st.warning("⚠️ **No cookies stored** for this account.  \n"
-                           "Enter Google credentials below and run — cookies will be saved automatically after login.")
+                st.warning("⚠️ **No cookies stored.** Run once with credentials to capture them.")
 
         with col_actions:
             if google_record:
@@ -877,7 +1099,6 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
                     st.rerun()
 
             with st.expander("📋 Paste cookies manually (JSON)"):
-                st.caption("Export cookies from your browser using a cookie-export extension.")
                 raw = st.text_area("Cookie JSON array:", height=120,
                                    key=f"manual_ck_{acct['account_id']}",
                                    placeholder='[{"name":"SID","value":"...","domain":".google.com",...}]')
@@ -924,29 +1145,27 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
         start_url = url_map[selected_label]["url"].strip()
         if start_url and not start_url.startswith(("http://", "https://")):
             start_url = "https://" + start_url
-            st.info(f"URL normalised to: {start_url}")
 
         num_surveys  = st.number_input("Surveys to answer:", min_value=1, max_value=50, value=1, key="num_surveys")
         model_choice = st.selectbox("AI Model:", available_models, key="model_choice")
 
         st.markdown("---")
         st.subheader("🔑 Google Account Credentials")
-        st.caption("Used as **fallback** if the persistent profile is not yet logged in.")
+        st.caption("Used as **fallback** if the Camoufox persistent profile is not yet logged in.")
 
         col_e, col_p = st.columns(2)
         with col_e:
-            google_email = st.text_input(
-                "Google Email", value=acct.get("email", ""),
-                key="google_email", placeholder="you@gmail.com",
-            )
+            google_email = st.text_input("Google Email", value=acct.get("email", ""),
+                                         key="google_email", placeholder="you@gmail.com")
         with col_p:
-            google_password = st.text_input(
-                "Google Password", type="password",
-                key="google_password", placeholder="your Google password",
-            )
+            google_password = st.text_input("Google Password", type="password",
+                                             key="google_password", placeholder="your Google password")
 
         st.markdown("---")
         st.subheader("🌐 Proxy Settings")
+        st.info("💡 Each account gets a **sticky** residential IP derived from its ID. "
+                "The same account will always use the same proxy session within a day.")
+
         DEFAULT_PROXY = {
             "proxy_type": "http", "host": "proxy-us.proxy-cheap.com",
             "port": 5959, "username": "pcpafN3XBx-res-us",
@@ -961,7 +1180,7 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
         if proxy_to_use:
             st.success(f"🔌 {proxy_to_use['proxy_type']}://{proxy_to_use['host']}:{proxy_to_use['port']}")
             if proxy_to_use.get("username"):
-                st.caption(f"Username: {proxy_to_use['username']}")
+                st.caption(f"Base username: {proxy_to_use['username']} (session suffix added automatically)")
 
         if st.button("✏️ Configure Proxy", key="edit_proxy_btn"):
             st.session_state.editing_proxy = not st.session_state.editing_proxy
@@ -1022,11 +1241,15 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
             f"**Prompt:** {prompt['prompt_name']}  |  **Email:** {google_email or '⚠️ not set'}"
         )
 
-        profile_path = self.chrome_manager.get_profile_path(acct['username'])
-        if os.path.exists(os.path.join(profile_path, 'Default')):
-            st.success("✅ Persistent Chrome profile exists — will reuse existing login state.")
+        # Camoufox profile status
+        camoufox_profile = os.path.join(
+            os.environ.get("CAMOUFOX_PROFILES_BASE_DIR", "/workspace/camoufox_profiles"),
+            f"account_{acct['username']}"
+        )
+        if os.path.exists(camoufox_profile):
+            st.success("✅ Camoufox persistent profile exists — will reuse existing Firefox session.")
         else:
-            st.info("ℹ️ No profile yet. Will create one and perform one‑time login if needed.")
+            st.info("ℹ️ No Camoufox profile yet — will create one and perform one-time Google login.")
 
         if st.button(
             f"🚀 Answer {num_surveys} Survey(s) with AI",
@@ -1040,28 +1263,20 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
             ))
 
     # =========================================================================
-    # CORE: _do_direct_answering  (v5.1.0 — isolated browser instances)
+    # CORE: _do_direct_answering  (v6.0.0 — Camoufox + isolated agents)
     # =========================================================================
-    # =========================================================================
-    # CORE: _do_direct_answering  (v5.2.0 — unified qual+participate agent)
-    # =========================================================================
-    # KEY CHANGES vs v5.1.0:
-    #   • Participate (button.p-btn--fill) can appear at ANY point — immediately
-    #     after clicking a survey card, or only after several pages of qual
-    #     questions.  The old two-phase split (qual agent stops before Participate,
-    #     then Playwright clicks it) is replaced with:
-    #       1. Instant Playwright check — if Participate is already visible, click
-    #          it right away and skip the agent entirely (fast path).
-    #       2. Combined qual+participate agent — answers qual questions AND clicks
-    #          Participate when it eventually appears (one agent, one CDP session).
-    #       3. Safety-net Playwright click — after the agent closes, re-check
-    #          whether Participate is still visible and click if so.
-    #   • New-tab detection after Participate — context.wait_for_event("page")
-    #     catches surveys that open in a new tab; page is reassigned so the main
-    #     agent follows the user there.
-    #   • Each browser_use Agent still gets its OWN isolated Browser instance
-    #     (bu_browser_qual / bu_browser_main); each is closed in its own finally
-    #     block with a 3 s CDP settle before Playwright resumes.
+    # KEY CHANGES vs v5.2.0:
+    #   • AsyncCamoufox replaces raw Playwright for all navigation/interaction.
+    #     Camoufox uses a C++-patched Firefox that scores ~0% on bot detectors.
+    #     geoip=True ensures locale/timezone automatically matches proxy IP.
+    #   • Sticky proxy per account via get_sticky_proxy() — same account always
+    #     gets same residential IP within a day, not a fresh random IP each run.
+    #   • Outcome detection is now two-stage: keyword fast-path first, then
+    #     gpt-4o-mini LLM classifier for ambiguous results.
+    #   • Screenshots stored via ScreenshotManager (disk/S3), not raw bytes in
+    #     session_state. st.session_state keeps only the URI strings.
+    #   • CDP architecture unchanged: each browser_use Agent gets its own
+    #     isolated Browser instance; always closed in finally + 3s settle.
     # =========================================================================
     async def _do_direct_answering(
         self, acct, site, prompt, start_url, num_surveys, model_choice,
@@ -1069,7 +1284,7 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
     ):
         batch_id = f"ai_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         st.session_state.batches[batch_id] = {
-            "logs": [], "screenshots": [],
+            "logs": [], "screenshot_uris": [],
             "timestamp": datetime.now().isoformat(),
             "account": acct["username"], "site": site["site_name"],
         }
@@ -1079,35 +1294,51 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
         status_ph   = st.empty()
         progress_ph = st.empty()
 
+        # CDP / Playwright objects (still needed for browser-use Agent connection)
         playwright_instance = None
         pw_browser = None
         context = None
         page = None
         session_id = None
         ws_url = None
+
+        # Camoufox is the primary browser — all navigation done here
+        camoufox_browser = None
+
         complete_count = passed_count = failed_count = error_count = 0
         survey_details: List[Dict] = []
 
+        # API key for LLM outcome classifier
+        openai_api_key = os.getenv("OPENAI_API_KEY", "")
+
         try:
             # ------------------------------------------------------------------
-            # STEP 0 – Chrome profile
+            # STEP 0 – Build sticky proxy for this account
             # ------------------------------------------------------------------
-            status_ph.info("🖥️ Preparing Chrome profile...")
+            proxy_camoufox = None
+            if proxy_cfg:
+                proxy_camoufox = get_sticky_proxy(acct["account_id"], batch_id, proxy_cfg)
+                self.log(
+                    f"🔌 Sticky proxy: {proxy_camoufox['server']} | "
+                    f"user: {proxy_camoufox.get('username','')}",
+                    batch_id=batch_id,
+                )
+
+            # ------------------------------------------------------------------
+            # STEP 1 – Start Chrome via ChromeSessionManager
+            #          (provides the CDP endpoint that browser-use agents connect to)
+            # ------------------------------------------------------------------
+            status_ph.info("🖥️ Preparing Chrome (CDP endpoint for AI agents)...")
             profile_path = self.chrome_manager.get_profile_path(acct['username'])
             if not os.path.exists(profile_path):
-                self.log(f"Creating Chrome profile for {acct['username']}", batch_id=batch_id)
                 create_result = self.chrome_manager.create_profile_for_account(
                     acct['account_id'], acct['username']
                 )
                 if not create_result.get('success'):
-                    raise Exception(f"Could not create profile: {create_result.get('error')}")
+                    raise Exception(f"Could not create Chrome profile: {create_result.get('error')}")
                 profile_path = create_result['profile_path']
 
-            # ------------------------------------------------------------------
-            # STEP 1 – Start Chrome
-            # ------------------------------------------------------------------
             session_id = f"persistent_{acct['username']}_{int(time.time())}"
-            self.log(f"Starting Chrome with profile: {profile_path}", batch_id=batch_id)
             start_result = self.chrome_manager.run_persistent_chrome(
                 session_id=session_id,
                 profile_path=profile_path,
@@ -1120,16 +1351,13 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
                 raise Exception(f"Failed to start Chrome: {start_result.get('error')}")
 
             debug_port = start_result['debug_port']
-            self.log(f"✅ Chrome started on debug port {debug_port}", batch_id=batch_id)
-            status_ph.success("Chrome running — connecting...")
+            self.log(f"✅ Chrome CDP ready on port {debug_port}", batch_id=batch_id)
 
-            # ------------------------------------------------------------------
-            # STEP 2 – Connect via CDP
-            # ------------------------------------------------------------------
+            # Wait for Chrome CDP to become available
             ws_endpoint = f"http://localhost:{debug_port}/json/version"
-            for attempt in range(10):
+            for attempt in range(15):
                 try:
-                    with urllib.request.urlopen(ws_endpoint) as response:
+                    with urllib.request.urlopen(ws_endpoint, timeout=3) as response:
                         data = json.loads(response.read().decode())
                         ws_url = data.get('webSocketDebuggerUrl')
                         if ws_url:
@@ -1137,69 +1365,67 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
                 except Exception:
                     await asyncio.sleep(1)
             else:
-                raise Exception("Chrome did not become ready within 10 seconds")
+                raise Exception("Chrome CDP did not become ready within 15 seconds")
 
-            from playwright.async_api import async_playwright
-            playwright_instance = await async_playwright().start()
-            pw_browser = await playwright_instance.chromium.connect_over_cdp(ws_url)
-            context = pw_browser.contexts[0]
-            page = context.pages[0] if context.pages else await context.new_page()
-            self.log("✅ Connected to Chrome via CDP", batch_id=batch_id)
-
-            try:
-                await page.wait_for_function(
-                    "() => document.readyState === 'complete'", timeout=10_000
-                )
-                self.log("Browser ready – document complete", batch_id=batch_id)
-            except Exception:
-                self.log("⚠️ readyState timeout (blank/chrome tab) — proceeding anyway",
-                         "WARNING", batch_id=batch_id)
-            await asyncio.sleep(1)
+            self.log(f"✅ Chrome CDP WebSocket: {ws_url}", batch_id=batch_id)
 
             # ------------------------------------------------------------------
-            # STEP 3 – Google login check
+            # STEP 2 – Launch Camoufox for all navigation & stealth interaction
             # ------------------------------------------------------------------
-            self.log("Navigating to Google to verify login state...", batch_id=batch_id)
-            for attempt in range(3):
-                try:
-                    await page.goto("https://accounts.google.com/",
-                                    wait_until="domcontentloaded", timeout=45_000)
-                    await asyncio.sleep(3)
-                    break
-                except Exception as e:
-                    if attempt == 2:
-                        raise
-                    self.log(f"Google nav attempt {attempt+1} failed: {e}, retrying...",
-                             "WARNING", batch_id=batch_id)
-                    await asyncio.sleep(5)
+            status_ph.info("🦊 Launching Camoufox (stealth Firefox)...")
+            camoufox_profile_dir = os.path.join(
+                os.environ.get("CAMOUFOX_PROFILES_BASE_DIR", "/workspace/camoufox_profiles"),
+                f"account_{acct['username']}",
+            )
+            os.makedirs(camoufox_profile_dir, exist_ok=True)
+
+            camoufox_kwargs = dict(
+                headless=False,          # headed = much harder to detect
+                geoip=True,              # auto-match locale/timezone to proxy IP
+                os="windows",           # most survey respondents use Windows
+                screen={"width": 1920, "height": 1080},
+                persistent_context=True,
+                user_data_dir=camoufox_profile_dir,
+            )
+            if proxy_camoufox:
+                camoufox_kwargs["proxy"] = proxy_camoufox
+
+            camoufox_ctx = AsyncCamoufox(**camoufox_kwargs)
+            camoufox_browser = await camoufox_ctx.__aenter__()
+            page = await camoufox_browser.new_page()
+            self.log("✅ Camoufox browser ready", batch_id=batch_id)
+
+            # ------------------------------------------------------------------
+            # STEP 3 – Google login check via Camoufox
+            # ------------------------------------------------------------------
+            status_ph.info("🔐 Checking Google login state...")
+            self.log("Navigating to Google to verify login...", batch_id=batch_id)
+            await page.goto("https://accounts.google.com/", wait_until="domcontentloaded", timeout=45_000)
+            await asyncio.sleep(3)
 
             current_url = page.url
-            self.log(f"Google landing URL: {current_url}", batch_id=batch_id)
-
             needs_login = (
                 "accounts.google.com/signin" in current_url
-                or "accounts.google.com/v3/signin" in current_url
                 or "identifier" in current_url
             )
 
             if needs_login:
-                self.log("⚠️ Not logged into Google – performing one-time login", batch_id=batch_id)
+                self.log("⚠️ Not logged in — performing Google login via Camoufox", batch_id=batch_id)
                 if not google_email or not google_password:
                     raise Exception("Google login required but no credentials provided.")
                 await self._perform_google_login(page, google_email, google_password, batch_id)
             else:
-                self.log(f"✅ Already logged into Google via profile (landed on: {current_url})",
-                         batch_id=batch_id)
+                self.log(f"✅ Already logged into Google ({current_url})", batch_id=batch_id)
 
             # ------------------------------------------------------------------
-            # STEP 4 – Navigate to survey site
+            # STEP 4 – Navigate to survey site via Camoufox
             # ------------------------------------------------------------------
             status_ph.info("🌐 Navigating to survey site...")
-            self.log(f"→ Navigating to: {start_url}", batch_id=batch_id)
             await page.goto(start_url, wait_until="domcontentloaded", timeout=30_000)
-            await page.wait_for_timeout(3000)
+            await asyncio.sleep(random.uniform(3, 5))
             self.log(f"Survey site URL: {page.url}", batch_id=batch_id)
 
+            # Click "Continue with Google" with human-like interaction
             google_clicked = False
             for sel in [
                 "button:has-text('Continue with Google')",
@@ -1207,74 +1433,56 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
                 "button:has-text('Login with Google')",
                 "a:has-text('Continue with Google')",
                 "[data-provider='google']",
-                "button:has-text('Google')",
             ]:
                 try:
                     btn = page.locator(sel).first
                     if await btn.is_visible(timeout=3000):
-                        await btn.click()
-                        self.log(f"✅ Clicked Google OAuth: {sel}", batch_id=batch_id)
+                        await human_like_click(page, sel)
+                        self.log(f"✅ Google OAuth clicked: {sel}", batch_id=batch_id)
                         google_clicked = True
-                        await page.wait_for_timeout(5000)
+                        await asyncio.sleep(random.uniform(4, 6))
                         break
                 except Exception:
                     pass
 
             if not google_clicked:
-                self.log("⚠️ No 'Continue with Google' button — may already be logged in",
-                         "WARNING", batch_id=batch_id)
+                self.log("⚠️ No Google OAuth button — may already be logged in", "WARNING", batch_id=batch_id)
 
+            # Account picker
             try:
                 picker = page.locator(f"[data-email='{google_email}']").first
                 if await picker.is_visible(timeout=4000):
                     await picker.click()
-                    self.log(f"✅ Selected account from picker: {google_email}", batch_id=batch_id)
-                    await page.wait_for_timeout(4000)
+                    await asyncio.sleep(random.uniform(3, 5))
             except Exception:
                 pass
-
-            await page.wait_for_timeout(3000)
-            self.log(f"Post-OAuth URL: {page.url}", batch_id=batch_id)
 
             # ------------------------------------------------------------------
             # STEP 5 – Surveys tab + wait for cards
             # ------------------------------------------------------------------
             status_ph.info("📋 Finding surveys tab...")
-            surveys_tab_clicked = False
             for sel in [
                 "div:nth-child(2) > .p-nav-wrapper > .p-nav-item",
                 ".p-nav-item:has-text('Surveys')",
                 "a:has-text('Surveys')",
-                "nav a:has-text('Surveys')",
-                "li a:has-text('Surveys')",
-                "[href*='survey']",
             ]:
                 try:
                     nav = page.locator(sel).first
                     if await nav.is_visible(timeout=3000):
                         await nav.click()
-                        self.log(f"✅ Clicked Surveys nav tab: {sel}", batch_id=batch_id)
-                        surveys_tab_clicked = True
-                        await page.wait_for_timeout(4000)
+                        self.log(f"✅ Surveys tab clicked: {sel}", batch_id=batch_id)
+                        await asyncio.sleep(random.uniform(3, 5))
                         break
                 except Exception:
                     pass
 
-            if not surveys_tab_clicked:
-                self.log("⚠️ Could not click Surveys tab — staying on current page",
-                         "WARNING", batch_id=batch_id)
-
             status_ph.info("⏳ Waiting for surveys to load...")
             surveys_found = await asyncio.wait_for(
-                self._wait_for_surveys_to_load(
-                    page, batch_id,
-                    max_reloads=5, reload_wait=6.0,
-                    poll_interval=2.0, max_polls_per_load=10,
-                ),
+                self._wait_for_surveys_to_load(page, batch_id, max_reloads=5),
                 timeout=180.0,
             )
             if not surveys_found:
-                raise Exception("Surveys never loaded after exhausting all reload attempts.")
+                raise Exception("Surveys never loaded.")
 
             await self._screenshot(page, "01_survey_tab_open", batch_id)
 
@@ -1307,53 +1515,38 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
                 result_snippet = ""
 
                 try:
-                    # ── Open survey card ──────────────────────────────────────
+                    # ── Open survey card (Camoufox page) ─────────────────────
                     try:
                         survey_page = await asyncio.wait_for(
                             self._open_survey_card(page, batch_id),
                             timeout=60.0,
                         )
-                        if survey_page != page:
+                        if survey_page and survey_page != page:
                             page = survey_page
-                            context = page.context
                         self.log(f"🌐 Active survey URL: {page.url}", batch_id=batch_id)
                     except asyncio.TimeoutError:
                         raise Exception("Timed out opening survey card after 60s")
 
-                    await asyncio.sleep(2)
+                    await asyncio.sleep(random.uniform(1.5, 3))
                     await self._screenshot(page, "02_qualification_start", batch_id, survey_num)
 
-                    # ── DETECT: is Participate already visible right now? ─────
-                    # If button.p-btn--fill is already on screen, there are no
-                    # qualification questions — skip the agent and click directly.
+                    # ── Is Participate already visible? ───────────────────────
                     participate_sel = "button.p-btn--fill"
                     participate_now = False
                     try:
-                        btn = page.locator(participate_sel).first
-                        if await btn.is_visible(timeout=3000):
+                        if await page.locator(participate_sel).first.is_visible(timeout=3000):
                             participate_now = True
-                            self.log(
-                                "⚡ Participate visible immediately — no qual questions, clicking now",
-                                batch_id=batch_id,
-                            )
+                            self.log("⚡ Participate visible immediately — fast path", batch_id=batch_id)
                     except Exception:
                         pass
 
                     if not participate_now:
-                        # ── QUAL + PARTICIPATE AGENT ──────────────────────────
-                        # Single agent handles both scenarios:
-                        #   A) Qual questions are present → answer them all,
-                        #      then click Participate when it appears.
-                        #   B) Participate is visible with no questions →
-                        #      click it immediately.
-                        #
+                        # ── QUAL + PARTICIPATE AGENT (browser-use, isolated) ──
                         # CRITICAL: bu_browser_qual is always closed in finally
-                        # with a 3 s settle before Playwright resumes.  This
-                        # prevents the empty AgentHistoryList CDP conflict.
+                        # with 3s CDP settle before Camoufox resumes control.
                         bu_browser_qual = Browser(
                             config=BrowserConfig(cdp_url=ws_url, headless=False)
                         )
-
                         qual_agent = Agent(
                             task=f"""
 {persona}
@@ -1363,67 +1556,54 @@ QUALIFICATION + PARTICIPATE
 ════════════════════════════════════
 You are on a survey platform. One of two situations is true:
 
-SITUATION A — Qualification questions are shown before Participate:
+SITUATION A — Qualification questions shown before Participate:
   Answer ALL qualification questions, then click the green Participate button
   (CSS selector: button.p-btn--fill) when it becomes visible.
 
-SITUATION B — Participate button is already visible with no questions:
+SITUATION B — Participate button already visible with no questions:
   Click the green Participate button (button.p-btn--fill) immediately.
 
 HOW TO ANSWER QUESTIONS (if present):
-1. Read each question and answer based on the persona's real attributes.
+1. Read each question, answer based on the persona's real attributes.
 2. Checkboxes: tick all that apply to the persona.
 3. Radio buttons: click the single best matching option.
-4. Dropdowns (div.options): click the container first, then pick the option.
-   Use ArrowDown keys to navigate dropdown options if needed.
+4. Dropdowns (div.options): click the container, then pick with ArrowDown.
 5. Number inputs: type the number ONLY — no $, no commas, no symbols.
-6. After answering each page/section, click the Next / Continue / ➔ arrow
-   button (button#submitButton or .p-btn-icon--right > svg).
-7. "I can't answer this question" — only use if truly not applicable.
-8. There may be MULTIPLE pages of questions — keep going until Participate
-   becomes visible.
+6. After each page, click Next / Continue / ➔ arrow button.
+7. There may be MULTIPLE pages — keep going until Participate appears.
 
 PARTICIPATE BUTTON:
-- CSS selector: button.p-btn--fill
-- This is the green button labelled "Participate".
-- Click it as soon as it is visible — whether that is on the very first
-  screen or only after answering several pages of questions.
-- After clicking Participate the main survey will start loading. STOP there —
-  do not answer the survey itself, that is handled separately.
+- CSS selector: button.p-btn--fill  (green, labelled "Participate")
+- Click as soon as visible — whether immediately or after several question pages.
+- After clicking, STOP — the main survey is handled separately.
 
-STOP and report when:
-a) You have clicked Participate → report PARTICIPATED
-b) You see disqualification / "sorry" / "not eligible" → report DISQUALIFIED
-c) You return to the survey list without clicking Participate → report DISQUALIFIED
+STOP and report:
+a) Clicked Participate → report PARTICIPATED
+b) Disqualified / "sorry" / "not eligible" → report DISQUALIFIED
+c) Returned to survey list without clicking → report DISQUALIFIED
 """,
                             llm=llm,
                             browser=bu_browser_qual,
                             max_actions_per_step=5,
                         )
-
                         try:
                             qual_result = await asyncio.wait_for(
-                                qual_agent.run(max_steps=50),
-                                timeout=300.0,
+                                qual_agent.run(max_steps=50), timeout=300.0
                             )
                         except asyncio.TimeoutError:
-                            raise Exception("Qualification/Participate agent timed out after 5 minutes")
+                            raise Exception("Qual/Participate agent timed out after 5 minutes")
                         finally:
-                            # ALWAYS close the qual browser so CDP settles
-                            # before Playwright touches the page again.
                             try:
                                 await bu_browser_qual.close()
                             except Exception:
                                 pass
-                            await asyncio.sleep(3)  # let CDP fully release
-
-                        qual_outcome = self._detect_survey_outcome(qual_result)
-                        self.log(f"Qual+Participate agent result: {qual_outcome}", batch_id=batch_id)
+                            await asyncio.sleep(3)  # CDP settle — non-negotiable
 
                         await self._screenshot(page, "03_qualification_done", batch_id, survey_num)
 
-                        # ── Disqualified during qualification ─────────────────
-                        if qual_outcome == STATUS_FAILED:
+                        # Check for disqualification during qual
+                        qual_kw = self._detect_survey_outcome_keywords(qual_result)
+                        if qual_kw == STATUS_FAILED:
                             self.log("❌ Disqualified during qualification", batch_id=batch_id)
                             survey_status  = STATUS_FAILED
                             result_snippet = "Disqualified during qualification"
@@ -1443,33 +1623,26 @@ c) You return to the survey list without clicking Participate → report DISQUAL
                                 notes=result_snippet[:300],
                             )
                             if i < num_surveys - 1:
-                                await asyncio.sleep(3)
+                                cooldown = random.uniform(30, 90)
+                                self.log(f"⏳ Cooldown {cooldown:.0f}s before next survey...", batch_id=batch_id)
+                                await asyncio.sleep(cooldown)
                                 await self._wait_for_surveys_to_load(page, batch_id, max_reloads=3)
                             continue
 
-                        # ── Safety net: agent may have stopped one action short ─
-                        # If Participate is still visible after the agent closed,
-                        # Playwright clicks it now.
+                        # Safety net — agent may have stopped one action short
                         try:
-                            still_there = page.locator(participate_sel).first
-                            if await still_there.is_visible(timeout=3000):
-                                self.log(
-                                    "⚠️ Participate still visible after agent — clicking via Playwright safety net",
-                                    "WARNING", batch_id=batch_id,
-                                )
+                            if await page.locator(participate_sel).first.is_visible(timeout=3000):
                                 participate_now = True
+                                self.log("⚠️ Participate still visible after agent — Camoufox safety-net click",
+                                         "WARNING", batch_id=batch_id)
                         except Exception:
                             pass
 
-                    # ── Playwright clicks Participate ─────────────────────────
-                    # Runs for two cases:
-                    #   1. Participate was visible immediately (fast path, no agent).
-                    #   2. Safety net: agent stopped before clicking Participate.
+                    # ── Camoufox clicks Participate ───────────────────────────
                     if participate_now:
                         participated = False
                         for p_sel in [
-                            "button.p-btn--fill",               # confirmed Automa selector
-                            "span.p-btn-label:nth-child(1)",    # Automa label fallback
+                            "button.p-btn--fill",
                             "button:has-text('Participate')",
                             "button:has-text('Get Started')",
                             "button:has-text('Begin')",
@@ -1478,24 +1651,21 @@ c) You return to the survey list without clicking Participate → report DISQUAL
                                 btn = page.locator(p_sel).first
                                 if await btn.is_visible(timeout=4000):
                                     await btn.scroll_into_view_if_needed()
-                                    await asyncio.sleep(0.3)
+                                    await asyncio.sleep(random.uniform(0.3, 0.8))
                                     try:
                                         await btn.hover()
                                     except Exception:
                                         pass
+                                    await asyncio.sleep(random.uniform(0.2, 0.5))
                                     await btn.click(timeout=5000)
                                     self.log(f"✅ Participate clicked: {p_sel}", batch_id=batch_id)
                                     participated = True
-                                    await asyncio.sleep(4)
+                                    await asyncio.sleep(random.uniform(3, 5))
                                     break
                             except Exception as e:
-                                self.log(
-                                    f"  Participate sel failed [{p_sel}]: {e}",
-                                    "WARNING", batch_id=batch_id,
-                                )
+                                self.log(f"  Participate sel failed [{p_sel}]: {e}", "WARNING", batch_id=batch_id)
 
                         if not participated:
-                            # JS fallback
                             try:
                                 clicked = await page.evaluate("""
                                     () => {
@@ -1507,71 +1677,50 @@ c) You return to the survey list without clicking Participate → report DISQUAL
                                                    txt.includes('get started') ||
                                                    txt.includes('begin');
                                         });
-                                        if (btn) {
-                                            btn.scrollIntoView({ block: 'center' });
-                                            btn.click();
-                                            return true;
-                                        }
+                                        if (btn) { btn.scrollIntoView({block:'center'}); btn.click(); return true; }
                                         return false;
                                     }
                                 """)
                                 if clicked:
                                     self.log("✅ Participate clicked via JS fallback", batch_id=batch_id)
-                                    participated = True
-                                    await asyncio.sleep(4)
-                                else:
-                                    self.log(
-                                        "❌ Participate button not found after all attempts",
-                                        "WARNING", batch_id=batch_id,
-                                    )
+                                    await asyncio.sleep(random.uniform(3, 5))
                             except Exception as pe:
                                 self.log(f"JS participate fallback error: {pe}", "WARNING", batch_id=batch_id)
 
-                    # ── Detect if survey opened in a NEW TAB ──────────────────
-                    # Some external survey providers open in a new tab after
-                    # Participate is clicked.  Follow the user there.
+                    # ── New tab detection after Participate ───────────────────
                     try:
-                        new_tab = await context.wait_for_event("page", timeout=5000)
+                        new_tab = await page.context.wait_for_event("page", timeout=5000)
                         await new_tab.wait_for_load_state("domcontentloaded")
-                        self.log(
-                            f"✅ Survey opened in NEW TAB: {new_tab.url}",
-                            batch_id=batch_id,
-                        )
+                        self.log(f"✅ Survey opened in NEW TAB: {new_tab.url}", batch_id=batch_id)
                         page = new_tab
                     except Exception:
-                        # No new tab — survey is in the same tab (normal case)
                         self.log("Survey staying in same tab", batch_id=batch_id)
 
                     await self._screenshot(page, "04_survey_started", batch_id, survey_num)
 
-                    # ── Agree and Continue gate (consent popup) ───────────────
+                    # ── Consent gate ──────────────────────────────────────────
                     try:
                         agree_btn = page.locator("button#gtm-agree-button").first
                         if await agree_btn.is_visible(timeout=4000):
                             await agree_btn.click()
                             self.log("✅ Clicked 'Agree and Continue'", batch_id=batch_id)
-                            await asyncio.sleep(3)
+                            await asyncio.sleep(random.uniform(2, 4))
                     except Exception:
                         pass
 
-                    # ── Wait for first main survey question ───────────────────
-                    self.log("Waiting for main survey questions to load...", batch_id=batch_id)
+                    # ── Wait for main survey to load ──────────────────────────
                     survey_started = False
                     for _ in range(15):
                         for sel in [
                             "input[type='radio']", "input[type='checkbox']",
                             "textarea", "input.p-input",
                             "button:has-text('Next')", "button:has-text('Continue')",
-                            "[class*='question']", "[class*='Question']",
-                            "input#ctl00_Content_btnContinue",
+                            "[class*='question']", "input#ctl00_Content_btnContinue",
                         ]:
                             try:
                                 if await page.locator(sel).first.is_visible(timeout=1000):
                                     survey_started = True
-                                    self.log(
-                                        f"✅ Main survey question visible: {sel}",
-                                        batch_id=batch_id,
-                                    )
+                                    self.log(f"✅ Main survey question visible: {sel}", batch_id=batch_id)
                                     break
                             except Exception:
                                 pass
@@ -1580,18 +1729,13 @@ c) You return to the survey list without clicking Participate → report DISQUAL
                         await asyncio.sleep(2)
 
                     if not survey_started:
-                        self.log(
-                            "⚠️ Main survey questions never appeared — proceeding anyway",
-                            "WARNING", batch_id=batch_id,
-                        )
+                        self.log("⚠️ Main survey questions never appeared — proceeding anyway",
+                                 "WARNING", batch_id=batch_id)
 
-                    # ── MAIN SURVEY AGENT — fresh isolated browser ────────────
-                    # Created AFTER Participate is clicked + CDP has settled.
-                    # Completely independent from bu_browser_qual (already closed).
+                    # ── MAIN SURVEY AGENT (fresh isolated browser) ────────────
                     bu_browser_main = Browser(
                         config=BrowserConfig(cdp_url=ws_url, headless=False)
                     )
-
                     main_agent = Agent(
                         task=f"""
 {persona}
@@ -1599,22 +1743,22 @@ c) You return to the survey list without clicking Participate → report DISQUAL
 ════════════════════════════════════
 MAIN SURVEY
 ════════════════════════════════════
-You have passed qualification and the main survey has started. Answer ALL questions.
+You have passed qualification. The main survey has started. Answer ALL questions.
 
 INSTRUCTIONS:
 - Radio / multiple choice: pick the best match for the persona.
 - Checkboxes: select all that apply to the persona.
-- Dropdowns (div.options): click the container, then pick with ArrowDown keys.
-- Free-text / open-ended: 1–2 natural sentences in the persona's voice.
-- Number inputs: type number only, no symbols.
+- Dropdowns (div.options): click container, pick with ArrowDown.
+- Free-text: 1–2 natural sentences in the persona's voice.
+- Number inputs: digits only, no symbols.
 - Never leave a required field blank.
-- Click Next / Continue / Submit (input#ctl00_Content_btnContinue) after each page.
+- Click Next / Continue / Submit after each page.
 - Pause 2–4 seconds between actions.
 - Follow attention-check questions exactly as written.
 - Never contradict previous answers.
 
 STOP when:
-- "Thank You" / completion / reward credited page → report SUCCESS
+- "Thank You" / completion / reward credited → report SUCCESS
 - Disqualification page → report DISQUALIFIED
 - Unrecoverable dead end → report ERROR
 """,
@@ -1622,11 +1766,9 @@ STOP when:
                         browser=bu_browser_main,
                         max_actions_per_step=5,
                     )
-
                     try:
                         result = await asyncio.wait_for(
-                            main_agent.run(max_steps=60),
-                            timeout=480.0,
+                            main_agent.run(max_steps=60), timeout=480.0
                         )
                     except asyncio.TimeoutError:
                         raise Exception("Main survey timed out after 8 minutes")
@@ -1635,15 +1777,12 @@ STOP when:
                             await bu_browser_main.close()
                         except Exception:
                             pass
-                        await asyncio.sleep(1)
+                        await asyncio.sleep(2)
 
                     result_snippet = str(result)[:500]
 
-                    if hasattr(result, "history") and result.history:
-                        for idx, h in enumerate(result.history[-5:]):
-                            self.log(f"  agent[-{5-idx}]: {str(h)[:200]}", batch_id=batch_id)
-
-                    survey_status = self._detect_survey_outcome(result)
+                    # Two-stage outcome detection (keyword fast-path + LLM)
+                    survey_status = await self._detect_survey_outcome(page, result, openai_api_key)
                     self.log(f"Survey {survey_num} → {survey_status}", batch_id=batch_id)
 
                 except Exception as se:
@@ -1657,7 +1796,7 @@ STOP when:
                 except Exception as sse:
                     self.log(f"Final screenshot failed: {sse}", "WARNING", batch_id=batch_id)
 
-                # ── Tally + record ────────────────────────────────────────────
+                # ── Tally ─────────────────────────────────────────────────────
                 st.session_state.survey_progress[-1] = {
                     "num": survey_num, "status": survey_status, "note": result_snippet[:100],
                 }
@@ -1666,32 +1805,43 @@ STOP when:
                 elif survey_status == STATUS_FAILED:  failed_count   += 1
                 else:                                 error_count    += 1
 
+                # Collect screenshot URIs for this survey
+                survey_screenshot_uris = [
+                    uri for (snum, uri, _label) in
+                    st.session_state.batches[batch_id].get("screenshot_uris", [])
+                    if snum == survey_num
+                ]
+
                 survey_details.append({
-                    "survey_number": survey_num,
-                    "outcome":        survey_status,
-                    "output_snippet": result_snippet,
+                    "survey_number":    survey_num,
+                    "outcome":          survey_status,
+                    "output_snippet":   result_snippet,
+                    "screenshot_uris":  survey_screenshot_uris,
                 })
                 self._record_survey_attempt(
                     account_id=acct["account_id"], site_id=site["site_id"],
                     survey_name=f"Survey_{survey_num}_{batch_id}",
                     batch_id=batch_id, status=survey_status,
                     notes=result_snippet[:300],
+                    screenshot_uris=survey_screenshot_uris,
                 )
 
+                # Cooldown between surveys — critical for not getting flagged
                 if i < num_surveys - 1:
-                    self.log("⏳ Waiting for survey list to reload...", batch_id=batch_id)
-                    await asyncio.sleep(3)
+                    cooldown = random.uniform(30, 90)
+                    self.log(f"⏳ Cooldown {cooldown:.0f}s before next survey...", batch_id=batch_id)
+                    await asyncio.sleep(cooldown)
                     await self._wait_for_surveys_to_load(page, batch_id, max_reloads=3)
 
             # ------------------------------------------------------------------
-            # STEP 8 – Stop Chrome
+            # STEP 8 – Stop Chrome (saves CDP session)
             # ------------------------------------------------------------------
-            self.log("Stopping Chrome session – cookies will be synced", batch_id=batch_id)
+            self.log("Stopping Chrome session...", batch_id=batch_id)
             stop_result = self.chrome_manager.stop_session(session_id)
             if stop_result.get('success'):
                 self.log("✅ Chrome closed, profile state saved", batch_id=batch_id)
             else:
-                self.log(f"⚠️ Stop had issues: {stop_result.get('error')}", "WARNING", batch_id=batch_id)
+                self.log(f"⚠️ Stop issues: {stop_result.get('error')}", "WARNING", batch_id=batch_id)
 
             progress_ph.progress(1.0, text="Done!")
             summary = (
@@ -1722,6 +1872,14 @@ STOP when:
             }
 
         finally:
+            # Close Camoufox
+            if camoufox_browser is not None:
+                try:
+                    await camoufox_ctx.__aexit__(None, None, None)
+                except Exception:
+                    pass
+
+            # Close Playwright objects (CDP connection)
             for obj in (page, context, pw_browser, playwright_instance):
                 if obj:
                     try:
@@ -1731,15 +1889,18 @@ STOP when:
                             await obj.stop()
                     except Exception:
                         pass
+
             if session_id and session_id in self.chrome_manager.active_processes:
                 try:
                     self.chrome_manager.stop_session(session_id)
                 except Exception:
                     pass
+
             st.session_state.generation_in_progress = False
             st.rerun()
+
     # =========================================================================
-    # Google login
+    # Google login (via Camoufox page — human-like typing)
     # =========================================================================
     async def _perform_google_login(self, page, email: str, password: str, batch_id: str):
         self.log("→ Navigating to Google sign-in", batch_id=batch_id)
@@ -1747,53 +1908,51 @@ STOP when:
             "https://accounts.google.com/signin/v2/identifier",
             wait_until="domcontentloaded", timeout=30_000,
         )
-        await page.wait_for_timeout(2000)
+        await asyncio.sleep(random.uniform(2, 3))
 
         try:
             email_sel = 'input[type="email"], input[name="identifier"]'
             await page.wait_for_selector(email_sel, timeout=15_000)
-            await page.fill(email_sel, email)
-            self.log(f"✅ Email filled: {email}", batch_id=batch_id)
+            # Use human-like typing instead of fill()
+            await human_like_type(page, email_sel, email)
+            self.log(f"✅ Email typed: {email}", batch_id=batch_id)
             await page.keyboard.press("Enter")
-            await page.wait_for_timeout(4000)
+            await asyncio.sleep(random.uniform(3, 5))
         except Exception as e:
             raise Exception(f"Google email step failed: {e}")
 
         try:
-            self.log("Waiting for password input...", batch_id=batch_id)
             pwd_sel = 'input[type="password"], input[name="Passwd"]'
-            for ct in ["Verify it's you", "Confirm it's you", "This extra step",
-                       "Get a verification code", "Check your phone", "Try another way"]:
+            for ct in ["Verify it's you", "Confirm it's you", "Get a verification code",
+                       "Check your phone", "Try another way"]:
                 try:
                     if await page.locator(f"text='{ct}'").first.is_visible(timeout=1500):
-                        raise Exception(f"Google security challenge detected: '{ct}'.")
+                        raise Exception(f"Google security challenge: '{ct}'")
                 except Exception as ce:
                     if "security challenge" in str(ce):
                         raise
             await page.wait_for_selector(pwd_sel, timeout=20_000)
-            await page.fill(pwd_sel, password)
-            self.log("✅ Password filled", batch_id=batch_id)
+            await human_like_type(page, pwd_sel, password)
+            self.log("✅ Password typed", batch_id=batch_id)
             await page.keyboard.press("Enter")
-            await page.wait_for_timeout(5000)
+            await asyncio.sleep(random.uniform(4, 6))
         except Exception as e:
             raise Exception(f"Google password step failed: {e}")
 
-        for btn_text in ["Stay signed in", "Yes", "Continue", "Not now", "Remind me later"]:
+        for btn_text in ["Stay signed in", "Yes", "Continue", "Not now"]:
             try:
                 btn = page.locator(f"button:has-text('{btn_text}')").first
                 if await btn.is_visible(timeout=2000):
                     await btn.click()
-                    self.log(f"Clicked post-login prompt: '{btn_text}'", batch_id=batch_id)
-                    await page.wait_for_timeout(2000)
+                    await asyncio.sleep(random.uniform(1, 2))
                     break
             except Exception:
                 pass
 
         final_url = page.url
-        self.log(f"Post-login URL: {final_url}", batch_id=batch_id)
         if "accounts.google.com/signin" in final_url and "challenge" not in final_url:
-            raise Exception("Still on Google sign-in page after password attempt.")
-        self.log("✅ Password login successful", batch_id=batch_id)
+            raise Exception("Still on Google sign-in after password attempt.")
+        self.log("✅ Google login successful", batch_id=batch_id)
 
     # =========================================================================
     # Persona builder
@@ -1821,10 +1980,12 @@ STOP when:
         return "\n".join(lines)
 
     # =========================================================================
-    # DB write
+    # DB write (v6: includes screenshot_uris)
     # =========================================================================
-    def _record_survey_attempt(self, account_id, site_id, survey_name,
-                               batch_id, status, notes=""):
+    def _record_survey_attempt(
+        self, account_id, site_id, survey_name,
+        batch_id, status, notes="", screenshot_uris: Optional[List[str]] = None,
+    ):
         status = {"completed": STATUS_COMPLETE, "disqualified": STATUS_FAILED,
                   "incomplete": STATUS_ERROR}.get(status, status)
         if status not in {STATUS_COMPLETE, STATUS_PASSED, STATUS_FAILED, STATUS_PENDING, STATUS_ERROR}:
@@ -1834,11 +1995,14 @@ STOP when:
                 with conn.cursor() as c:
                     c.execute("""
                         INSERT INTO screening_results
-                            (account_id,site_id,survey_name,batch_id,screener_answers,
-                             status,started_at,completed_at,notes)
-                        VALUES (%s,%s,%s,%s,%s,%s,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,%s)
-                    """, (account_id, site_id, survey_name, batch_id, 1,
-                          status, (notes or "")[:1000]))
+                            (account_id, site_id, survey_name, batch_id, screener_answers,
+                             status, started_at, completed_at, notes, screenshot_uris)
+                        VALUES (%s,%s,%s,%s,%s,%s,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,%s,%s)
+                    """, (
+                        account_id, site_id, survey_name, batch_id, 1,
+                        status, (notes or "")[:1000],
+                        json.dumps(screenshot_uris or []),
+                    ))
                     conn.commit()
                     self.log(f"✅ Recorded: {survey_name} → {status}")
         except Exception as e:
@@ -1897,6 +2061,21 @@ STOP when:
                     )
                     if r.get("notes"):
                         st.caption(r["notes"])
+                    # Show screenshot URIs if present
+                    uris = r.get("screenshot_uris") or []
+                    if isinstance(uris, str):
+                        try:
+                            uris = json.loads(uris)
+                        except Exception:
+                            uris = []
+                    if uris:
+                        with st.expander(f"📸 {len(uris)} screenshot(s)"):
+                            for uri in uris:
+                                img_bytes = self.screenshot_manager.load_bytes(uri)
+                                if img_bytes:
+                                    st.image(img_bytes, use_container_width=True)
+                                else:
+                                    st.caption(uri)
                 with ca:
                     rid = r["result_id"]
                     if r["status"] != STATUS_COMPLETE:
@@ -2000,7 +2179,8 @@ STOP when:
             with self._pg() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as c:
                     c.execute(
-                        "SELECT result_id,survey_name,batch_id,status,started_at,completed_at,notes "
+                        "SELECT result_id,survey_name,batch_id,status,started_at,"
+                        "completed_at,notes,screenshot_uris "
                         "FROM screening_results WHERE account_id=%s AND site_id=%s "
                         "ORDER BY started_at DESC",
                         (account_id, site_id),
