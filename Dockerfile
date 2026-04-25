@@ -38,11 +38,12 @@
     RUN which google-chrome-stable && google-chrome-stable --version
     
     # -------------------------------
-    # Python dependencies
+    # Python dependencies + debugpy
     # -------------------------------
     COPY requirements.txt .
     RUN pip install --no-cache-dir --upgrade pip \
-        && pip install --no-cache-dir -r requirements.txt
+        && pip install --no-cache-dir -r requirements.txt \
+        && pip install --no-cache-dir debugpy
     
     # -------------------------------
     # Install Playwright browsers
@@ -74,20 +75,21 @@
         STREAMLIT_SERVER_HEADLESS=true \
         STREAMLIT_SERVER_ENABLE_CORS=false \
         CHROME_PROFILES_BASE_DIR=/app/chrome_profiles \
-        PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+        PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+        DEBUGPY_LISTEN_PORT=5678
     
     # -------------------------------
     # Expose ports
     # -------------------------------
-    EXPOSE 8501 6080 5900
+    EXPOSE 8501 6080 5900 5678
     
     # -------------------------------
-    # Startup script
+    # Startup script – runs streamlit inside debugpy
     # -------------------------------
     CMD bash -c "\
         Xvfb :99 -screen 0 1920x1080x24 -ac +extension GLX +render -noreset & \
         fluxbox & \
         x11vnc -display :99 -forever -shared -rfbport 5900 -rfbauth /root/.vnc/passwd & \
         websockify --web /usr/share/novnc 6080 localhost:5900 & \
-        streamlit run src/streamlit/app.py --server.address=0.0.0.0 --server.port=8501 \
+        python -m debugpy --listen 0.0.0.0:5678 --wait-for-client -m streamlit run src/streamlit/app.py --server.address=0.0.0.0 --server.port=8501 \
     "
