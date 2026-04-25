@@ -365,9 +365,19 @@ async def create_undetected_browser(
     _kill_chrome_on_port(cdp_port)
 
     # ----------------------------------------------------------------
-    # Build proxy string
+    # Build proxy config
+    #
+    # When Chrome is launched via CDP, Playwright CANNOT inject proxy auth
+    # into the already-running process.  Proxy credentials MUST go into
+    # Chrome's --proxy-server arg.  Chrome 120+ requires the credentials
+    # to be percent-encoded (urllib.parse.quote) so special characters
+    # (colons, hyphens, underscores) in BrightData usernames don't break
+    # the URL parser.
     # ----------------------------------------------------------------
-    proxy_string: Optional[str] = None
+    import urllib.parse
+
+    proxy_string: Optional[str] = None        # full URL for --proxy-server
+    playwright_proxy: Optional[Dict] = None   # kept for BrowserConfig (no-op when CDP)
 
     if proxy and proxy.get("host") and proxy.get("port"):
         proxy_type = proxy.get("proxy_type", "http")
@@ -384,12 +394,16 @@ async def create_undetected_browser(
                 log_func(f"🌎 Targeting country: {country} via BrightData", batch_id=batch_id)
 
         if username and password:
-            proxy_string = f"{proxy_type}://{username}:{password}@{host}:{port}"
+            # Percent-encode credentials so colons/hyphens in BrightData
+            # usernames don't confuse Chrome's URL parser
+            enc_user = urllib.parse.quote(str(username), safe="")
+            enc_pass = urllib.parse.quote(str(password), safe="")
+            proxy_string = f"{proxy_type}://{enc_user}:{enc_pass}@{host}:{port}"
         else:
             proxy_string = f"{proxy_type}://{host}:{port}"
 
         if log_func:
-            masked = proxy_string.split("@")[0] + "@..." if "@" in proxy_string else proxy_string
+            masked = f"{proxy_type}://{str(username)[:20]}...@{host}:{port}" if username else proxy_string
             log_func(f"🌐 Using proxy: {masked}", batch_id=batch_id)
 
     # ----------------------------------------------------------------
@@ -451,7 +465,12 @@ async def create_undetected_browser(
 
     # ----------------------------------------------------------------
     # Connect browser-use via CDP
+    # Proxy credentials are passed here so Playwright handles auth —
+    # Chrome itself only gets the proxy host (no credentials in its arg).
     # ----------------------------------------------------------------
+    # When connecting via CDP, proxy is already handled by Chrome itself
+    # (credentials passed via --proxy-server at launch). Do NOT set proxy
+    # on BrowserConfig here — it creates a second conflicting proxy layer.
     browser_config = BrowserConfig(
         headless=headless,
         cdp_url=f"http://127.0.0.1:{cdp_port}",

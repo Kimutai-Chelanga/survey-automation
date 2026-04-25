@@ -201,10 +201,7 @@ class GenerateManualWorkflowsPage:
                     raise Exception(f"Could not create profile: {create_result.get('error')}")
                 profile_path = create_result['profile_path']
 
-            # Launch stealth browser with proxy
-            # NOTE: user_data_dir is passed here and handled inside
-            # create_undetected_browser via --user-data-dir chromium arg
-            # (BrowserConfig 0.1.40 does not accept user_data_dir directly).
+            # ── Launch stealth browser with proxy ──────────────────────────
             status_ph.info("🖥️ Launching stealth browser...")
             browser = await create_undetected_browser(
                 user_data_dir=profile_path,
@@ -213,9 +210,15 @@ class GenerateManualWorkflowsPage:
                 log_func=self.log,
                 batch_id=batch_id
             )
-            context = browser.context
+
+            # ── Acquire a BrowserContext and Page — browser-use 0.1.40 API ──
+            # Browser.new_context() → browser_use.BrowserContext
+            # BrowserContext.get_current_page() → Playwright Page (or None)
+            # BrowserContext.new_page() → creates a fresh Playwright Page
+            context = await browser.new_context()
             page = await context.get_current_page()
-            if not page:
+            if page is None:
+                self.log("No existing page — opening a new one", batch_id=batch_id)
                 page = await context.new_page()
 
             await take_screenshot(page, "01_survey_tab_open", batch_id, log_func=self.log)
@@ -225,9 +228,7 @@ class GenerateManualWorkflowsPage:
             await page.goto(start_url, wait_until="domcontentloaded")
             await page.wait_for_timeout(3000)
 
-            # ------------------------------------------------------------------
-            # Attempt to click "Continue with Google" using the robust helper.
-            # ------------------------------------------------------------------
+            # ── Attempt to click "Continue with Google" ────────────────────
             self.log("🔍 Looking for 'Continue with Google' button…", batch_id=batch_id)
             clicked = await _click_continue_with_google(page, log_func=self.log, batch_id=batch_id)
 
@@ -235,30 +236,36 @@ class GenerateManualWorkflowsPage:
                 self.log("✅ Clicked Google OAuth button — waiting for redirect/popup…", batch_id=batch_id)
                 await page.wait_for_timeout(5000)
 
-                # If a new popup appeared (OAuth in a new tab), switch to it
-                pages = await context.get_pages()
-                if len(pages) > 1:
-                    oauth_page = pages[-1]
-                    self.log("🔀 Detected OAuth popup — switching to it", batch_id=batch_id)
-                    await oauth_page.wait_for_load_state("domcontentloaded")
-                    await oauth_page.wait_for_timeout(3000)
-                    account_selectors = [
-                        "div[data-authuser]",
-                        "li[data-identifier]",
-                        "[data-email]",
-                        "div.XID2Y",
-                        "div.H0sPbc",
-                    ]
-                    for acc_sel in account_selectors:
-                        try:
-                            acc_elem = oauth_page.locator(acc_sel).first
-                            if await acc_elem.is_visible(timeout=3000):
-                                await acc_elem.click()
-                                self.log("✅ Selected saved Google account from chooser", batch_id=batch_id)
-                                await oauth_page.wait_for_timeout(4000)
-                                break
-                        except Exception:
-                            continue
+                # If a new popup appeared (OAuth in a new tab), switch to it.
+                # page.context is the raw Playwright BrowserContext; .pages is a
+                # sync list property that gives all open Playwright pages.
+                try:
+                    playwright_ctx = page.context          # raw Playwright BrowserContext
+                    all_pages = playwright_ctx.pages       # sync property → list[Page]
+                    if len(all_pages) > 1:
+                        oauth_page = all_pages[-1]
+                        self.log("🔀 Detected OAuth popup — switching to it", batch_id=batch_id)
+                        await oauth_page.wait_for_load_state("domcontentloaded")
+                        await oauth_page.wait_for_timeout(3000)
+                        account_selectors = [
+                            "div[data-authuser]",
+                            "li[data-identifier]",
+                            "[data-email]",
+                            "div.XID2Y",
+                            "div.H0sPbc",
+                        ]
+                        for acc_sel in account_selectors:
+                            try:
+                                acc_elem = oauth_page.locator(acc_sel).first
+                                if await acc_elem.is_visible(timeout=3000):
+                                    await acc_elem.click()
+                                    self.log("✅ Selected saved Google account from chooser", batch_id=batch_id)
+                                    await oauth_page.wait_for_timeout(4000)
+                                    break
+                            except Exception:
+                                continue
+                except Exception as e:
+                    self.log(f"⚠️ Could not check for OAuth popup: {e}", "WARNING", batch_id=batch_id)
             else:
                 self.log(
                     "⚠️ No Google OAuth button found — the profile may already be logged in, "
@@ -452,8 +459,6 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
         if st.session_state.generation_results and st.session_state.generation_results.get("batch_id"):
             st.markdown("---")
             st.subheader("📁 Latest Run — Logs & Screenshots")
-            # key_suffix="_latest" avoids duplicate keys when the same batch_id
-            # is also shown in the "Inspect Any Run" section below.
             display_batch_details(
                 st.session_state.generation_results["batch_id"],
                 st.session_state.batches,
@@ -468,7 +473,6 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
             chosen = st.selectbox("Select batch:", all_batches, key="inspect_batch_select")
             if chosen:
                 with st.expander(f"📁 {chosen}", expanded=False):
-                    # key_suffix="_inspect" keeps keys unique from the "_latest" section
                     display_batch_details(
                         chosen,
                         st.session_state.batches,

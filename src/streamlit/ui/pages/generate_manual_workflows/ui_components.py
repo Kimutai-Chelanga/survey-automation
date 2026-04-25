@@ -41,8 +41,16 @@ def display_batch_details(batch_id: str, batches_state: dict, screenshot_labels:
     with tab_shots:
         shots = batch.get("screenshots", [])
         if shots:
-            for i, (num, img_path, label) in enumerate(shots):
-                display_label = labels.get(label, label)
+            for i, shot in enumerate(shots):
+                # Support both the new dict format and legacy 3-tuple (num, path, label_key)
+                if isinstance(shot, dict):
+                    img_path = shot.get("path", "")
+                    stage = shot.get("stage", "")
+                    display_label = shot.get("label") or labels.get(stage, stage)
+                else:
+                    _, img_path, stage = shot
+                    display_label = labels.get(stage, stage)
+
                 st.markdown(f"**{display_label}**")
                 if os.path.exists(img_path):
                     st.image(img_path, use_container_width=True)
@@ -51,7 +59,7 @@ def display_batch_details(batch_id: str, batches_state: dict, screenshot_labels:
                     st.download_button(
                         f"⬇️ {display_label}.png",
                         img_bytes,
-                        f"ss_{batch_id}_{i}_{label}.png",
+                        f"ss_{batch_id}_{i}_{stage}.png",
                         mime="image/png",
                         key=f"dl_ss_{batch_id}{key_suffix}_ui_{i}",
                     )
