@@ -12,12 +12,7 @@ from .constants import SCREENSHOT_LABELS, STATUS_COMPLETE, STATUS_PASSED, STATUS
 
 
 def display_batch_details(batch_id: str, batches_state: dict, screenshot_labels: dict = None, key_suffix: str = ""):
-    """Display logs and screenshots for a given batch.
-
-    key_suffix: pass a unique string (e.g. "_latest", "_inspect") when this
-    function is called more than once per Streamlit render cycle for the same
-    batch_id, to avoid StreamlitDuplicateElementKey errors.
-    """
+    """Display logs and screenshots for a given batch."""
     batch = batches_state.get(batch_id)
     if not batch:
         st.info("No data recorded for this batch yet.")
@@ -42,7 +37,6 @@ def display_batch_details(batch_id: str, batches_state: dict, screenshot_labels:
         shots = batch.get("screenshots", [])
         if shots:
             for i, shot in enumerate(shots):
-                # Support both the new dict format and legacy 3-tuple (num, path, label_key)
                 if isinstance(shot, dict):
                     img_path = shot.get("path", "")
                     stage = shot.get("stage", "")
@@ -166,7 +160,6 @@ def display_screening_results_tab(acct: dict, site: dict, batches_state: dict):
     if st.session_state.get("selected_batch_for_details"):
         bid = st.session_state.selected_batch_for_details
         st.markdown(f"### 📁 Batch: `{bid}`")
-        # Use "_selected" suffix — this is a third distinct call site
         display_batch_details(bid, batches_state, key_suffix="_selected")
         if st.button("Close batch view", key="close_batch_ui"):
             st.session_state.selected_batch_for_details = None

@@ -145,7 +145,6 @@ class GenerateManualWorkflowsPage:
         self.log(f"═══ Batch {batch_id} ═══  {acct['username']} / {site['site_name']}", batch_id=batch_id)
         st.session_state.generation_in_progress = True
 
-        # UI placeholders inside Runner tab
         status_ph = st.empty()
         progress_ph = st.empty()
 
@@ -154,7 +153,6 @@ class GenerateManualWorkflowsPage:
         survey_details = []
 
         try:
-            # Persistent Chrome profile
             profile_path = self.chrome_manager.get_profile_path(acct['username'])
             if not os.path.exists(profile_path):
                 self.log(f"Creating Chrome profile for {acct['username']}", batch_id=batch_id)
@@ -172,6 +170,11 @@ class GenerateManualWorkflowsPage:
                 batch_id=batch_id
             )
 
+            # Extract CDP port from browser object
+            cdp_port = getattr(browser, '_cdp_port', 9222)
+            cdp_url = f"http://127.0.0.1:{cdp_port}"
+            self.log(f"CDP URL for extraction: {cdp_url}", batch_id=batch_id)
+
             context = await browser.new_context()
             page = await context.get_current_page()
             if page is None:
@@ -179,7 +182,39 @@ class GenerateManualWorkflowsPage:
                 page = await context.new_page()
 
             await take_screenshot(page, "01_survey_tab_open", batch_id, log_func=self.log)
-            await page.goto(start_url, wait_until="domcontentloaded")
+
+            # Navigate with retry and error screenshots
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    await page.goto(start_url, wait_until="domcontentloaded", timeout=30000)
+                    break  # success
+                except Exception as e:
+                    self.log(f"Navigation attempt {attempt+1} failed: {e}", "WARNING", batch_id=batch_id)
+                    
+                    # --- Take screenshot of the current state (error page / blank) ---
+                    await take_screenshot(
+                        page,
+                        "navigation_error",
+                        batch_id,
+                        survey_num=0,
+                        log_func=self.log
+                    )
+                    
+                    if attempt == max_retries - 1:
+                        # Final attempt failed – take another screenshot and raise
+                        await take_screenshot(
+                            page,
+                            "navigation_error",
+                            batch_id,
+                            survey_num=0,
+                            log_func=self.log
+                        )
+                        raise
+                    await asyncio.sleep(2)
+                    # Refresh page object (might be stale)
+                    page = await context.get_current_page() or await context.new_page()
+
             await page.wait_for_timeout(9000)
 
             # Attempt Google OAuth (only if the profile isn't already logged in)
@@ -211,8 +246,8 @@ class GenerateManualWorkflowsPage:
 
             await solve_captcha_if_present(page, log_func=self.log, batch_id=batch_id)
 
-            # Extract surveys
-            surveys = await extract_surveys_with_crawl4ai(page.url, log_func=self.log)
+            # Extract surveys using existing CDP Chrome (no new browser)
+            surveys = await extract_surveys_with_crawl4ai(page.url, cdp_url=cdp_url, log_func=self.log)
             if not surveys:
                 self.log("No surveys found via Crawl4AI, falling back to agent discovery", "WARNING", batch_id=batch_id)
 
@@ -309,6 +344,7 @@ class GenerateManualWorkflowsPage:
                     pass
             st.session_state.generation_in_progress = False
             st.rerun()
+    
 
     # ----------------------------------------------------------------------
     # UI helpers for tabs

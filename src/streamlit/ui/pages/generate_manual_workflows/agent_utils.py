@@ -41,12 +41,12 @@ from typing import Dict, List, Optional, Any
 
 import aiohttp
 import requests as _requests
-from browser_use import Agent, Browser, BrowserConfig
+from browser_use import Agent, Browser, BrowserConfig as BrowserUseConfig
 from browser_use.browser.context import BrowserContext, BrowserContextConfig
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 from langchain_google_genai import ChatGoogleGenerativeAI
-from crawl4ai import AsyncWebCrawler, LLMExtractionStrategy
+from crawl4ai import AsyncWebCrawler, BrowserConfig as Crawl4AIBrowserConfig, LLMExtractionStrategy, LLMConfig
 from pydantic import BaseModel, Field
 
 from .constants import (
@@ -253,6 +253,8 @@ class _AuthProxyTunnel:
                     self._relay(client_sock, upstream)
                 else:
                     client_sock.sendall(resp)
+                    if self.log_func:
+                        self.log_func(f"Proxy CONNECT failed: {resp_line}", batch_id=self.batch_id)
             else:
                 headers_end = data.index(b"\r\n\r\n")
                 head = data[:headers_end]
@@ -263,6 +265,8 @@ class _AuthProxyTunnel:
 
         except Exception as e:
             logger.debug("Proxy tunnel error: %s", e)
+            if self.log_func:
+                self.log_func(f"Tunnel error: {e}", "ERROR", batch_id=self.batch_id)
         finally:
             try:
                 client_sock.close()
@@ -336,6 +340,23 @@ class _AuthProxyTunnel:
             self._server_sock.close()
         except Exception:
             pass
+
+
+def _test_upstream_proxy(proxy_config: Dict, test_url: str = "https://www.topsurveys.app/") -> tuple[bool, str]:
+    """Test the BrightData proxy directly using requests."""
+    import requests
+    proxy_type = proxy_config.get("proxy_type", "http")
+    host = proxy_config["host"]
+    port = proxy_config["port"]
+    username = proxy_config.get("username")
+    password = proxy_config.get("password")
+    proxy_url = f"{proxy_type}://{username}:{password}@{host}:{port}" if username and password else f"{proxy_type}://{host}:{port}"
+    proxies = {"http": proxy_url, "https": proxy_url}
+    try:
+        resp = requests.get(test_url, proxies=proxies, timeout=15, verify=False)
+        return resp.status_code == 200, f"HTTP {resp.status_code}"
+    except Exception as e:
+        return False, str(e)
 
 
 # ---------------------------------------------------------------------------
@@ -464,13 +485,17 @@ async def create_undetected_browser(
       - stealth / anti-detection flags
       - Docker / Xvfb compatible
 
-    Proxy flow:
-      1. _AuthProxyTunnel starts on 127.0.0.1:<random_port>
-      2. Chrome gets --proxy-server=http://127.0.0.1:<random_port>  (no auth needed)
-      3. Tunnel injects Proxy-Authorization header when forwarding to BrightData
-      4. BrightData authenticates -> connection succeeds
+    Returns a Browser object with an attached attribute _cdp_port containing the CDP port.
     """
     from .proxy_utils import format_brightdata_username
+
+    # Test upstream proxy before launching Chrome
+    if proxy and proxy.get("host") and proxy.get("port"):
+        ok, msg = _test_upstream_proxy(proxy)
+        if not ok:
+            raise RuntimeError(f"Upstream proxy test failed: {msg}. Check credentials/zone.")
+        if log_func:
+            log_func(f"Proxy upstream test passed: {msg}", batch_id=batch_id)
 
     cdp_port = _find_free_port()
     if log_func:
@@ -507,6 +532,7 @@ async def create_undetected_browser(
                 batch_id=batch_id,
             )
             local_port   = tunnel.start()
+            await asyncio.sleep(0.5)  # ensure socket is listening
             proxy_server = f"http://127.0.0.1:{local_port}"
             if log_func:
                 masked_user = (str(username)[:30] + "...") if len(str(username)) > 30 else str(username)
@@ -559,7 +585,7 @@ async def create_undetected_browser(
             f"STDOUT: {stdout[:500]}\nSTDERR: {stderr[:500]}"
         )
 
-    if not _wait_for_cdp(port=cdp_port, timeout=30.0, log_func=log_func):
+    if not _wait_for_cdp(port=cdp_port, timeout=90.0, log_func=log_func):
         stdout = chrome_proc.stdout.read().decode(errors="replace") if chrome_proc.stdout else ""
         stderr = chrome_proc.stderr.read().decode(errors="replace") if chrome_proc.stderr else ""
         chrome_proc.terminate()
@@ -576,7 +602,7 @@ async def create_undetected_browser(
     # ----------------------------------------------------------------
     # Connect browser-use via CDP
     # ----------------------------------------------------------------
-    browser_config = BrowserConfig(
+    browser_config = BrowserUseConfig(
         headless=headless,
         cdp_url=f"http://127.0.0.1:{cdp_port}",
     )
@@ -610,17 +636,38 @@ async def create_undetected_browser(
 
     browser.close = _patched_close  # type: ignore[method-assign]
 
+    # Attach CDP port to browser object so it can be retrieved later
+    browser._cdp_port = cdp_port
+
     return browser
 
 
 # ---------------------------------------------------------------------------
-# Crawl4AI survey extraction
+# ✅ FIXED: Crawl4AI survey extraction (attaches to existing Chrome CDP)
 # ---------------------------------------------------------------------------
-async def extract_surveys_with_crawl4ai(page_url: str, log_func=None) -> List[SurveyCard]:
+async def extract_surveys_with_crawl4ai(page_url: str, cdp_url: str = "http://127.0.0.1:9222", log_func=None) -> List[SurveyCard]:
+    """
+    Extract surveys from a page using Crawl4AI attached to an existing CDP Chrome.
+
+    Args:
+        page_url: The URL of the survey dashboard.
+        cdp_url: The Chrome DevTools Protocol URL of the already-running Chrome instance.
+        log_func: Optional logging function.
+    """
     if log_func:
-        log_func(f"Extracting surveys from {page_url} using Crawl4AI...")
+        log_func(f"Extracting surveys from {page_url} using Crawl4AI via CDP: {cdp_url}")
+
+    # Configure Crawl4AI to connect to the external Chrome instance
+    browser_config = Crawl4AIBrowserConfig(
+        browser_type="chromium",
+        headless=False,           # match your Chrome's headless state (usually False)
+        cdp_url=cdp_url,          # attach to existing browser, do NOT launch new one
+        verbose=True,
+    )
+
+    llm_config = LLMConfig(provider="openai/gpt-4o")
     extraction_strategy = LLMExtractionStrategy(
-        provider="openai/gpt-4o",
+        llm_config=llm_config,
         schema=SurveyCard.model_json_schema(),
         extraction_type="schema",
         instruction=(
@@ -629,7 +676,8 @@ async def extract_surveys_with_crawl4ai(page_url: str, log_func=None) -> List[Su
             "a CSS selector or text that can be used to click the card."
         ),
     )
-    async with AsyncWebCrawler(verbose=True) as crawler:
+
+    async with AsyncWebCrawler(config=browser_config, verbose=True) as crawler:
         result = await crawler.arun(
             url=page_url,
             extraction_strategy=extraction_strategy,
@@ -638,7 +686,7 @@ async def extract_surveys_with_crawl4ai(page_url: str, log_func=None) -> List[Su
         )
         if result.success and result.extracted_content:
             try:
-                data    = json.loads(result.extracted_content)
+                data = json.loads(result.extracted_content)
                 surveys = [SurveyCard(**item) for item in data]
                 if log_func:
                     log_func(f"Extracted {len(surveys)} surveys")

@@ -205,3 +205,30 @@ def verify_status_constraint() -> dict:
         return {"ok": True}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+
+def get_batches_for_account_site(account_id: int, site_id: int) -> List[Dict[str, Any]]:
+    """
+    Returns a list of distinct batch_ids with summary stats for a given account and site.
+    Each dict: batch_id, total_surveys, complete_count, passed_count, failed_count, error_count.
+    """
+    try:
+        with get_postgres() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as c:
+                c.execute("""
+                    SELECT
+                        batch_id,
+                        COUNT(*) as total_surveys,
+                        SUM(CASE WHEN status = %s THEN 1 ELSE 0 END) as complete_count,
+                        SUM(CASE WHEN status = %s THEN 1 ELSE 0 END) as passed_count,
+                        SUM(CASE WHEN status = %s THEN 1 ELSE 0 END) as failed_count,
+                        SUM(CASE WHEN status = %s THEN 1 ELSE 0 END) as error_count
+                    FROM screening_results
+                    WHERE account_id = %s AND site_id = %s AND batch_id IS NOT NULL
+                    GROUP BY batch_id
+                    ORDER BY MAX(started_at) DESC
+                """, (STATUS_COMPLETE, STATUS_PASSED, STATUS_FAILED, STATUS_ERROR, account_id, site_id))
+                return [dict(row) for row in c.fetchall()]
+    except Exception as e:
+        logger.error(f"get_batches_for_account_site: {e}")
+        return []

@@ -47,10 +47,10 @@ DISQUALIFIED_KEYWORDS = [
     "not selected", "quota full", "quota reached", "sorry, ", "we're sorry",
 ]
 
-# Screenshots
+# Screenshots – added "navigation_error"
 ALLOWED_SCREENSHOTS = frozenset({
     "01_survey_tab_open", "02_qualification_start", "03_qualification_done",
-    "04_survey_started", "05_survey_complete"
+    "04_survey_started", "05_survey_complete", "navigation_error"
 })
 SCREENSHOT_LABELS = {
     "01_survey_tab_open":      "1️⃣ Survey Tab Open",
@@ -58,6 +58,7 @@ SCREENSHOT_LABELS = {
     "03_qualification_done":   "3️⃣ Qualification Done",
     "04_survey_started":       "4️⃣ Survey Started",
     "05_survey_complete":      "5️⃣ Survey Complete",
+    "navigation_error":        "🚨 Navigation Error (ERR_EMPTY_RESPONSE)",
 }
 
 # Default BrightData proxy (USA)
