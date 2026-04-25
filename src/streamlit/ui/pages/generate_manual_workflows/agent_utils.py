@@ -2,34 +2,47 @@
 Agent utilities with proxy authentication, Capsolver, and stealth browser.
 Compatible with browser-use 0.1.40.
 
-browser-use 0.1.40 API facts (verified from source):
-  - Browser(config)           — sync constructor only, NO .start() method
-  - await browser.new_context(ctx_config) → BrowserContext
-  - await context.get_current_page()      → Page
-  - BrowserConfig fields: headless, extra_chromium_args, proxy (ProxySettings),
-                          chrome_instance_path, cdp_url, wss_url
-  - NO user_data_dir on BrowserConfig — persistent profiles are handled by
-    launching Chrome with --user-data-dir ourselves, then connecting via CDP.
+PROXY STRATEGY — CDP + Authenticated Proxy
+-------------------------------------------
+Chrome launched via CDP does NOT support credentials in --proxy-server.
+Both of these fail:
+  --proxy-server=http://user:pass@host:port  → ERR_NO_SUPPORTED_PROXIES
+  --proxy-server=http://host:port            → ERR_INVALID_AUTH_CREDENTIALS
+
+The only reliable pattern for authenticated proxies + CDP persistent profiles:
+
+  1. Spin up a tiny local HTTP CONNECT tunnel (thread-based, stdlib only).
+     It listens on 127.0.0.1:<free_port> with NO auth required.
+  2. When Chrome connects to it, the tunnel authenticates upstream to
+     BrightData using the real credentials via the Proxy-Authorization header.
+  3. Pass --proxy-server=http://127.0.0.1:<tunnel_port> to Chrome.
+     No credentials in the URL — ERR_NO_SUPPORTED_PROXIES is avoided.
+     The tunnel handles auth transparently.
+
+This preserves the persistent Chrome profile (user-data-dir) and CDP
+connection while supporting fully authenticated residential proxies.
 """
 
 import asyncio
+import base64
 import glob
 import json
 import os
 import logging
-import shlex
+import select
 import shutil
 import signal
 import socket
 import subprocess
+import threading
 import time
+import urllib.parse
 from typing import Dict, List, Optional, Any
 
 import aiohttp
 import requests as _requests
 from browser_use import Agent, Browser, BrowserConfig
 from browser_use.browser.context import BrowserContext, BrowserContextConfig
-from playwright._impl._api_structures import ProxySettings
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -43,15 +56,14 @@ from .constants import (
 
 logger = logging.getLogger(__name__)
 
-# CDP port range — we pick a free port dynamically so concurrent runs don't collide
 _CDP_PORT_START = int(os.environ.get("CHROME_DEBUG_PORT_START", "9222"))
-_CDP_PORT_END = 9322
+_CDP_PORT_END   = 9322
 
 
 class SurveyCard(BaseModel):
-    title: str = Field(description="The survey title or name")
-    reward: str = Field(description="Reward amount (e.g., '$1.50')")
-    link_url: str = Field(description="The URL or clickable element to start the survey")
+    title:     str           = Field(description="The survey title or name")
+    reward:    str           = Field(description="Reward amount (e.g., '$1.50')")
+    link_url:  str           = Field(description="The URL or clickable element to start the survey")
     unique_id: Optional[str] = Field(default=None, description="Any unique identifier for the survey")
 
 
@@ -59,7 +71,6 @@ class SurveyCard(BaseModel):
 # Port utilities
 # ---------------------------------------------------------------------------
 def _find_free_port(start: int = _CDP_PORT_START, end: int = _CDP_PORT_END) -> int:
-    """Return the first TCP port in [start, end] that is not currently bound."""
     for port in range(start, end + 1):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -68,19 +79,20 @@ def _find_free_port(start: int = _CDP_PORT_START, end: int = _CDP_PORT_END) -> i
                 return port
             except OSError:
                 continue
-    raise RuntimeError(
-        f"No free TCP port found in range {start}–{end}. "
-        "Kill stale Chrome processes or widen the port range."
-    )
+    raise RuntimeError(f"No free TCP port in range {start}-{end}.")
+
+
+def _find_free_port_any() -> int:
+    """Find a free port anywhere (used for the local proxy tunnel)."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
 
 
 def _kill_chrome_on_port(port: int) -> None:
-    """Best-effort: kill any process already listening on `port`."""
     try:
-        result = subprocess.run(
-            ["lsof", "-ti", f"tcp:{port}"],
-            capture_output=True, text=True, timeout=5
-        )
+        result = subprocess.run(["lsof", "-ti", f"tcp:{port}"],
+                                capture_output=True, text=True, timeout=5)
         for pid in result.stdout.strip().splitlines():
             try:
                 subprocess.run(["kill", "-9", pid], timeout=3)
@@ -92,58 +104,34 @@ def _kill_chrome_on_port(port: int) -> None:
 
 
 def _kill_chrome_using_profile(profile_path: str, log_func=None, batch_id: str = "") -> None:
-    """
-    Kill any Chrome process that is currently using `profile_path`.
-    This is necessary because ChromeSessionManager sessions leave a
-    SingletonLock behind that makes Chrome exit with code 21.
-    """
     try:
         import psutil
         killed = []
         for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
             try:
-                name = (proc.info.get('name') or '').lower()
+                name    = (proc.info.get('name') or '').lower()
                 cmdline = ' '.join(proc.info.get('cmdline') or [])
                 if 'chrome' in name and profile_path in cmdline:
                     os.kill(proc.info['pid'], signal.SIGKILL)
                     killed.append(proc.info['pid'])
-            except (psutil.NoSuchProcess, psutil.AccessDenied, Exception):
+            except Exception:
                 pass
         if killed and log_func:
-            log_func(f"🔪 Killed {len(killed)} Chrome process(es) using profile", batch_id=batch_id)
+            log_func(f"Killed {len(killed)} Chrome process(es) using profile", batch_id=batch_id)
         if killed:
             time.sleep(2)
     except ImportError:
-        # psutil not available — fall back to pkill
         try:
-            subprocess.run(
-                ["pkill", "-9", "-f", f"chrome.*{profile_path}"],
-                timeout=5, capture_output=True,
-            )
+            subprocess.run(["pkill", "-9", "-f", f"chrome.*{profile_path}"],
+                           timeout=5, capture_output=True)
             time.sleep(2)
         except Exception:
             pass
 
 
 def _cleanup_profile_locks(profile_path: str, log_func=None, batch_id: str = "") -> None:
-    """
-    Remove Chrome singleton lock files from a profile directory so Chrome can
-    open the profile even if a previous process crashed or was killed externally.
-
-    Files removed:
-      <profile>/SingletonLock
-      <profile>/SingletonCookie
-      <profile>/SingletonSocket
-      <profile>/lockfile
-      <profile>/Default/SingletonLock  (and siblings)
-      <profile>/Default/Last Session
-      <profile>/Default/Last Tabs
-      <profile>/Default/Current Session
-      <profile>/Default/Current Tabs
-    """
     lock_names    = ['SingletonLock', 'SingletonCookie', 'SingletonSocket', 'lockfile']
     session_names = ['Last Session', 'Last Tabs', 'Current Session', 'Current Tabs']
-
     dirs_to_clean = [profile_path, os.path.join(profile_path, 'Default')]
     removed = []
 
@@ -162,9 +150,7 @@ def _cleanup_profile_locks(profile_path: str, log_func=None, batch_id: str = "")
                         removed.append(target)
                     except Exception as e2:
                         if log_func:
-                            log_func(f"⚠️ Could not remove lock {target}: {e2}", "WARNING", batch_id=batch_id)
-
-        # Only remove session files from the Default sub-directory
+                            log_func(f"Could not remove lock {target}: {e2}", "WARNING", batch_id=batch_id)
         if directory.endswith('Default'):
             for name in session_names:
                 target = os.path.join(directory, name)
@@ -175,7 +161,6 @@ def _cleanup_profile_locks(profile_path: str, log_func=None, batch_id: str = "")
                     except Exception:
                         pass
 
-    # Also clean up any .org.chromium / .com.google temp socket files
     try:
         for pattern in [
             os.path.join(profile_path, '.org.chromium.Chromium.*'),
@@ -191,21 +176,175 @@ def _cleanup_profile_locks(profile_path: str, log_func=None, batch_id: str = "")
         pass
 
     if removed and log_func:
-        log_func(f"🧹 Removed {len(removed)} stale lock/session file(s)", batch_id=batch_id)
+        log_func(f"Removed {len(removed)} stale lock/session file(s)", batch_id=batch_id)
     elif log_func:
-        log_func("🧹 No stale lock files found", batch_id=batch_id)
+        log_func("No stale lock files found", batch_id=batch_id)
+
+
+# ---------------------------------------------------------------------------
+# Local authenticating proxy tunnel
+# ---------------------------------------------------------------------------
+class _AuthProxyTunnel:
+    """
+    A minimal HTTP CONNECT proxy tunnel that runs locally on 127.0.0.1.
+
+    Chrome connects to it with NO credentials (avoids ERR_NO_SUPPORTED_PROXIES).
+    The tunnel adds the Proxy-Authorization header when forwarding CONNECT
+    requests to the real upstream proxy (BrightData).
+
+    Supports HTTPS tunnelling (CONNECT) and plain HTTP forwarding.
+    Thread-based, stdlib only — no extra dependencies.
+    """
+
+    def __init__(self, upstream_host: str, upstream_port: int,
+                 username: str, password: str, log_func=None, batch_id: str = ""):
+        self.upstream_host = upstream_host
+        self.upstream_port = upstream_port
+        self.username      = username
+        self.password      = password
+        self.log_func      = log_func
+        self.batch_id      = batch_id
+        self.local_port    = _find_free_port_any()
+        self._server_sock  = None
+        self._thread       = None
+        self._stop         = threading.Event()
+
+    def _proxy_auth_header(self) -> bytes:
+        creds = base64.b64encode(
+            f"{self.username}:{self.password}".encode()
+        ).decode()
+        return f"Proxy-Authorization: Basic {creds}\r\n".encode()
+
+    def _tunnel(self, client_sock: socket.socket) -> None:
+        """Handle one client connection in its own thread."""
+        try:
+            client_sock.settimeout(30)
+            data = b""
+            while b"\r\n\r\n" not in data:
+                chunk = client_sock.recv(4096)
+                if not chunk:
+                    return
+                data += chunk
+
+            first_line = data.split(b"\r\n")[0].decode(errors="replace")
+            method = first_line.split(" ")[0].upper() if " " in first_line else ""
+
+            upstream = socket.create_connection(
+                (self.upstream_host, self.upstream_port), timeout=30
+            )
+            upstream.settimeout(30)
+
+            if method == "CONNECT":
+                headers_end = data.index(b"\r\n\r\n")
+                head = data[:headers_end]
+                auth_bytes = self._proxy_auth_header()
+                upstream.sendall(head + b"\r\n" + auth_bytes + b"\r\n")
+
+                resp = b""
+                while b"\r\n\r\n" not in resp:
+                    chunk = upstream.recv(4096)
+                    if not chunk:
+                        break
+                    resp += chunk
+
+                resp_line = resp.split(b"\r\n")[0].decode(errors="replace")
+                if "200" in resp_line:
+                    client_sock.sendall(b"HTTP/1.1 200 Connection established\r\n\r\n")
+                    self._relay(client_sock, upstream)
+                else:
+                    client_sock.sendall(resp)
+            else:
+                headers_end = data.index(b"\r\n\r\n")
+                head = data[:headers_end]
+                body = data[headers_end + 4:]
+                auth_bytes = self._proxy_auth_header()
+                upstream.sendall(head + b"\r\n" + auth_bytes + b"\r\n" + body)
+                self._relay(client_sock, upstream)
+
+        except Exception as e:
+            logger.debug("Proxy tunnel error: %s", e)
+        finally:
+            try:
+                client_sock.close()
+            except Exception:
+                pass
+
+    @staticmethod
+    def _relay(a: socket.socket, b: socket.socket) -> None:
+        """Bidirectional relay between two sockets until one closes."""
+        a.settimeout(1)
+        b.settimeout(1)
+        try:
+            while True:
+                try:
+                    r, _, _ = select.select([a, b], [], [], 5)
+                except Exception:
+                    break
+                if not r:
+                    continue
+                for src, dst in [(a, b), (b, a)]:
+                    if src in r:
+                        try:
+                            chunk = src.recv(65536)
+                            if not chunk:
+                                return
+                            dst.sendall(chunk)
+                        except Exception:
+                            return
+        finally:
+            try:
+                a.close()
+            except Exception:
+                pass
+            try:
+                b.close()
+            except Exception:
+                pass
+
+    def _serve(self) -> None:
+        while not self._stop.is_set():
+            try:
+                self._server_sock.settimeout(1)
+                try:
+                    client_sock, _ = self._server_sock.accept()
+                except socket.timeout:
+                    continue
+                t = threading.Thread(target=self._tunnel, args=(client_sock,), daemon=True)
+                t.start()
+            except Exception:
+                break
+
+    def start(self) -> int:
+        """Start the tunnel. Returns the local port Chrome should connect to."""
+        self._server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self._server_sock.bind(("127.0.0.1", self.local_port))
+        self._server_sock.listen(50)
+        self._thread = threading.Thread(target=self._serve, daemon=True)
+        self._thread.start()
+        if self.log_func:
+            self.log_func(
+                f"Local auth proxy tunnel: 127.0.0.1:{self.local_port} "
+                f"-> {self.upstream_host}:{self.upstream_port}",
+                batch_id=self.batch_id,
+            )
+        return self.local_port
+
+    def stop(self) -> None:
+        self._stop.set()
+        try:
+            self._server_sock.close()
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------------
 # Chrome binary discovery
 # ---------------------------------------------------------------------------
 def _find_chrome() -> str:
-    """Return the path to a usable Chrome / Chromium binary."""
-    # Prefer the env var set in docker-compose
     env_path = os.environ.get("CHROME_EXECUTABLE", "") or os.environ.get("CHROME_PATH", "")
     if env_path and os.path.exists(env_path):
         return env_path
-
     candidates = [
         "/usr/bin/google-chrome-stable",
         "/usr/bin/google-chrome",
@@ -235,33 +374,26 @@ def _find_chrome() -> str:
 def _launch_chrome_with_profile(
     user_data_dir: str,
     headless: bool,
-    proxy_string: Optional[str],
+    proxy_server: Optional[str],
     extra_args: List[str],
     cdp_port: int,
 ) -> subprocess.Popen:
     """
-    Start a Chrome process with remote debugging enabled on `cdp_port`.
-
-    Key Docker fixes
-    ----------------
-    • DISPLAY is forwarded so Chrome can use the Xvfb virtual display.
-    • The profile path is passed as a single argument (no shell=True) so
-      spaces in directory names are handled correctly.
-    • stdout/stderr are captured to a pipe so we can log Chrome startup
-      errors instead of silently swallowing them.
+    Launch Chrome with CDP and optional proxy.
+    proxy_server must be 'http://127.0.0.1:<tunnel_port>' — no credentials.
+    Auth is handled transparently by the local _AuthProxyTunnel.
     """
     chrome_path = _find_chrome()
 
-    # Build arg list — avoid shell=True so spaces in paths are safe
     args = [
         chrome_path,
         f"--remote-debugging-port={cdp_port}",
-        f"--remote-debugging-address=127.0.0.1",
-        f"--user-data-dir={user_data_dir}",   # subprocess handles quoting
+        "--remote-debugging-address=127.0.0.1",
+        f"--user-data-dir={user_data_dir}",
         "--no-first-run",
         "--no-default-browser-check",
-        "--no-sandbox",                        # required inside Docker
-        "--disable-dev-shm-usage",             # required inside Docker (/dev/shm too small)
+        "--no-sandbox",
+        "--disable-dev-shm-usage",
         "--disable-gpu",
         "--disable-software-rasterizer",
         "--disable-background-networking",
@@ -280,47 +412,34 @@ def _launch_chrome_with_profile(
     ]
 
     if headless:
-        # headless=new is the modern flag; falls back gracefully on older Chrome
         args.append("--headless=new")
     else:
-        # Non-headless inside Docker needs the Xvfb display
         args.append(f"--display={os.environ.get('DISPLAY', ':99')}")
 
-    if proxy_string:
-        args.append(f"--proxy-server={proxy_string}")
+    if proxy_server:
+        args.append(f"--proxy-server={proxy_server}")
 
     args.extend(extra_args)
 
-    # Inherit the environment but ensure DISPLAY is set for Chrome
     env = os.environ.copy()
     env.setdefault("DISPLAY", ":99")
 
-    proc = subprocess.Popen(
-        args,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        env=env,
-    )
-    return proc
+    return subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
 
 
 # ---------------------------------------------------------------------------
 # CDP readiness probe
 # ---------------------------------------------------------------------------
 def _wait_for_cdp(port: int, timeout: float = 30.0, log_func=None) -> bool:
-    """Poll until Chrome's CDP /json/version endpoint responds."""
     deadline = time.time() + timeout
-    attempt = 0
+    attempt  = 0
     while time.time() < deadline:
         attempt += 1
         try:
-            r = _requests.get(
-                f"http://127.0.0.1:{port}/json/version",
-                timeout=2,
-            )
+            r = _requests.get(f"http://127.0.0.1:{port}/json/version", timeout=2)
             if r.status_code == 200:
                 if log_func:
-                    log_func(f"✅ CDP responded on port {port} after {attempt} attempts")
+                    log_func(f"CDP responded on port {port} after {attempt} attempts")
                 return True
         except Exception:
             pass
@@ -340,151 +459,137 @@ async def create_undetected_browser(
 ) -> Browser:
     """
     Create a browser-use 0.1.40 Browser with:
-      • a persistent Chrome profile (via --user-data-dir)
-      • BrightData proxy support
-      • stealth / anti-detection flags
-      • Docker / Xvfb compatibility
+      - persistent Chrome profile (--user-data-dir)
+      - authenticated BrightData proxy via local tunnel (no credentials in Chrome args)
+      - stealth / anti-detection flags
+      - Docker / Xvfb compatible
 
-    Strategy
-    --------
-    browser-use 0.1.40 removed `user_data_dir` from BrowserConfig and also
-    removed the `.start()` method from Browser.  The supported path for a
-    persistent profile is:
-      1. Launch Chrome ourselves with --user-data-dir + --remote-debugging-port
-      2. Tell browser-use to connect via CDP  (cdp_url="http://localhost:<port>")
+    Proxy flow:
+      1. _AuthProxyTunnel starts on 127.0.0.1:<random_port>
+      2. Chrome gets --proxy-server=http://127.0.0.1:<random_port>  (no auth needed)
+      3. Tunnel injects Proxy-Authorization header when forwarding to BrightData
+      4. BrightData authenticates -> connection succeeds
     """
+    from .proxy_utils import format_brightdata_username
 
-    # ----------------------------------------------------------------
-    # Pick a free CDP port (avoids collisions between concurrent runs)
-    # ----------------------------------------------------------------
     cdp_port = _find_free_port()
     if log_func:
-        log_func(f"🔌 Using CDP port {cdp_port}", batch_id=batch_id)
-
-    # Kill anything already on that port just in case
+        log_func(f"Using CDP port {cdp_port}", batch_id=batch_id)
     _kill_chrome_on_port(cdp_port)
 
     # ----------------------------------------------------------------
-    # Build proxy config
-    #
-    # When Chrome is launched via CDP, Playwright CANNOT inject proxy auth
-    # into the already-running process.  Proxy credentials MUST go into
-    # Chrome's --proxy-server arg.  Chrome 120+ requires the credentials
-    # to be percent-encoded (urllib.parse.quote) so special characters
-    # (colons, hyphens, underscores) in BrightData usernames don't break
-    # the URL parser.
+    # Build proxy config and start local tunnel if needed
     # ----------------------------------------------------------------
-    import urllib.parse
-
-    proxy_string: Optional[str] = None        # full URL for --proxy-server
-    playwright_proxy: Optional[Dict] = None   # kept for BrowserConfig (no-op when CDP)
+    proxy_server: Optional[str]        = None
+    tunnel: Optional[_AuthProxyTunnel] = None
 
     if proxy and proxy.get("host") and proxy.get("port"):
         proxy_type = proxy.get("proxy_type", "http")
-        host = proxy["host"]
-        port = proxy["port"]
-        username = proxy.get("username")
-        password = proxy.get("password")
-        country = proxy.get("country", "US")
+        host       = proxy["host"]
+        port       = proxy["port"]
+        username   = proxy.get("username")
+        password   = proxy.get("password")
+        country    = proxy.get("country", "US")
 
         if "brd.superproxy.io" in host and username:
-            from .proxy_utils import format_brightdata_username
             username = format_brightdata_username(username, country)
             if log_func:
-                log_func(f"🌎 Targeting country: {country} via BrightData", batch_id=batch_id)
+                log_func(f"BrightData country targeting: {country}", batch_id=batch_id)
 
         if username and password:
-            # Percent-encode credentials so colons/hyphens in BrightData
-            # usernames don't confuse Chrome's URL parser
-            enc_user = urllib.parse.quote(str(username), safe="")
-            enc_pass = urllib.parse.quote(str(password), safe="")
-            proxy_string = f"{proxy_type}://{enc_user}:{enc_pass}@{host}:{port}"
+            # Start local auth tunnel — Chrome connects without credentials
+            tunnel = _AuthProxyTunnel(
+                upstream_host=host,
+                upstream_port=int(port),
+                username=username,
+                password=password,
+                log_func=log_func,
+                batch_id=batch_id,
+            )
+            local_port   = tunnel.start()
+            proxy_server = f"http://127.0.0.1:{local_port}"
+            if log_func:
+                masked_user = (str(username)[:30] + "...") if len(str(username)) > 30 else str(username)
+                log_func(
+                    f"Proxy: {proxy_type}://{host}:{port}  |  user: {masked_user}  "
+                    f"|  local tunnel: 127.0.0.1:{local_port}",
+                    batch_id=batch_id,
+                )
         else:
-            proxy_string = f"{proxy_type}://{host}:{port}"
-
-        if log_func:
-            masked = f"{proxy_type}://{str(username)[:20]}...@{host}:{port}" if username else proxy_string
-            log_func(f"🌐 Using proxy: {masked}", batch_id=batch_id)
+            proxy_server = f"{proxy_type}://{host}:{port}"
+            if log_func:
+                log_func(f"Proxy (no auth): {proxy_server}", batch_id=batch_id)
 
     # ----------------------------------------------------------------
-    # Ensure the profile directory exists
+    # Profile cleanup
     # ----------------------------------------------------------------
     os.makedirs(user_data_dir, exist_ok=True)
-
-    # ----------------------------------------------------------------
-    # Kill any existing Chrome process using this profile and clean up
-    # its lock files.  This is the root cause of "exit code 21":
-    # ChromeSessionManager leaves a SingletonLock when a manual session
-    # is stopped, and Chrome refuses to open a locked profile.
-    # ----------------------------------------------------------------
     if log_func:
-        log_func("🔍 Checking for stale Chrome processes / lock files…", batch_id=batch_id)
+        log_func("Checking for stale Chrome processes / lock files", batch_id=batch_id)
     _kill_chrome_using_profile(user_data_dir, log_func=log_func, batch_id=batch_id)
     _cleanup_profile_locks(user_data_dir, log_func=log_func, batch_id=batch_id)
 
     # ----------------------------------------------------------------
     # Launch Chrome
     # ----------------------------------------------------------------
+    bare_proxy_log = f"{proxy.get('host')}:{proxy.get('port')}" if proxy else "none"
     if log_func:
         log_func(
-            f"🖥️ Launching Chrome — profile: {user_data_dir!r}  CDP port: {cdp_port}",
+            f"Launching Chrome — profile: {user_data_dir!r}  CDP: {cdp_port}"
+            + (f"  upstream proxy: {bare_proxy_log}" if proxy_server else "  no proxy"),
             batch_id=batch_id,
         )
 
     chrome_proc = _launch_chrome_with_profile(
         user_data_dir=user_data_dir,
         headless=headless,
-        proxy_string=proxy_string,
-        extra_args=[],   # stealth flags are now inside _launch_chrome_with_profile
+        proxy_server=proxy_server,
+        extra_args=[],
         cdp_port=cdp_port,
     )
 
-    # Give Chrome a moment to start, then check whether it died immediately
     await asyncio.sleep(2)
     if chrome_proc.poll() is not None:
         stdout = chrome_proc.stdout.read().decode(errors="replace") if chrome_proc.stdout else ""
         stderr = chrome_proc.stderr.read().decode(errors="replace") if chrome_proc.stderr else ""
+        if tunnel:
+            tunnel.stop()
         raise RuntimeError(
             f"Chrome exited immediately (code {chrome_proc.returncode}).\n"
             f"STDOUT: {stdout[:500]}\nSTDERR: {stderr[:500]}"
         )
 
     if not _wait_for_cdp(port=cdp_port, timeout=30.0, log_func=log_func):
-        # Collect Chrome's output for debugging before giving up
         stdout = chrome_proc.stdout.read().decode(errors="replace") if chrome_proc.stdout else ""
         stderr = chrome_proc.stderr.read().decode(errors="replace") if chrome_proc.stderr else ""
         chrome_proc.terminate()
+        if tunnel:
+            tunnel.stop()
         raise RuntimeError(
             f"Chrome did not expose CDP on port {cdp_port} within 30 s.\n"
-            f"STDOUT: {stdout[:500]}\nSTDERR: {stderr[:500]}\n"
-            "Check that Chrome is installed and the port is not already in use."
+            f"STDOUT: {stdout[:500]}\nSTDERR: {stderr[:500]}"
         )
 
     if log_func:
-        log_func(f"✅ Chrome CDP ready on port {cdp_port}", batch_id=batch_id)
+        log_func(f"Chrome CDP ready on port {cdp_port}", batch_id=batch_id)
 
     # ----------------------------------------------------------------
     # Connect browser-use via CDP
-    # Proxy credentials are passed here so Playwright handles auth —
-    # Chrome itself only gets the proxy host (no credentials in its arg).
     # ----------------------------------------------------------------
-    # When connecting via CDP, proxy is already handled by Chrome itself
-    # (credentials passed via --proxy-server at launch). Do NOT set proxy
-    # on BrowserConfig here — it creates a second conflicting proxy layer.
     browser_config = BrowserConfig(
         headless=headless,
         cdp_url=f"http://127.0.0.1:{cdp_port}",
     )
     browser = Browser(config=browser_config)
-
-    # Trigger lazy initialisation
     await browser.get_playwright_browser()
 
     if log_func:
-        log_func("✅ browser-use connected to Chrome via CDP", batch_id=batch_id)
+        if tunnel:
+            log_func("Proxy auth tunnel active — BrightData credentials injected transparently", batch_id=batch_id)
+        log_func("browser-use connected to Chrome via CDP", batch_id=batch_id)
 
     # ----------------------------------------------------------------
-    # Patch browser.close() to also terminate the Chrome subprocess
+    # Patch browser.close() to stop tunnel + terminate Chrome
     # ----------------------------------------------------------------
     _original_close = browser.close
 
@@ -497,6 +602,11 @@ async def create_undetected_browser(
                 chrome_proc.wait(timeout=5)
             except Exception:
                 pass
+            if tunnel:
+                try:
+                    tunnel.stop()
+                except Exception:
+                    pass
 
     browser.close = _patched_close  # type: ignore[method-assign]
 
@@ -507,9 +617,8 @@ async def create_undetected_browser(
 # Crawl4AI survey extraction
 # ---------------------------------------------------------------------------
 async def extract_surveys_with_crawl4ai(page_url: str, log_func=None) -> List[SurveyCard]:
-    """Use Crawl4AI + LLM to extract survey cards."""
     if log_func:
-        log_func(f"🔍 Extracting surveys from {page_url} using Crawl4AI...")
+        log_func(f"Extracting surveys from {page_url} using Crawl4AI...")
     extraction_strategy = LLMExtractionStrategy(
         provider="openai/gpt-4o",
         schema=SurveyCard.model_json_schema(),
@@ -529,10 +638,10 @@ async def extract_surveys_with_crawl4ai(page_url: str, log_func=None) -> List[Su
         )
         if result.success and result.extracted_content:
             try:
-                data = json.loads(result.extracted_content)
+                data    = json.loads(result.extracted_content)
                 surveys = [SurveyCard(**item) for item in data]
                 if log_func:
-                    log_func(f"✅ Extracted {len(surveys)} surveys")
+                    log_func(f"Extracted {len(surveys)} surveys")
                 return surveys
             except Exception as e:
                 if log_func:
@@ -548,13 +657,9 @@ async def extract_surveys_with_crawl4ai(page_url: str, log_func=None) -> List[Su
 # CAPTCHA solving
 # ---------------------------------------------------------------------------
 async def solve_captcha_if_present(page, log_func=None, batch_id: str = ""):
-    """
-    Detect common CAPTCHA widgets and solve them using Capsolver.
-    Supports reCAPTCHA v2, v3, hCaptcha, and Cloudflare Turnstile.
-    """
     if not CAPSOLVER_API_KEY:
         if log_func:
-            log_func("⚠️ CAPTCHA solving skipped: No Capsolver API key", batch_id=batch_id)
+            log_func("CAPTCHA solving skipped: No Capsolver API key", batch_id=batch_id)
         return False
 
     captcha_selectors = [
@@ -572,7 +677,7 @@ async def solve_captcha_if_present(page, log_func=None, batch_id: str = ""):
             element = await page.query_selector(selector)
             if element:
                 if log_func:
-                    log_func(f"🛡️ CAPTCHA detected: {selector}. Attempting to solve...", batch_id=batch_id)
+                    log_func(f"CAPTCHA detected: {selector}. Attempting to solve...", batch_id=batch_id)
                 sitekey = None
                 if selector.startswith("iframe"):
                     parent = await element.evaluate_handle("el => el.closest('[data-sitekey]')")
@@ -588,9 +693,7 @@ async def solve_captcha_if_present(page, log_func=None, batch_id: str = ""):
                     for script in scripts:
                         content = await script.inner_html()
                         import re
-                        match = re.search(
-                            r'data-sitekey[\s]*=[\s]*["\']([^"\']+)["\']', content
-                        )
+                        match = re.search(r'data-sitekey[\s]*=[\s]*["\']([^"\']+)["\']', content)
                         if match:
                             sitekey = match.group(1)
                             break
@@ -598,7 +701,7 @@ async def solve_captcha_if_present(page, log_func=None, batch_id: str = ""):
                 if sitekey:
                     page_url = page.url
                     if log_func:
-                        log_func(f"🔑 Sitekey: {sitekey}, page URL: {page_url}", batch_id=batch_id)
+                        log_func(f"Sitekey: {sitekey}, page URL: {page_url}", batch_id=batch_id)
                     token = await call_capsolver(sitekey, page_url, log_func)
                     if token:
                         await page.evaluate(f"""
@@ -620,14 +723,14 @@ async def solve_captcha_if_present(page, log_func=None, batch_id: str = ""):
                         """)
                         solved = True
                         if log_func:
-                            log_func("✅ CAPTCHA solved and token injected", batch_id=batch_id)
+                            log_func("CAPTCHA solved and token injected", batch_id=batch_id)
                         await asyncio.sleep(3)
                     else:
                         if log_func:
-                            log_func("❌ Failed to solve CAPTCHA via Capsolver", batch_id=batch_id)
+                            log_func("Failed to solve CAPTCHA via Capsolver", batch_id=batch_id)
                 else:
                     if log_func:
-                        log_func("⚠️ Could not find sitekey for CAPTCHA", batch_id=batch_id)
+                        log_func("Could not find sitekey for CAPTCHA", batch_id=batch_id)
         except Exception as e:
             if log_func:
                 log_func(f"Error solving CAPTCHA: {e}", "ERROR", batch_id=batch_id)
@@ -635,7 +738,6 @@ async def solve_captcha_if_present(page, log_func=None, batch_id: str = ""):
 
 
 async def call_capsolver(sitekey: str, page_url: str, log_func=None) -> Optional[str]:
-    """Call Capsolver API to solve reCAPTCHA / hCaptcha."""
     if not CAPSOLVER_API_KEY:
         return None
     task_type = "ReCaptchaV2TaskProxyless"
@@ -645,7 +747,7 @@ async def call_capsolver(sitekey: str, page_url: str, log_func=None) -> Optional
     payload = {
         "clientKey": CAPSOLVER_API_KEY,
         "task": {
-            "type": task_type,
+            "type":       task_type,
             "websiteURL": page_url,
             "websiteKey": sitekey,
         },
@@ -693,13 +795,11 @@ async def call_capsolver(sitekey: str, page_url: str, log_func=None) -> Optional
 # Survey agent
 # ---------------------------------------------------------------------------
 async def run_survey_agent(browser: Browser, llm, persona: str, start_url: str, log_func=None) -> str:
-    """Run a single browser-use agent for one complete survey."""
     agent_task = f"""
 {persona}
 
-════════════════════════════════════
 SURVEY COMPLETION AGENT
-════════════════════════════════════
+========================
 You are to complete ONE survey from start to finish.
 
 STEPS:
@@ -779,7 +879,7 @@ def detect_survey_outcome(result, log_func=None) -> str:
 # LLM factory
 # ---------------------------------------------------------------------------
 def get_llm(model_choice: str):
-    cfg = MODEL_REGISTRY[model_choice]
+    cfg     = MODEL_REGISTRY[model_choice]
     api_key = os.getenv(MODEL_ENV_KEYS[model_choice], "")
     if not api_key:
         raise Exception(f"Missing API key for {model_choice}")
@@ -800,7 +900,7 @@ def get_llm(model_choice: str):
 async def perform_google_login(page, email: str, password: str, log_func=None):
     """Fallback Google login via direct navigation."""
     if log_func:
-        log_func("→ Navigating to Google sign-in")
+        log_func("Navigating to Google sign-in")
     await page.goto(
         "https://accounts.google.com/signin/v2/identifier",
         wait_until="domcontentloaded",
@@ -812,7 +912,7 @@ async def perform_google_login(page, email: str, password: str, log_func=None):
         await page.wait_for_selector(email_sel, timeout=15_000)
         await page.fill(email_sel, email)
         if log_func:
-            log_func(f"✅ Email filled: {email}")
+            log_func(f"Email filled: {email}")
         await page.keyboard.press("Enter")
         await page.wait_for_timeout(4000)
     except Exception as e:
@@ -822,12 +922,8 @@ async def perform_google_login(page, email: str, password: str, log_func=None):
             log_func("Waiting for password input...")
         pwd_sel = 'input[type="password"], input[name="Passwd"]'
         for ct in [
-            "Verify it's you",
-            "Confirm it's you",
-            "This extra step",
-            "Get a verification code",
-            "Check your phone",
-            "Try another way",
+            "Verify it's you", "Confirm it's you", "This extra step",
+            "Get a verification code", "Check your phone", "Try another way",
         ]:
             try:
                 if await page.locator(f"text='{ct}'").first.is_visible(timeout=1500):
@@ -838,7 +934,7 @@ async def perform_google_login(page, email: str, password: str, log_func=None):
         await page.wait_for_selector(pwd_sel, timeout=20_000)
         await page.fill(pwd_sel, password)
         if log_func:
-            log_func("✅ Password filled")
+            log_func("Password filled")
         await page.keyboard.press("Enter")
         await page.wait_for_timeout(5000)
     except Exception as e:
@@ -860,4 +956,4 @@ async def perform_google_login(page, email: str, password: str, log_func=None):
     if "accounts.google.com/signin" in final_url and "challenge" not in final_url:
         raise Exception("Still on Google sign-in page after password attempt.")
     if log_func:
-        log_func("✅ Password login successful")
+        log_func("Password login successful")
