@@ -60,8 +60,6 @@ async def _click_continue_with_google(page, log_func=None, batch_id: str = "") -
     or 'Sign in with Google' element.  Works for <button>, <a>, <div> etc.
     Returns True if the element was found and clicked.
     """
-    # Playwright text locators and CSS attribute selectors in priority order.
-    # Using :text() pseudo-class (Playwright built-in) plus data-* attributes.
     selectors = [
         # Playwright built-in text matchers (case-insensitive substring)
         "text=Continue with Google",
@@ -204,6 +202,9 @@ class GenerateManualWorkflowsPage:
                 profile_path = create_result['profile_path']
 
             # Launch stealth browser with proxy
+            # NOTE: user_data_dir is passed here and handled inside
+            # create_undetected_browser via --user-data-dir chromium arg
+            # (BrowserConfig 0.1.40 does not accept user_data_dir directly).
             status_ph.info("🖥️ Launching stealth browser...")
             browser = await create_undetected_browser(
                 user_data_dir=profile_path,
@@ -226,14 +227,12 @@ class GenerateManualWorkflowsPage:
 
             # ------------------------------------------------------------------
             # Attempt to click "Continue with Google" using the robust helper.
-            # This covers <button>, <a>, <div role="button">, etc. on any site.
             # ------------------------------------------------------------------
             self.log("🔍 Looking for 'Continue with Google' button…", batch_id=batch_id)
             clicked = await _click_continue_with_google(page, log_func=self.log, batch_id=batch_id)
 
             if clicked:
                 self.log("✅ Clicked Google OAuth button — waiting for redirect/popup…", batch_id=batch_id)
-                # Give the OAuth popup / redirect time to settle
                 await page.wait_for_timeout(5000)
 
                 # If a new popup appeared (OAuth in a new tab), switch to it
@@ -241,17 +240,14 @@ class GenerateManualWorkflowsPage:
                 if len(pages) > 1:
                     oauth_page = pages[-1]
                     self.log("🔀 Detected OAuth popup — switching to it", batch_id=batch_id)
-                    # Wait for Google account chooser / login page
                     await oauth_page.wait_for_load_state("domcontentloaded")
                     await oauth_page.wait_for_timeout(3000)
-                    # If already signed in via the persistent profile, Google will
-                    # show an account chooser; click the first account automatically.
                     account_selectors = [
                         "div[data-authuser]",
                         "li[data-identifier]",
                         "[data-email]",
-                        "div.XID2Y",          # Google account chooser card
-                        "div.H0sPbc",         # another variant
+                        "div.XID2Y",
+                        "div.H0sPbc",
                     ]
                     for acc_sel in account_selectors:
                         try:
@@ -456,7 +452,14 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
         if st.session_state.generation_results and st.session_state.generation_results.get("batch_id"):
             st.markdown("---")
             st.subheader("📁 Latest Run — Logs & Screenshots")
-            display_batch_details(st.session_state.generation_results["batch_id"], st.session_state.batches, SCREENSHOT_LABELS)
+            # key_suffix="_latest" avoids duplicate keys when the same batch_id
+            # is also shown in the "Inspect Any Run" section below.
+            display_batch_details(
+                st.session_state.generation_results["batch_id"],
+                st.session_state.batches,
+                SCREENSHOT_LABELS,
+                key_suffix="_latest",
+            )
 
         all_batches = sorted(st.session_state.batches.keys(), reverse=True)
         if all_batches:
@@ -465,7 +468,13 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
             chosen = st.selectbox("Select batch:", all_batches, key="inspect_batch_select")
             if chosen:
                 with st.expander(f"📁 {chosen}", expanded=False):
-                    display_batch_details(chosen, st.session_state.batches, SCREENSHOT_LABELS)
+                    # key_suffix="_inspect" keeps keys unique from the "_latest" section
+                    display_batch_details(
+                        chosen,
+                        st.session_state.batches,
+                        SCREENSHOT_LABELS,
+                        key_suffix="_inspect",
+                    )
 
         if st.session_state.generation_logs:
             st.markdown("---")
@@ -477,7 +486,11 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
                         self.clear_logs()
                         st.rerun()
                 with c2:
-                    st.download_button("⬇️ Download", "\n".join(st.session_state.generation_logs), f"logs_{datetime.now():%Y%m%d_%H%M%S}.txt")
+                    st.download_button(
+                        "⬇️ Download",
+                        "\n".join(st.session_state.generation_logs),
+                        f"logs_{datetime.now():%Y%m%d_%H%M%S}.txt",
+                    )
 
         if st.session_state.generation_results:
             st.markdown("---")
@@ -599,13 +612,16 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
                 st.rerun()
 
         st.markdown("---")
-        # CAPTCHA status
         if CAPSOLVER_API_KEY:
             st.success("✅ Capsolver API key detected – automatic CAPTCHA solving enabled.")
         else:
             st.warning("⚠️ No Capsolver API key set (set CAPSOLVER_API_KEY environment variable). CAPTCHAs may block progress.")
 
-        st.info(f"**Account:** {acct['username']}  |  **Site:** {site['site_name']}  |  **URL:** {start_url}  |  **Surveys:** {num_surveys}  |  **Model:** {model_choice}  |  **Prompt:** {prompt['prompt_name']}  |  **Email:** {google_email or '⚠️ not set'}")
+        st.info(
+            f"**Account:** {acct['username']}  |  **Site:** {site['site_name']}  |  "
+            f"**URL:** {start_url}  |  **Surveys:** {num_surveys}  |  **Model:** {model_choice}  |  "
+            f"**Prompt:** {prompt['prompt_name']}  |  **Email:** {google_email or '⚠️ not set'}"
+        )
 
         profile_path = self.chrome_manager.get_profile_path(acct['username'])
         if os.path.exists(os.path.join(profile_path, 'Default')):
@@ -613,7 +629,13 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
         else:
             st.info("ℹ️ No profile yet. Will create one and perform one‑time login if needed.")
 
-        if st.button(f"🚀 Answer {num_surveys} Survey(s) with AI (BrightData + CAPTCHA)", type="primary", use_container_width=True, key="answer_btn", disabled=st.session_state.get("generation_in_progress", False)):
+        if st.button(
+            f"🚀 Answer {num_surveys} Survey(s) with AI (BrightData + CAPTCHA)",
+            type="primary",
+            use_container_width=True,
+            key="answer_btn",
+            disabled=st.session_state.get("generation_in_progress", False),
+        ):
             st.session_state.survey_progress = []
             run_async(self._do_direct_answering(
                 acct, site, prompt, start_url, num_surveys, model_choice,

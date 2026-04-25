@@ -67,6 +67,11 @@
     RUN x11vnc -storepasswd secret /root/.vnc/passwd
     
     # -------------------------------
+    # Make entrypoint script executable
+    # -------------------------------
+    RUN chmod +x /app/start.sh
+    
+    # -------------------------------
     # Environment variables
     # -------------------------------
     ENV PYTHONUNBUFFERED=1 \
@@ -76,7 +81,8 @@
         STREAMLIT_SERVER_ENABLE_CORS=false \
         CHROME_PROFILES_BASE_DIR=/app/chrome_profiles \
         PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
-        DEBUGPY_LISTEN_PORT=5678
+        DEBUGPY_LISTEN_PORT=5678 \
+        DEBUGPY_WAIT_FOR_CLIENT=false
     
     # -------------------------------
     # Expose ports
@@ -84,12 +90,6 @@
     EXPOSE 8501 6080 5900 5678
     
     # -------------------------------
-    # Startup script – runs streamlit inside debugpy
+    # Startup script
     # -------------------------------
-    CMD bash -c "\
-        Xvfb :99 -screen 0 1920x1080x24 -ac +extension GLX +render -noreset & \
-        fluxbox & \
-        x11vnc -display :99 -forever -shared -rfbport 5900 -rfbauth /root/.vnc/passwd & \
-        websockify --web /usr/share/novnc 6080 localhost:5900 & \
-        python -m debugpy --listen 0.0.0.0:5678 --wait-for-client -m streamlit run src/streamlit/app.py --server.address=0.0.0.0 --server.port=8501 \
-    "
+    CMD ["/app/start.sh"]

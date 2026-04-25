@@ -151,6 +151,8 @@ services:
       BROWSERLESS_TOKEN: ${BROWSERLESS_TOKEN}
       BROWSERLESS_WS_URL: ${BROWSERLESS_WS_URL:-wss://production-sfo.browserless.io}
       DEBUGPY_LISTEN_PORT: 5678
+      # Set to "true" in .env to block Streamlit startup until a debugger attaches
+      DEBUGPY_WAIT_FOR_CLIENT: ${DEBUGPY_WAIT_FOR_CLIENT:-false}
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8501/_stcore/health"]
       interval: 30s
