@@ -175,11 +175,9 @@ class GenerateManualWorkflowsPage:
             cdp_url = f"http://127.0.0.1:{cdp_port}"
             self.log(f"CDP URL for extraction: {cdp_url}", batch_id=batch_id)
 
-            context = await browser.new_context()
-            page = await context.get_current_page()
-            if page is None:
-                self.log("No existing page — opening a new one", batch_id=batch_id)
-                page = await context.new_page()
+            # ✅ FIX: Get a live page using the helper from agent_utils
+            from .agent_utils import _get_live_page
+            page, _ = await _get_live_page(browser, log_func=self.log, batch_id=batch_id)
 
             await take_screenshot(page, "01_survey_tab_open", batch_id, log_func=self.log)
 
@@ -188,32 +186,16 @@ class GenerateManualWorkflowsPage:
             for attempt in range(max_retries):
                 try:
                     await page.goto(start_url, wait_until="domcontentloaded", timeout=30000)
-                    break  # success
+                    break
                 except Exception as e:
                     self.log(f"Navigation attempt {attempt+1} failed: {e}", "WARNING", batch_id=batch_id)
-                    
-                    # --- Take screenshot of the current state (error page / blank) ---
-                    await take_screenshot(
-                        page,
-                        "navigation_error",
-                        batch_id,
-                        survey_num=0,
-                        log_func=self.log
-                    )
-                    
+                    await take_screenshot(page, "navigation_error", batch_id, survey_num=0, log_func=self.log)
                     if attempt == max_retries - 1:
-                        # Final attempt failed – take another screenshot and raise
-                        await take_screenshot(
-                            page,
-                            "navigation_error",
-                            batch_id,
-                            survey_num=0,
-                            log_func=self.log
-                        )
+                        await take_screenshot(page, "navigation_error_final", batch_id, survey_num=0, log_func=self.log)
                         raise
                     await asyncio.sleep(2)
-                    # Refresh page object (might be stale)
-                    page = await context.get_current_page() or await context.new_page()
+                    # Get a fresh page reference in case the old one became unusable
+                    page, _ = await _get_live_page(browser, log_func=self.log, batch_id=batch_id)
 
             await page.wait_for_timeout(9000)
 
@@ -244,9 +226,21 @@ class GenerateManualWorkflowsPage:
                 except Exception as e:
                     self.log(f"⚠️ OAuth popup handling: {e}", "WARNING", batch_id=batch_id)
 
+                # ✅ Wait for the dashboard to actually load after OAuth
+                try:
+                    # After OAuth, the main page redirects to the dashboard
+                    await page.wait_for_load_state("networkidle", timeout=15000)
+                    self.log("Dashboard loaded after OAuth", batch_id=batch_id)
+                except Exception:
+                    await page.wait_for_timeout(5000)  # fallback wait
+
             await solve_captcha_if_present(page, log_func=self.log, batch_id=batch_id)
 
+            # Take a screenshot before the agent starts (safe point)
+            await take_screenshot(page, "04_before_agent", batch_id, log_func=self.log)
+
             # Extract surveys using existing CDP Chrome (no new browser)
+            # Use page.url as the current URL (which should be the dashboard)
             surveys = await extract_surveys_with_crawl4ai(page.url, cdp_url=cdp_url, log_func=self.log)
             if not surveys:
                 self.log("No surveys found via Crawl4AI, falling back to agent discovery", "WARNING", batch_id=batch_id)
@@ -264,6 +258,9 @@ class GenerateManualWorkflowsPage:
                 survey_status = STATUS_ERROR
                 result_snippet = ""
 
+                # Ensure we have a live page before each survey (in case of stale reference)
+                page, _ = await _get_live_page(browser, log_func=self.log, batch_id=batch_id)
+
                 try:
                     if surveys and i < len(surveys):
                         survey_card = surveys[i]
@@ -279,10 +276,14 @@ class GenerateManualWorkflowsPage:
 
                     await solve_captcha_if_present(page, log_func=self.log, batch_id=batch_id)
 
+                    # Run the survey agent (it uses its own isolated context but shares the browser)
                     outcome = await run_survey_agent(browser, llm, persona, page.url, log_func=self.log)
                     survey_status = outcome
                     result_snippet = f"Agent returned: {outcome}"
-                    await take_screenshot(page, "05_survey_complete", batch_id, survey_num, log_func=self.log)
+
+                    # ✅ After agent, get a fresh live page for the final screenshot
+                    fresh_page, _ = await _get_live_page(browser, log_func=self.log, batch_id=batch_id)
+                    await take_screenshot(fresh_page, "05_survey_complete", batch_id, survey_num, log_func=self.log)
 
                 except Exception as e:
                     self.log(f"Survey {survey_num} exception: {e}", "ERROR", batch_id=batch_id)
@@ -308,8 +309,10 @@ class GenerateManualWorkflowsPage:
                 )
 
                 if i < num_surveys - 1:
-                    await page.goto(start_url)
-                    await page.wait_for_timeout(9000)
+                    # Return to the dashboard – get a fresh page to avoid stale reference
+                    fresh_page, _ = await _get_live_page(browser, log_func=self.log, batch_id=batch_id)
+                    await fresh_page.goto(start_url)
+                    await fresh_page.wait_for_timeout(9000)
 
             progress_ph.progress(1.0, text="Done!")
             summary = f"✅ {complete_count} complete  🟡 {passed_count} passed  ❌ {failed_count} failed  ⚠️ {error_count} error"

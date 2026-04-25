@@ -21,6 +21,17 @@ The only reliable pattern for authenticated proxies + CDP persistent profiles:
 
 This preserves the persistent Chrome profile (user-data-dir) and CDP
 connection while supporting fully authenticated residential proxies.
+
+AGENT ISOLATION STRATEGY
+--------------------------
+browser-use 0.1.40's Agent.run() calls browser.close() and/or
+context.close() when it finishes, which in CDP mode kills the entire
+Playwright browser connection and Chrome process.
+
+Fix: we create a throw-away "shadow" Browser object for each agent run
+that wraps the same CDP URL but has its close() patched to a no-op.
+The agent tears down its shadow browser — the real Browser object and
+Chrome process are completely unaffected.
 """
 
 import asyncio
@@ -36,7 +47,6 @@ import socket
 import subprocess
 import threading
 import time
-import urllib.parse
 from typing import Dict, List, Optional, Any
 
 import aiohttp
@@ -83,7 +93,6 @@ def _find_free_port(start: int = _CDP_PORT_START, end: int = _CDP_PORT_END) -> i
 
 
 def _find_free_port_any() -> int:
-    """Find a free port anywhere (used for the local proxy tunnel)."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
@@ -187,13 +196,7 @@ def _cleanup_profile_locks(profile_path: str, log_func=None, batch_id: str = "")
 class _AuthProxyTunnel:
     """
     A minimal HTTP CONNECT proxy tunnel that runs locally on 127.0.0.1.
-
-    Chrome connects to it with NO credentials (avoids ERR_NO_SUPPORTED_PROXIES).
-    The tunnel adds the Proxy-Authorization header when forwarding CONNECT
-    requests to the real upstream proxy (BrightData).
-
-    Supports HTTPS tunnelling (CONNECT) and plain HTTP forwarding.
-    Thread-based, stdlib only — no extra dependencies.
+    Chrome connects with NO credentials; the tunnel injects Proxy-Authorization.
     """
 
     def __init__(self, upstream_host: str, upstream_port: int,
@@ -216,7 +219,6 @@ class _AuthProxyTunnel:
         return f"Proxy-Authorization: Basic {creds}\r\n".encode()
 
     def _tunnel(self, client_sock: socket.socket) -> None:
-        """Handle one client connection in its own thread."""
         try:
             client_sock.settimeout(30)
             data = b""
@@ -265,8 +267,6 @@ class _AuthProxyTunnel:
 
         except Exception as e:
             logger.debug("Proxy tunnel error: %s", e)
-            if self.log_func:
-                self.log_func(f"Tunnel error: {e}", "ERROR", batch_id=self.batch_id)
         finally:
             try:
                 client_sock.close()
@@ -275,7 +275,6 @@ class _AuthProxyTunnel:
 
     @staticmethod
     def _relay(a: socket.socket, b: socket.socket) -> None:
-        """Bidirectional relay between two sockets until one closes."""
         a.settimeout(1)
         b.settimeout(1)
         try:
@@ -319,7 +318,6 @@ class _AuthProxyTunnel:
                 break
 
     def start(self) -> int:
-        """Start the tunnel. Returns the local port Chrome should connect to."""
         self._server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._server_sock.bind(("127.0.0.1", self.local_port))
@@ -343,7 +341,6 @@ class _AuthProxyTunnel:
 
 
 def _test_upstream_proxy(proxy_config: Dict, test_url: str = "https://www.topsurveys.app/") -> tuple[bool, str]:
-    """Test the BrightData proxy directly using requests."""
     import requests
     proxy_type = proxy_config.get("proxy_type", "http")
     host = proxy_config["host"]
@@ -399,11 +396,6 @@ def _launch_chrome_with_profile(
     extra_args: List[str],
     cdp_port: int,
 ) -> subprocess.Popen:
-    """
-    Launch Chrome with CDP and optional proxy.
-    proxy_server must be 'http://127.0.0.1:<tunnel_port>' — no credentials.
-    Auth is handled transparently by the local _AuthProxyTunnel.
-    """
     chrome_path = _find_chrome()
 
     args = [
@@ -469,6 +461,70 @@ def _wait_for_cdp(port: int, timeout: float = 30.0, log_func=None) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Helper: get a live page from the playwright browser
+# ---------------------------------------------------------------------------
+async def _get_live_page(browser: Browser, log_func=None, batch_id: str = ""):
+    """
+    Retrieve a live Playwright Page. Walks existing contexts first; creates
+    a new context+page if needed.
+    """
+    try:
+        playwright_browser = await browser.get_playwright_browser()
+        for ctx in playwright_browser.contexts:
+            pages = ctx.pages
+            if pages:
+                page = pages[0]
+                if not page.is_closed():
+                    if log_func:
+                        log_func("Reusing existing browser page", batch_id=batch_id)
+                    return page, ctx
+        if log_func:
+            log_func("No open pages — opening fresh context+page", batch_id=batch_id)
+        ctx = await playwright_browser.new_context()
+        page = await ctx.new_page()
+        return page, ctx
+    except Exception as e:
+        if log_func:
+            log_func(f"_get_live_page error: {e}", "ERROR", batch_id=batch_id)
+        raise
+
+
+# ---------------------------------------------------------------------------
+# Helper: build a throw-away shadow Browser for the agent
+# ---------------------------------------------------------------------------
+async def _create_shadow_browser(cdp_port: int, log_func=None, batch_id: str = "") -> Browser:
+    """
+    Create a second browser-use Browser object pointing at the SAME CDP port.
+
+    The agent will call close() on this shadow browser when it finishes.
+    Because it's a separate Python object, closing it does NOT affect the
+    real Browser or the underlying Chrome process — only the Playwright
+    connection object inside the shadow is torn down.
+
+    We additionally patch shadow.close() to a no-op so even that lightweight
+    Playwright disconnect cannot interfere.
+    """
+    shadow_config = BrowserUseConfig(
+        headless=False,
+        cdp_url=f"http://127.0.0.1:{cdp_port}",
+    )
+    shadow = Browser(config=shadow_config)
+    # Pre-connect so the agent doesn't need to
+    await shadow.get_playwright_browser()
+
+    # Patch close to a complete no-op — agent can call it freely
+    async def _noop_close():
+        if log_func:
+            log_func("Shadow browser close() intercepted (no-op)", batch_id=batch_id)
+
+    shadow.close = _noop_close  # type: ignore[method-assign]
+
+    if log_func:
+        log_func(f"Shadow browser created on CDP port {cdp_port}", batch_id=batch_id)
+    return shadow
+
+
+# ---------------------------------------------------------------------------
 # Public: create_undetected_browser
 # ---------------------------------------------------------------------------
 async def create_undetected_browser(
@@ -479,17 +535,13 @@ async def create_undetected_browser(
     batch_id: str = "",
 ) -> Browser:
     """
-    Create a browser-use 0.1.40 Browser with:
-      - persistent Chrome profile (--user-data-dir)
-      - authenticated BrightData proxy via local tunnel (no credentials in Chrome args)
-      - stealth / anti-detection flags
-      - Docker / Xvfb compatible
+    Create the primary browser-use Browser with persistent Chrome profile,
+    BrightData proxy tunnel, and stealth flags.
 
-    Returns a Browser object with an attached attribute _cdp_port containing the CDP port.
+    Returns a Browser with _cdp_port attached.
     """
     from .proxy_utils import format_brightdata_username
 
-    # Test upstream proxy before launching Chrome
     if proxy and proxy.get("host") and proxy.get("port"):
         ok, msg = _test_upstream_proxy(proxy)
         if not ok:
@@ -502,9 +554,6 @@ async def create_undetected_browser(
         log_func(f"Using CDP port {cdp_port}", batch_id=batch_id)
     _kill_chrome_on_port(cdp_port)
 
-    # ----------------------------------------------------------------
-    # Build proxy config and start local tunnel if needed
-    # ----------------------------------------------------------------
     proxy_server: Optional[str]        = None
     tunnel: Optional[_AuthProxyTunnel] = None
 
@@ -522,7 +571,6 @@ async def create_undetected_browser(
                 log_func(f"BrightData country targeting: {country}", batch_id=batch_id)
 
         if username and password:
-            # Start local auth tunnel — Chrome connects without credentials
             tunnel = _AuthProxyTunnel(
                 upstream_host=host,
                 upstream_port=int(port),
@@ -532,7 +580,7 @@ async def create_undetected_browser(
                 batch_id=batch_id,
             )
             local_port   = tunnel.start()
-            await asyncio.sleep(0.5)  # ensure socket is listening
+            await asyncio.sleep(0.5)
             proxy_server = f"http://127.0.0.1:{local_port}"
             if log_func:
                 masked_user = (str(username)[:30] + "...") if len(str(username)) > 30 else str(username)
@@ -546,18 +594,12 @@ async def create_undetected_browser(
             if log_func:
                 log_func(f"Proxy (no auth): {proxy_server}", batch_id=batch_id)
 
-    # ----------------------------------------------------------------
-    # Profile cleanup
-    # ----------------------------------------------------------------
     os.makedirs(user_data_dir, exist_ok=True)
     if log_func:
         log_func("Checking for stale Chrome processes / lock files", batch_id=batch_id)
     _kill_chrome_using_profile(user_data_dir, log_func=log_func, batch_id=batch_id)
     _cleanup_profile_locks(user_data_dir, log_func=log_func, batch_id=batch_id)
 
-    # ----------------------------------------------------------------
-    # Launch Chrome
-    # ----------------------------------------------------------------
     bare_proxy_log = f"{proxy.get('host')}:{proxy.get('port')}" if proxy else "none"
     if log_func:
         log_func(
@@ -599,9 +641,6 @@ async def create_undetected_browser(
     if log_func:
         log_func(f"Chrome CDP ready on port {cdp_port}", batch_id=batch_id)
 
-    # ----------------------------------------------------------------
-    # Connect browser-use via CDP
-    # ----------------------------------------------------------------
     browser_config = BrowserUseConfig(
         headless=headless,
         cdp_url=f"http://127.0.0.1:{cdp_port}",
@@ -614,9 +653,7 @@ async def create_undetected_browser(
             log_func("Proxy auth tunnel active — BrightData credentials injected transparently", batch_id=batch_id)
         log_func("browser-use connected to Chrome via CDP", batch_id=batch_id)
 
-    # ----------------------------------------------------------------
-    # Patch browser.close() to stop tunnel + terminate Chrome
-    # ----------------------------------------------------------------
+    # Patch the REAL browser's close to also stop tunnel + Chrome process
     _original_close = browser.close
 
     async def _patched_close():
@@ -635,33 +672,26 @@ async def create_undetected_browser(
                     pass
 
     browser.close = _patched_close  # type: ignore[method-assign]
-
-    # Attach CDP port to browser object so it can be retrieved later
     browser._cdp_port = cdp_port
 
     return browser
 
 
 # ---------------------------------------------------------------------------
-# ✅ FIXED: Crawl4AI survey extraction (attaches to existing Chrome CDP)
+# Crawl4AI survey extraction
 # ---------------------------------------------------------------------------
-async def extract_surveys_with_crawl4ai(page_url: str, cdp_url: str = "http://127.0.0.1:9222", log_func=None) -> List[SurveyCard]:
-    """
-    Extract surveys from a page using Crawl4AI attached to an existing CDP Chrome.
-
-    Args:
-        page_url: The URL of the survey dashboard.
-        cdp_url: The Chrome DevTools Protocol URL of the already-running Chrome instance.
-        log_func: Optional logging function.
-    """
+async def extract_surveys_with_crawl4ai(
+    page_url: str,
+    cdp_url: str = "http://127.0.0.1:9222",
+    log_func=None,
+) -> List[SurveyCard]:
     if log_func:
         log_func(f"Extracting surveys from {page_url} using Crawl4AI via CDP: {cdp_url}")
 
-    # Configure Crawl4AI to connect to the external Chrome instance
     browser_config = Crawl4AIBrowserConfig(
         browser_type="chromium",
-        headless=False,           # match your Chrome's headless state (usually False)
-        cdp_url=cdp_url,          # attach to existing browser, do NOT launch new one
+        headless=False,
+        cdp_url=cdp_url,
         verbose=True,
     )
 
@@ -840,9 +870,23 @@ async def call_capsolver(sitekey: str, page_url: str, log_func=None) -> Optional
 
 
 # ---------------------------------------------------------------------------
-# Survey agent
+# Survey agent — shadow browser pattern
 # ---------------------------------------------------------------------------
-async def run_survey_agent(browser: Browser, llm, persona: str, start_url: str, log_func=None) -> str:
+async def run_survey_agent(
+    browser: Browser,
+    llm,
+    persona: str,
+    start_url: str,
+    log_func=None,
+) -> str:
+    """
+    Run a single survey agent using a throw-away shadow Browser.
+
+    The shadow Browser connects to the same CDP port as the real browser
+    but has its close() patched to a no-op. When the agent tears down
+    the shadow, Chrome is completely unaffected. The real Browser and
+    Chrome process continue running for the next survey.
+    """
     agent_task = f"""
 {persona}
 
@@ -872,14 +916,30 @@ RULES:
 FINAL REPORT:
 - Return exactly "COMPLETE" or "DISQUALIFIED" as your final answer.
 """
+
+    cdp_port = getattr(browser, '_cdp_port', 9222)
+
+    # Give the agent a shadow browser — close() on it is a no-op
+    shadow = await _create_shadow_browser(cdp_port, log_func=log_func, batch_id="")
+
     agent = Agent(
         task=agent_task,
         llm=llm,
-        browser=browser,
+        browser=shadow,
         max_actions_per_step=5,
     )
-    result = await asyncio.wait_for(agent.run(max_steps=80), timeout=600.0)
-    return detect_survey_outcome(result, log_func)
+
+    try:
+        result = await asyncio.wait_for(agent.run(max_steps=80), timeout=600.0)
+        return detect_survey_outcome(result, log_func)
+    except asyncio.TimeoutError:
+        if log_func:
+            log_func("Survey agent timed out after 600 s", "WARNING")
+        return STATUS_ERROR
+    except Exception as e:
+        if log_func:
+            log_func(f"Survey agent exception: {e}", "ERROR")
+        return STATUS_ERROR
 
 
 def detect_survey_outcome(result, log_func=None) -> str:
