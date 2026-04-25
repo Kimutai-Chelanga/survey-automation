@@ -144,6 +144,9 @@ services:
       VNC_PORT: 5900
       NOVNC_PORT: 6080
       TZ: ${DAG_TIMEZONE:-Africa/Nairobi}
+      # ========== ADDED NO_PROXY TO FIX CDP TIMEOUT ==========
+      NO_PROXY: localhost,127.0.0.1
+      # =======================================================
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}

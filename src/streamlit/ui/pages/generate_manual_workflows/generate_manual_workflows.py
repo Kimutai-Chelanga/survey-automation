@@ -180,7 +180,7 @@ class GenerateManualWorkflowsPage:
 
             await take_screenshot(page, "01_survey_tab_open", batch_id, log_func=self.log)
             await page.goto(start_url, wait_until="domcontentloaded")
-            await page.wait_for_timeout(3000)
+            await page.wait_for_timeout(9000)
 
             # Attempt Google OAuth (only if the profile isn't already logged in)
             self.log("🔍 Looking for 'Continue with Google' button…", batch_id=batch_id)
@@ -274,7 +274,7 @@ class GenerateManualWorkflowsPage:
 
                 if i < num_surveys - 1:
                     await page.goto(start_url)
-                    await page.wait_for_timeout(3000)
+                    await page.wait_for_timeout(9000)
 
             progress_ph.progress(1.0, text="Done!")
             summary = f"✅ {complete_count} complete  🟡 {passed_count} passed  ❌ {failed_count} failed  ⚠️ {error_count} error"
