@@ -47,37 +47,81 @@ DISQUALIFIED_KEYWORDS = [
     "not selected", "quota full", "quota reached", "sorry, ", "we're sorry",
 ]
 
-# Screenshots – added "navigation_error"
+# Screenshots
 ALLOWED_SCREENSHOTS = frozenset({
     "01_survey_tab_open", "02_qualification_start", "03_qualification_done",
-    "04_survey_started", "05_survey_complete", "navigation_error"
+    "04_survey_started", "05_survey_complete", "04_before_agent", "navigation_error",
+    "navigation_error_final",
 })
 SCREENSHOT_LABELS = {
     "01_survey_tab_open":      "1️⃣ Survey Tab Open",
     "02_qualification_start":  "2️⃣ Qualification Started",
     "03_qualification_done":   "3️⃣ Qualification Done",
     "04_survey_started":       "4️⃣ Survey Started",
+    "04_before_agent":         "4️⃣ Before Agent Starts",
     "05_survey_complete":      "5️⃣ Survey Complete",
-    "navigation_error":        "🚨 Navigation Error (ERR_EMPTY_RESPONSE)",
+    "navigation_error":        "🚨 Navigation Error",
+    "navigation_error_final":  "🚨 Navigation Error (Final Attempt)",
 }
 
-# Default BrightData proxy (USA)
+# ---------------------------------------------------------------------------
+# Default proxy — Proxy-Cheap rotating residential SOCKS5 (USA)
+#
+# PORT GUIDE:
+# ┌─────────┬──────────────────────────────────────────────────────────────┐
+# │  Port   │ Purpose                                                      │
+# ├─────────┼──────────────────────────────────────────────────────────────┤
+# │  5959   │ Rotating residential — HTTP only. Cannot tunnel HTTPS via   │
+# │         │ CONNECT. Do NOT use for browser automation against HTTPS.    │
+# ├─────────┼──────────────────────────────────────────────────────────────┤
+# │  9595   │ Rotating residential — SOCKS5. Proxies the full TCP         │
+# │         │ connection, works for both HTTP and HTTPS targets without    │
+# │         │ needing HTTP CONNECT support. Use this port.                 │
+# │         │ Chrome receives --proxy-server=socks5://host:9595 directly. │
+# └─────────┴──────────────────────────────────────────────────────────────┘
+#
+# HOW THE PROXY IS USED IN BROWSER AUTOMATION:
+# - Chrome is launched WITH --proxy-server=socks5://proxy-us.proxy-cheap.com:9595
+# - Credentials are percent-encoded and embedded in the --proxy-server flag URL.
+# - Chrome handles SOCKS5 auth natively at the process level.
+# - Playwright contexts are created plain (no proxy dict) — Playwright does NOT
+#   support SOCKS5 proxy authentication at the context level.
+#
+# HOW THE PRE-FLIGHT TEST WORKS:
+# - _test_upstream_proxy() hits http://ipv4.icanhazip.com via socks5h:// proxy.
+# - A successful test returns the external IP assigned by Proxy-Cheap.
+#
+# USERNAME FORMAT (Proxy-Cheap credential from dashboard):
+# - pcwS65b60G-resfix-us-nnid-0  →  fixed US residential, session 0
+# - pcwS65b60G-res-any           →  rotating, any country
+# Country/session targeting is baked into the username at credential-generation
+# time on the Proxy-Cheap dashboard. Do NOT append -country-XX suffixes
+# (that is BrightData convention only).
+#
+# BANDWIDTH NOTE:
+# - This proxy is bandwidth-based. Monitor usage on the Proxy-Cheap dashboard.
+# - When bandwidth is exhausted the proxy returns connection errors.
+# - Top up at: https://app.proxy-cheap.com
+# ---------------------------------------------------------------------------
 DEFAULT_PROXY = {
-    "proxy_type": "http",
-    "host": "brd.superproxy.io",
-    "port": 33335,
-    "username": "brd-customer-hl_9f5def12-zone-residential_proxy1",
-    "password": "mviek6dqzsbm",
-    "country": "US"
+    "proxy_type": "socks5",
+    "host":       "proxy-us.proxy-cheap.com",
+    "port":       9595,                          # ← SOCKS5 port
+    "username":   "pcwS65b60G-resfix-us-nnid-0",
+    "password":   "PC_7HMCucvPdRZZ5kcvn",
+    "country":    "US",
 }
 
-# List of common country codes for BrightData
+# Proxy-Cheap does not use country-suffix usernames like BrightData.
+# Country targeting is baked into the username at credential-generation time
+# on the Proxy-Cheap dashboard (e.g. pcwS65b60G-res-any for any country).
 PROXY_COUNTRIES = [
     "US", "GB", "CA", "AU", "DE", "FR", "JP", "BR", "IN", "IT", "ES", "NL",
     "SE", "NO", "DK", "FI", "BE", "CH", "AT", "IE", "PL", "CZ", "PT", "GR",
-    "HU", "RO", "ZA", "IL", "AE", "SG", "HK", "KR", "TW", "MX", "CO", "CL", "AR", "PE", "VE"
+    "HU", "RO", "ZA", "IL", "AE", "SG", "HK", "KR", "TW", "MX", "CO", "CL",
+    "AR", "PE", "VE",
 ]
 
-# CAPTCHA solver (Capsolver) – set environment variable CAPSOLVER_API_KEY
+# CAPTCHA solver (Capsolver) — set environment variable CAPSOLVER_API_KEY
 CAPSOLVER_API_KEY = os.environ.get("CAPSOLVER_API_KEY", "")
 CAPSOLVER_API_URL = "https://api.capsolver.com"

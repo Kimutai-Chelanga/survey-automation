@@ -403,7 +403,7 @@ class GenerateManualWorkflowsPage:
 
         # Proxy section with toggle & test
         st.markdown("---")
-        st.subheader("🌐 Proxy Settings (BrightData Residential)")
+        st.subheader("🌐 Proxy Settings")
         proxy_enabled = st.checkbox("🔌 Enable Proxy", value=st.session_state.proxy_enabled, key="proxy_toggle")
         st.session_state.proxy_enabled = proxy_enabled
 
