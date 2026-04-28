@@ -639,29 +639,84 @@ async def dismiss_popups(page, log_func=None, batch_id: str = "") -> None:
     Safe to call at any point — silently skips if nothing is found.
     """
     # ── TopSurveys: Select Devices modal ─────────────────────────────────
+    # Wait a moment for the modal to render after page load
+    await page.wait_for_timeout(2000)
+
     try:
-        save_btn = page.locator("button:has-text('Save Selection'), text=Save Selection").first
-        if await save_btn.is_visible(timeout=3000):
+        # Detect the modal by looking for "Select Devices" heading text
+        modal_heading = page.locator("text=Select Devices").first
+        if await modal_heading.is_visible(timeout=4000):
             if log_func:
-                log_func("🖥️ 'Select Devices' popup detected — selecting Desktop and saving", batch_id=batch_id)
-            # Select Desktop checkbox if not already checked
-            desktop_checkbox = page.locator("text=Desktop").locator("..").locator("input[type=checkbox], [role=checkbox]").first
-            try:
-                if not await desktop_checkbox.is_checked(timeout=1000):
-                    await desktop_checkbox.click()
-            except Exception:
-                # Try clicking the Desktop card itself
+                log_func("🖥️ 'Select Devices' popup detected", batch_id=batch_id)
+
+            # Try multiple strategies to click the Desktop option
+            desktop_clicked = False
+
+            # Strategy 1: click the Desktop card/label directly (the whole clickable area)
+            desktop_selectors = [
+                "text=Desktop",
+                "[class*='device'] >> text=Desktop",
+                "label:has-text('Desktop')",
+                "div:has-text('Desktop') >> nth=0",
+            ]
+            for sel in desktop_selectors:
                 try:
-                    await page.locator("text=Desktop").first.click()
+                    elem = page.locator(sel).first
+                    if await elem.is_visible(timeout=1500):
+                        await elem.click()
+                        await page.wait_for_timeout(500)
+                        if log_func:
+                            log_func(f"🖥️ Clicked Desktop via: {sel}", batch_id=batch_id)
+                        desktop_clicked = True
+                        break
+                except Exception:
+                    continue
+
+            # Strategy 2: find any checkbox near "Desktop" text and check it
+            if not desktop_clicked:
+                try:
+                    checkboxes = page.locator("input[type=checkbox], [role=checkbox]")
+                    count = await checkboxes.count()
+                    if count > 0:
+                        await checkboxes.first.click()
+                        await page.wait_for_timeout(500)
+                        if log_func:
+                            log_func("🖥️ Clicked first checkbox (assumed Desktop)", batch_id=batch_id)
+                        desktop_clicked = True
                 except Exception:
                     pass
-            await save_btn.click()
-            await page.wait_for_timeout(2000)
-            if log_func:
-                log_func("✅ 'Select Devices' popup dismissed", batch_id=batch_id)
+
+            if not desktop_clicked and log_func:
+                log_func("⚠️ Could not find Desktop checkbox — attempting Save anyway", "WARNING", batch_id=batch_id)
+
+            # Now click Save Selection — try multiple selectors
+            save_selectors = [
+                "button:has-text('Save Selection')",
+                "text=Save Selection",
+                "[class*='save']",
+                "button.p-button:has-text('Save')",
+            ]
+            saved = False
+            for sel in save_selectors:
+                try:
+                    btn = page.locator(sel).first
+                    if await btn.is_visible(timeout=2000):
+                        await btn.click()
+                        await page.wait_for_timeout(2000)
+                        if log_func:
+                            log_func(f"✅ 'Select Devices' popup dismissed via Save ({sel})", batch_id=batch_id)
+                        saved = True
+                        break
+                except Exception:
+                    continue
+
+            if not saved and log_func:
+                log_func("⚠️ Could not click Save Selection button", "WARNING", batch_id=batch_id)
             return
-    except Exception:
-        pass
+
+    except Exception as e:
+        if log_func:
+            log_func(f"Select Devices modal check: {e}", "WARNING", batch_id=batch_id)
 
     # ── Generic: any visible modal close / dismiss button ────────────────
     generic_selectors = [
