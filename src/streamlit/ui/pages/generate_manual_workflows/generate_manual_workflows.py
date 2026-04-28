@@ -4,12 +4,13 @@ Tab layout: ⚙️ Settings | 🤖 Survey Runner | 📁 History & Logs
 - Removed email/password fields (login handled entirely via persistent Chrome profile + cookies)
 - Settings tab: account, site, URL, model, surveys count, proxy toggle/test, cookie status, etc.
 - Runner tab: launch button + live inline logs + per‑survey progress + results summary
-- History tab: batch logs/screenshots, survey attempts table, global log download
+- History tab: batch logs/screenshots, survey attempts table, global log download, batch deletion.
 """
 
 import asyncio
 import logging
 import os
+import shutil
 import traceback
 from datetime import datetime
 from typing import Dict, Optional
@@ -68,6 +69,45 @@ def run_async(coro):
         return loop.run_until_complete(coro)
     finally:
         loop.close()
+
+
+def _delete_batch(batch_id: str) -> None:
+    """Delete a batch: remove screenshot files + delete from session state."""
+    batch_data = st.session_state.batches.get(batch_id)
+    if not batch_data:
+        return
+
+    # 1. Delete screenshot files from disk
+    screenshots = batch_data.get("screenshots", [])
+    for shot in screenshots:
+        path = shot.get("path")
+        if path and os.path.exists(path):
+            try:
+                os.remove(path)
+            except Exception as e:
+                logger.warning(f"Could not delete screenshot {path}: {e}")
+
+    # 2. Delete the batch folder (if empty)
+    batch_dir = os.path.join(os.environ.get("RECORDINGS_DIR", "/app/recordings"), batch_id)
+    if os.path.isdir(batch_dir):
+        try:
+            shutil.rmtree(batch_dir)
+        except Exception as e:
+            logger.warning(f"Could not remove batch directory {batch_dir}: {e}")
+
+    # 3. Remove batch entry
+    del st.session_state.batches[batch_id]
+
+    # 4. Remove any associated logs from global logs? Not needed; global logs are append‑only.
+    st.session_state.generation_logs.append(f"[{datetime.now():%H:%M:%S}] INFO: Deleted batch {batch_id}")
+
+
+def _delete_all_batches() -> None:
+    """Delete all batches."""
+    batch_ids = list(st.session_state.batches.keys())
+    for bid in batch_ids:
+        _delete_batch(bid)
+    st.session_state.generation_logs.append(f"[{datetime.now():%H:%M:%S}] INFO: Deleted all batches")
 
 
 async def _click_continue_with_google(page, log_func=None, batch_id: str = "") -> bool:
@@ -175,17 +215,20 @@ class GenerateManualWorkflowsPage:
             cdp_url = f"http://127.0.0.1:{cdp_port}"
             self.log(f"CDP URL for extraction: {cdp_url}", batch_id=batch_id)
 
-            # ✅ FIX: Get a live page using the helper from agent_utils
+            # Get a live page
             from .agent_utils import _get_live_page
             page, _ = await _get_live_page(browser, log_func=self.log, batch_id=batch_id)
 
-            await take_screenshot(page, "01_survey_tab_open", batch_id, log_func=self.log)
+            # Screenshot 1: browser launched (blank/new tab)
+            await take_screenshot(page, "browser_launched", batch_id, log_func=self.log)
 
             # Navigate with retry and error screenshots
             max_retries = 3
             for attempt in range(max_retries):
                 try:
                     await page.goto(start_url, wait_until="domcontentloaded", timeout=30000)
+                    # Screenshot 2: dashboard loaded (actual page)
+                    await take_screenshot(page, "dashboard_loaded", batch_id, log_func=self.log)
                     break
                 except Exception as e:
                     self.log(f"Navigation attempt {attempt+1} failed: {e}", "WARNING", batch_id=batch_id)
@@ -194,7 +237,6 @@ class GenerateManualWorkflowsPage:
                         await take_screenshot(page, "navigation_error_final", batch_id, survey_num=0, log_func=self.log)
                         raise
                     await asyncio.sleep(2)
-                    # Get a fresh page reference in case the old one became unusable
                     page, _ = await _get_live_page(browser, log_func=self.log, batch_id=batch_id)
 
             await page.wait_for_timeout(9000)
@@ -213,7 +255,6 @@ class GenerateManualWorkflowsPage:
                         oauth_page = all_pages[-1]
                         self.log("🔀 Switching to OAuth popup", batch_id=batch_id)
                         await oauth_page.wait_for_load_state("domcontentloaded")
-                        # Try to select already logged-in account
                         for acc_sel in ["div[data-authuser]", "li[data-identifier]", "[data-email]"]:
                             try:
                                 acc_elem = oauth_page.locator(acc_sel).first
@@ -226,21 +267,15 @@ class GenerateManualWorkflowsPage:
                 except Exception as e:
                     self.log(f"⚠️ OAuth popup handling: {e}", "WARNING", batch_id=batch_id)
 
-                # ✅ Wait for the dashboard to actually load after OAuth
                 try:
-                    # After OAuth, the main page redirects to the dashboard
                     await page.wait_for_load_state("networkidle", timeout=15000)
                     self.log("Dashboard loaded after OAuth", batch_id=batch_id)
                 except Exception:
-                    await page.wait_for_timeout(5000)  # fallback wait
+                    await page.wait_for_timeout(5000)
 
             await solve_captcha_if_present(page, log_func=self.log, batch_id=batch_id)
 
-            # Take a screenshot before the agent starts (safe point)
-            await take_screenshot(page, "04_before_agent", batch_id, log_func=self.log)
-
-            # Extract surveys using existing CDP Chrome (no new browser)
-            # Use page.url as the current URL (which should be the dashboard)
+            # Extract surveys
             surveys = await extract_surveys_with_crawl4ai(page.url, cdp_url=cdp_url, log_func=self.log)
             if not surveys:
                 self.log("No surveys found via Crawl4AI, falling back to agent discovery", "WARNING", batch_id=batch_id)
@@ -257,11 +292,13 @@ class GenerateManualWorkflowsPage:
 
                 survey_status = STATUS_ERROR
                 result_snippet = ""
+                midpoint_captured = False
 
-                # Ensure we have a live page before each survey (in case of stale reference)
+                # Ensure live page
                 page, _ = await _get_live_page(browser, log_func=self.log, batch_id=batch_id)
 
                 try:
+                    # Navigate to or click the survey card
                     if surveys and i < len(surveys):
                         survey_card = surveys[i]
                         if survey_card.link_url.startswith("http"):
@@ -274,16 +311,39 @@ class GenerateManualWorkflowsPage:
                             except Exception:
                                 self.log(f"Could not click survey via '{survey_card.link_url}', falling back", "WARNING", batch_id=batch_id)
 
+                    # Screenshot 3: start of survey
+                    await take_screenshot(page, "start_survey", batch_id, survey_num, log_func=self.log)
+
+                    # Solve any CAPTCHA on survey start page
                     await solve_captcha_if_present(page, log_func=self.log, batch_id=batch_id)
 
-                    # Run the survey agent (it uses its own isolated context but shares the browser)
+                    # --- Midpoint screenshot timer ---
+                    # We'll run the agent and simultaneously wait 45 seconds to take a midpoint screenshot
+                    async def capture_midpoint():
+                        nonlocal midpoint_captured
+                        await asyncio.sleep(45)  # Adjust seconds as needed
+                        if not midpoint_captured:
+                            midpoint_captured = True
+                            fresh_page, _ = await _get_live_page(browser, log_func=self.log, batch_id=batch_id)
+                            await take_screenshot(fresh_page, "midpoint_survey", batch_id, survey_num, log_func=self.log)
+
+                    midpoint_task = asyncio.create_task(capture_midpoint())
+
+                    # Run the survey agent
                     outcome = await run_survey_agent(browser, llm, persona, page.url, log_func=self.log)
                     survey_status = outcome
                     result_snippet = f"Agent returned: {outcome}"
 
-                    # ✅ After agent, get a fresh live page for the final screenshot
+                    # Cancel midpoint timer if not yet fired
+                    midpoint_task.cancel()
+                    try:
+                        await midpoint_task
+                    except asyncio.CancelledError:
+                        pass
+
+                    # Screenshot 4: after completion (thank you page)
                     fresh_page, _ = await _get_live_page(browser, log_func=self.log, batch_id=batch_id)
-                    await take_screenshot(fresh_page, "05_survey_complete", batch_id, survey_num, log_func=self.log)
+                    await take_screenshot(fresh_page, "after_completion", batch_id, survey_num, log_func=self.log)
 
                 except Exception as e:
                     self.log(f"Survey {survey_num} exception: {e}", "ERROR", batch_id=batch_id)
@@ -309,7 +369,6 @@ class GenerateManualWorkflowsPage:
                 )
 
                 if i < num_surveys - 1:
-                    # Return to the dashboard – get a fresh page to avoid stale reference
                     fresh_page, _ = await _get_live_page(browser, log_func=self.log, batch_id=batch_id)
                     await fresh_page.goto(start_url)
                     await fresh_page.wait_for_timeout(9000)
@@ -347,7 +406,6 @@ class GenerateManualWorkflowsPage:
                     pass
             st.session_state.generation_in_progress = False
             st.rerun()
-    
 
     # ----------------------------------------------------------------------
     # UI helpers for tabs
@@ -525,13 +583,11 @@ class GenerateManualWorkflowsPage:
         ):
             st.session_state.survey_progress = []
             st.session_state.generation_results = None
-            # Clear old logs for a fresh view
             st.session_state.generation_logs = []
             run_async(self._do_direct_answering(
                 acct, site, acct_prompt, start_url, num_surveys, model_choice, proxy_to_use
             ))
 
-        # Display progress and logs inline
         if st.session_state.survey_progress:
             st.markdown("---")
             st.subheader("📊 Run Progress")
@@ -549,25 +605,45 @@ class GenerateManualWorkflowsPage:
         if st.session_state.generation_results and st.session_state.generation_results.get("batch_id"):
             st.markdown("---")
             st.subheader("📁 Latest Run Summary")
-            # Show a quick summary, full details are in History tab
             display_results(st.session_state.generation_results)
             st.info("View full logs and screenshots in the **History & Logs** tab.")
 
     def _render_history_tab(self):
         st.subheader("📁 Inspect Past Runs")
+
+        # Delete All button with confirmation
+        col1, col2 = st.columns([4, 1])
+        with col2:
+            if st.button("🗑️ Delete All Batches", type="secondary", use_container_width=True):
+                if st.checkbox("⚠️ Confirm: Delete ALL batches and screenshots? This cannot be undone."):
+                    _delete_all_batches()
+                    st.rerun()
+
         all_batches = sorted(st.session_state.batches.keys(), reverse=True)
         if not all_batches:
             st.info("No runs yet. Run some surveys first.")
             return
 
-        chosen = st.selectbox("Select batch:", all_batches, key="history_batch_select")
-        if chosen:
-            display_batch_details(
-                chosen,
-                st.session_state.batches,
-                SCREENSHOT_LABELS,
-                key_suffix="_history",
-            )
+        for batch_id in all_batches:
+            batch_data = st.session_state.batches[batch_id]
+            # Display batch header with delete button
+            with st.container():
+                cols = st.columns([5, 1])
+                with cols[0]:
+                    st.markdown(f"**{batch_id}**  –  {batch_data.get('account', '?')} / {batch_data.get('site', '?')}  –  {batch_data.get('timestamp', '')[:19]}")
+                with cols[1]:
+                    if st.button("❌ Delete", key=f"del_{batch_id}"):
+                        _delete_batch(batch_id)
+                        st.rerun()
+                # Show details expander
+                with st.expander(f"📄 Details for {batch_id}"):
+                    display_batch_details(
+                        batch_id,
+                        st.session_state.batches,
+                        SCREENSHOT_LABELS,
+                        key_suffix=f"_{batch_id}",
+                    )
+            st.divider()
 
         # Global logs
         st.markdown("---")
@@ -583,23 +659,6 @@ class GenerateManualWorkflowsPage:
                 st.code("\n".join(st.session_state.generation_logs[-200:]), language="log")
         else:
             st.caption("No logs yet.")
-
-        # Screening results table
-        st.markdown("---")
-        # We need an account & site to display screening results. Use the latest batch if any.
-        if all_batches:
-            last_batch = st.session_state.batches[all_batches[0]]
-            acct_name = last_batch.get("account")
-            site_name = last_batch.get("site")
-            if acct_name and site_name:
-                # Load fake accounts/sites to pass to display_screening_results_tab
-                from .db_utils import load_accounts, load_survey_sites
-                accounts = load_accounts()
-                sites = load_survey_sites()
-                acct_obj = next((a for a in accounts if a["username"] == acct_name), None)
-                site_obj = next((s for s in sites if s["site_name"] == site_name), None)
-                if acct_obj and site_obj:
-                    display_screening_results_tab(acct_obj, site_obj, st.session_state.batches)
 
     # ----------------------------------------------------------------------
     # Main render
@@ -618,7 +677,6 @@ class GenerateManualWorkflowsPage:
         </p>
         </div>""", unsafe_allow_html=True)
 
-        # Load data once
         accounts = load_accounts()
         survey_sites = load_survey_sites()
         prompts = load_prompts()
@@ -640,14 +698,12 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
     CHECK (status IN ('pending','passed','failed','complete','error'));
 """, language="sql")
 
-        # Render tabs
         tab_settings, tab_runner, tab_history = st.tabs(["⚙️ Settings", "🤖 Survey Runner", "📁 History & Logs"])
 
         with tab_settings:
             result = self._render_settings_tab(accounts, survey_sites, prompts, avail_sites)
             if result[0] is None:
                 return
-            # Store settings in session state so runner tab can access them
             (acct, acct_prompt, site, start_url, num_surveys, model_choice, proxy_to_use) = result
             st.session_state["_settings_acct"] = acct
             st.session_state["_settings_acct_prompt"] = acct_prompt
@@ -658,7 +714,6 @@ ALTER TABLE screening_results ADD CONSTRAINT screening_results_status_check
             st.session_state["_settings_proxy"] = proxy_to_use
 
         with tab_runner:
-            # Retrieve settings from session state
             acct = st.session_state.get("_settings_acct")
             acct_prompt = st.session_state.get("_settings_acct_prompt")
             site = st.session_state.get("_settings_site")

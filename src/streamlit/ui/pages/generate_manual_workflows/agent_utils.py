@@ -5,22 +5,26 @@ Compatible with browser-use 0.1.40.
 PROXY STRATEGY
 --------------
 Proxy-Cheap rotating residential (port 9595, SOCKS5):
-  - SOCKS5 proxies the full TCP connection — no HTTP CONNECT needed.
-  - Chrome is launched WITH --proxy-server=socks5://user:pass@host:9595
-    Chrome handles SOCKS5 credentials natively via the flag URL.
-  - playwright_proxy is set to None — Playwright does NOT support SOCKS5
-    proxy authentication at the context level (throws "Browser does not
-    support socks5 proxy authentication"). Chrome handles it instead.
-  - _get_live_page() returns a plain context (no proxy dict needed) since
-    Chrome itself is already routing all traffic through the SOCKS5 proxy.
+  - Routed through _AuthProxyTunnel so Chrome always sees http://127.0.0.1:PORT.
+  - This avoids ERR_NO_SUPPORTED_PROXIES caused by Chrome caching SOCKS5
+    proxy settings in the persistent user_data_dir profile.
+  - The tunnel performs the SOCKS5 handshake internally.
 
 BrightData (brd.superproxy.io):
-  - Supports CONNECT. Uses _AuthProxyTunnel as before.
+  - Supports CONNECT. Uses _AuthProxyTunnel with HTTP CONNECT path.
 
 AGENT ISOLATION STRATEGY
 --------------------------
 browser-use 0.1.40 Agent.run() calls browser.close() on finish.
 Fix: throw-away "shadow" Browser per agent run, close() patched to no-op.
+
+SCREENSHOT FLOW
+---------------
+1. browser_launched   — right after browser starts + page obtained
+2. dashboard_loaded   — after navigating to start_url (survey dashboard)
+3. start_survey       — after clicking survey card, before agent runs
+4. midpoint_survey    — injected mid-agent via callback at step 40/80
+5. after_completion   — after agent finishes (thank you / result page)
 """
 
 import asyncio
@@ -37,7 +41,7 @@ import subprocess
 import threading
 import time
 import urllib.parse
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import aiohttp
 import requests as _requests
@@ -189,11 +193,8 @@ def _cleanup_profile_locks(
     except Exception:
         pass
 
-    # ── NEW: Clear cached proxy settings from Chrome Preferences ──────────
-    # Chrome stores proxy config in Default/Preferences. If a previous run
-    # used a different proxy (or no proxy), the cached value overrides the
-    # --proxy-server flag and causes ERR_NO_SUPPORTED_PROXIES.
-    # We surgically remove only the "proxy" key so cookies/login stay intact.
+    # Clear cached proxy settings from Chrome Preferences so --proxy-server
+    # flag is always honoured (prevents ERR_NO_SUPPORTED_PROXIES on reuse).
     prefs_file = os.path.join(profile_path, "Default", "Preferences")
     if os.path.exists(prefs_file):
         try:
@@ -215,7 +216,6 @@ def _cleanup_profile_locks(
                     f"Could not clear proxy prefs ({prefs_file}): {e}",
                     "WARNING", batch_id=batch_id,
                 )
-    # ── END NEW ───────────────────────────────────────────────────────────
 
     if removed and log_func:
         log_func(f"Removed {len(removed)} stale lock/session file(s)", batch_id=batch_id)
@@ -223,17 +223,22 @@ def _cleanup_profile_locks(
         log_func("No stale lock files found", batch_id=batch_id)
 
 
-
-
-
 # ---------------------------------------------------------------------------
-# Local authenticating proxy tunnel  (BrightData ONLY)
+# Local authenticating proxy tunnel (BrightData + Proxy-Cheap SOCKS5)
 # ---------------------------------------------------------------------------
 class _AuthProxyTunnel:
     """
-    Minimal HTTP CONNECT proxy tunnel on 127.0.0.1.
-    Injects Proxy-Authorization into every upstream request.
-    Only used for BrightData which supports CONNECT.
+    Minimal local proxy tunnel on 127.0.0.1.
+
+    For BrightData (HTTP upstream):
+        Injects Proxy-Authorization header into every CONNECT request.
+
+    For Proxy-Cheap SOCKS5 (port 9595):
+        Performs a full SOCKS5 handshake with the upstream proxy,
+        then relays the raw TCP stream to Chrome.
+        Chrome sees a plain http://127.0.0.1:PORT proxy — no SOCKS5
+        in the --proxy-server flag — which avoids ERR_NO_SUPPORTED_PROXIES
+        when using persistent user_data_dir profiles.
     """
 
     def __init__(
@@ -271,14 +276,10 @@ class _AuthProxyTunnel:
         """
         Handle one client connection from Chrome.
 
-        Chrome always sends an HTTP CONNECT request (because Chrome sees
-        --proxy-server=http://127.0.0.1:PORT).
+        Chrome always sends HTTP CONNECT (it sees http://127.0.0.1:PORT).
 
-        If the upstream proxy is SOCKS5 (Proxy-Cheap port 9595), we perform
-        the SOCKS5 handshake ourselves, then relay the raw TCP stream.
-
-        If the upstream proxy is HTTP (BrightData), we inject Proxy-Authorization
-        and forward the CONNECT request as before.
+        If upstream is SOCKS5 (port 9595) → perform SOCKS5 handshake then relay.
+        If upstream is HTTP (BrightData)  → inject Proxy-Authorization header.
         """
         upstream = None
         try:
@@ -296,8 +297,7 @@ class _AuthProxyTunnel:
             first_line   = header_block.split(b"\r\n")[0].decode(errors="replace")
             method       = first_line.split(" ")[0].upper() if " " in first_line else ""
 
-            # Parse target host:port from CONNECT request
-            # e.g. "CONNECT www.topsurveys.app:443 HTTP/1.1"
+            # Parse target host:port from CONNECT line
             target_host = ""
             target_port = 443
             if method == "CONNECT" and " " in first_line:
@@ -309,9 +309,6 @@ class _AuthProxyTunnel:
                     except ValueError:
                         target_port = 443
 
-            # ── Detect upstream proxy type ────────────────────────────────
-            # self.upstream_port == 9595  →  Proxy-Cheap SOCKS5
-            # anything else               →  BrightData HTTP CONNECT
             is_socks5_upstream = (self.upstream_port == 9595)
 
             upstream = socket.create_connection(
@@ -321,7 +318,7 @@ class _AuthProxyTunnel:
 
             if is_socks5_upstream and method == "CONNECT" and target_host:
                 # ── SOCKS5 handshake ──────────────────────────────────────
-                # Step 1: greeting with username/password auth method (0x02)
+                # Step 1: greeting — request username/password auth (0x02)
                 upstream.sendall(b"\x05\x01\x02")
                 greeting_resp = upstream.recv(2)
                 if len(greeting_resp) < 2 or greeting_resp[1] == 0xFF:
@@ -343,7 +340,7 @@ class _AuthProxyTunnel:
                         client_sock.sendall(b"HTTP/1.1 407 SOCKS5 auth failed\r\n\r\n")
                         return
 
-                # Step 3: CONNECT request to target
+                # Step 3: CONNECT to target via SOCKS5
                 host_bytes  = target_host.encode()
                 connect_msg = (
                     b"\x05\x01\x00\x03"
@@ -352,7 +349,7 @@ class _AuthProxyTunnel:
                 )
                 upstream.sendall(connect_msg)
 
-                # Step 4: read SOCKS5 response
+                # Step 4: read SOCKS5 response (need at least 4 bytes)
                 socks_resp = b""
                 while len(socks_resp) < 4:
                     chunk = upstream.recv(4)
@@ -366,24 +363,24 @@ class _AuthProxyTunnel:
                     )
                     return
 
-                # Drain the rest of the SOCKS5 response (BND.ADDR + BND.PORT)
+                # Drain BND.ADDR + BND.PORT from SOCKS5 response
                 addr_type = socks_resp[3] if len(socks_resp) > 3 else 0x01
-                if addr_type == 0x01:    # IPv4 — 4 bytes + 2 port
+                if addr_type == 0x01:    # IPv4
                     upstream.recv(6)
-                elif addr_type == 0x03:  # domain — 1 len byte + N bytes + 2 port
+                elif addr_type == 0x03:  # domain
                     n = ord(upstream.recv(1))
                     upstream.recv(n + 2)
-                elif addr_type == 0x04:  # IPv6 — 16 bytes + 2 port
+                elif addr_type == 0x04:  # IPv6
                     upstream.recv(18)
 
-                # Tell Chrome the tunnel is ready
+                # Tell Chrome tunnel is open
                 client_sock.sendall(b"HTTP/1.1 200 Connection established\r\n\r\n")
                 if leftover:
                     upstream.sendall(leftover)
                 self._relay(client_sock, upstream)
 
             else:
-                # ── BrightData HTTP CONNECT (original behaviour) ───────────
+                # ── BrightData HTTP CONNECT ───────────────────────────────
                 upstream.sendall(self._inject_auth(header_block))
                 if leftover:
                     upstream.sendall(leftover)
@@ -495,15 +492,6 @@ class _AuthProxyTunnel:
 # Pre-flight proxy test
 # ---------------------------------------------------------------------------
 def _test_upstream_proxy(proxy_config: Dict) -> tuple[bool, str]:
-    """
-    Quick pre-flight using requests.
-
-    For SOCKS5 (Proxy-Cheap port 9595): uses socks5h:// so DNS also resolves
-    through the proxy — matches how Chrome routes traffic.
-    Requires: pip install requests[socks]  (PySocks)
-
-    Non-fatal — caller only logs a warning on failure.
-    """
     from .proxy_utils import is_brightdata, format_brightdata_username
 
     proxy_type = proxy_config.get("proxy_type", "http")
@@ -516,7 +504,6 @@ def _test_upstream_proxy(proxy_config: Dict) -> tuple[bool, str]:
     if is_brightdata(host) and username:
         username = format_brightdata_username(username, country)
 
-    # Use socks5h:// for SOCKS5 so DNS resolves through proxy (same as Chrome behaviour)
     scheme = "socks5h" if proxy_type == "socks5" else proxy_type
 
     if username and password:
@@ -641,28 +628,71 @@ def _wait_for_cdp(port: int, timeout: float = 30.0, log_func=None) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Helper: dismiss common onboarding popups
+# ---------------------------------------------------------------------------
+async def dismiss_popups(page, log_func=None, batch_id: str = "") -> None:
+    """
+    Dismiss known onboarding / setup popups that block survey access.
+    Currently handles:
+      - TopSurveys "Select Devices" modal (selects Desktop, clicks Save)
+      - Generic modal close buttons
+    Safe to call at any point — silently skips if nothing is found.
+    """
+    # ── TopSurveys: Select Devices modal ─────────────────────────────────
+    try:
+        save_btn = page.locator("button:has-text('Save Selection'), text=Save Selection").first
+        if await save_btn.is_visible(timeout=3000):
+            if log_func:
+                log_func("🖥️ 'Select Devices' popup detected — selecting Desktop and saving", batch_id=batch_id)
+            # Select Desktop checkbox if not already checked
+            desktop_checkbox = page.locator("text=Desktop").locator("..").locator("input[type=checkbox], [role=checkbox]").first
+            try:
+                if not await desktop_checkbox.is_checked(timeout=1000):
+                    await desktop_checkbox.click()
+            except Exception:
+                # Try clicking the Desktop card itself
+                try:
+                    await page.locator("text=Desktop").first.click()
+                except Exception:
+                    pass
+            await save_btn.click()
+            await page.wait_for_timeout(2000)
+            if log_func:
+                log_func("✅ 'Select Devices' popup dismissed", batch_id=batch_id)
+            return
+    except Exception:
+        pass
+
+    # ── Generic: any visible modal close / dismiss button ────────────────
+    generic_selectors = [
+        "button:has-text('Got it')",
+        "button:has-text('Continue')",
+        "button:has-text('Dismiss')",
+        "button:has-text('Close')",
+        "button:has-text('Skip')",
+        "[aria-label='Close']",
+        "[aria-label='Dismiss']",
+    ]
+    for sel in generic_selectors:
+        try:
+            btn = page.locator(sel).first
+            if await btn.is_visible(timeout=1000):
+                await btn.click()
+                await page.wait_for_timeout(1000)
+                if log_func:
+                    log_func(f"✅ Dismissed popup via: {sel}", batch_id=batch_id)
+                return
+        except Exception:
+            continue
+
+
+# ---------------------------------------------------------------------------
 # Helper: get a live page
 # ---------------------------------------------------------------------------
 async def _get_live_page(browser: Browser, log_func=None, batch_id: str = ""):
-    """
-    Retrieve a live Playwright Page from the browser.
-
-    For Proxy-Cheap SOCKS5: Chrome itself routes all traffic through the proxy
-    (via --proxy-server=socks5://user:pass@host:port flag). Playwright contexts
-    are created WITHOUT a proxy dict — plain new_context() is correct because
-    Chrome is already the proxy at the process level.
-
-    Playwright does NOT support socks5 proxy authentication at the context
-    level — passing it throws "Browser does not support socks5 proxy
-    authentication". Never pass playwright_proxy for SOCKS5.
-
-    For BrightData: same — tunnel handles auth, Chrome gets the http://
-    localhost flag, Playwright contexts are plain.
-    """
     try:
         playwright_browser = await browser.get_playwright_browser()
 
-        # Return any existing open page first
         for ctx in playwright_browser.contexts:
             pages = ctx.pages
             if pages:
@@ -672,7 +702,6 @@ async def _get_live_page(browser: Browser, log_func=None, batch_id: str = ""):
                         log_func("Reusing existing browser page", batch_id=batch_id)
                     return page, ctx
 
-        # No open pages — create a plain context (proxy handled at Chrome level)
         if log_func:
             log_func("No open pages — creating fresh context+page", batch_id=batch_id)
         ctx  = await playwright_browser.new_context()
@@ -688,8 +717,6 @@ async def _get_live_page(browser: Browser, log_func=None, batch_id: str = ""):
 # ---------------------------------------------------------------------------
 # Public: create_undetected_browser
 # ---------------------------------------------------------------------------
-
-
 async def create_undetected_browser(
     user_data_dir: str,
     headless: bool = False,
@@ -700,30 +727,12 @@ async def create_undetected_browser(
     """
     Launch Chrome with a persistent profile and connect browser-use via CDP.
 
-    Proxy routing
-    ─────────────
-    BrightData  →  _AuthProxyTunnel + --proxy-server=http://127.0.0.1:<port>
-
-    Proxy-Cheap SOCKS5 (port 9595):
-                →  ALSO routed through _AuthProxyTunnel.
-                   The tunnel accepts HTTP CONNECT from Chrome, opens a raw
-                   SOCKS5 connection to the upstream proxy, and relays traffic.
-                   Chrome sees --proxy-server=http://127.0.0.1:<local_port>
-                   which works reliably with persistent user_data_dir profiles.
-
-    WHY NOT --proxy-server=socks5://user:pass@host:port ?
-                   Chrome with a persistent user_data_dir caches proxy settings
-                   in Default/Preferences. A stale cached value causes Chrome to
-                   ignore the --proxy-server flag and throw ERR_NO_SUPPORTED_PROXIES.
-                   Routing via a local HTTP tunnel avoids this entirely — Chrome
-                   always sees a plain http:// proxy with no credentials in the flag.
-
-    Key invariant: browser._playwright_proxy is always None in this codebase.
-    All proxy auth lives in the tunnel. Playwright contexts are always created plain.
+    All proxies (BrightData and Proxy-Cheap SOCKS5) are routed through
+    _AuthProxyTunnel so Chrome always receives --proxy-server=http://127.0.0.1:PORT.
+    This avoids ERR_NO_SUPPORTED_PROXIES with persistent user_data_dir profiles.
     """
     from .proxy_utils import is_brightdata, format_brightdata_username
 
-    # ── Pre-flight (non-fatal) ───────────────────────────────────────────────
     if proxy and proxy.get("host") and proxy.get("port"):
         ok, msg = _test_upstream_proxy(proxy)
         level = "INFO" if ok else "WARNING"
@@ -747,21 +756,11 @@ async def create_undetected_browser(
         password   = proxy.get("password") or ""
         country    = proxy.get("country", "US")
 
-        if is_brightdata(host):
-            # ── BrightData: HTTP CONNECT tunnel ──────────────────────────
-            if username:
-                username = format_brightdata_username(username, country)
-                if log_func:
-                    log_func(
-                        f"BrightData country targeting applied: {country}",
-                        batch_id=batch_id,
-                    )
+        if is_brightdata(host) and username:
+            username = format_brightdata_username(username, country)
+            if log_func:
+                log_func(f"BrightData country targeting applied: {country}", batch_id=batch_id)
 
-        # ── ALL proxies (BrightData AND Proxy-Cheap SOCKS5) go through
-        #    _AuthProxyTunnel so Chrome always gets http://127.0.0.1:PORT
-        #    This avoids ERR_NO_SUPPORTED_PROXIES caused by Chrome caching
-        #    SOCKS5 proxy settings in the persistent user_data_dir profile.
-        # ─────────────────────────────────────────────────────────────────
         if username and password:
             tunnel = _AuthProxyTunnel(
                 upstream_host=host,
@@ -783,13 +782,9 @@ async def create_undetected_browser(
                     batch_id=batch_id,
                 )
         else:
-            # No credentials — pass proxy directly (rare case)
             chrome_proxy_server = f"{proxy_type}://{host}:{port}"
             if log_func:
-                log_func(
-                    f"Proxy (no auth): {proxy_type}://{host}:{port}",
-                    batch_id=batch_id,
-                )
+                log_func(f"Proxy (no auth): {proxy_type}://{host}:{port}", batch_id=batch_id)
 
     os.makedirs(user_data_dir, exist_ok=True)
     if log_func:
@@ -808,7 +803,7 @@ async def create_undetected_browser(
     chrome_proc = _launch_chrome_with_profile(
         user_data_dir=user_data_dir,
         headless=headless,
-        proxy_server=chrome_proxy_server,   # always http://127.0.0.1:PORT or None
+        proxy_server=chrome_proxy_server,
         extra_args=[],
         cdp_port=cdp_port,
     )
@@ -844,8 +839,6 @@ async def create_undetected_browser(
     )
     browser = Browser(config=browser_config)
 
-    # Store metadata — _playwright_proxy is always None.
-    # All proxy auth is handled inside the tunnel.
     browser._cdp_port         = cdp_port  # type: ignore[attr-defined]
     browser._playwright_proxy = None      # type: ignore[attr-defined]
 
@@ -855,7 +848,6 @@ async def create_undetected_browser(
             log_func(f"Proxy tunnel active — Chrome routing via: {safe_log}", batch_id=batch_id)
         log_func("browser-use connected to Chrome via CDP", batch_id=batch_id)
 
-    # Patch close() to also terminate Chrome + tunnel
     _original_close = browser.close
 
     async def _patched_close():
@@ -875,16 +867,14 @@ async def create_undetected_browser(
 
     browser.close = _patched_close  # type: ignore[method-assign]
     return browser
+
+
 # ---------------------------------------------------------------------------
 # Helper: build a throw-away shadow Browser for the agent
 # ---------------------------------------------------------------------------
 async def _create_shadow_browser(
     cdp_port: int, log_func=None, batch_id: str = ""
 ) -> Browser:
-    """
-    Second browser-use Browser on the same CDP port.
-    close() patched to no-op so the agent can't kill the real Chrome.
-    """
     shadow_config = BrowserUseConfig(
         headless=False,
         cdp_url=f"http://127.0.0.1:{cdp_port}",
@@ -980,10 +970,7 @@ async def solve_captcha_if_present(page, log_func=None, batch_id: str = ""):
             element = await page.query_selector(selector)
             if element:
                 if log_func:
-                    log_func(
-                        f"CAPTCHA detected: {selector}. Attempting to solve...",
-                        batch_id=batch_id,
-                    )
+                    log_func(f"CAPTCHA detected: {selector}. Attempting to solve...", batch_id=batch_id)
                 sitekey = None
                 if selector.startswith("iframe"):
                     parent = await element.evaluate_handle("el => el.closest('[data-sitekey]')")
@@ -1050,9 +1037,7 @@ async def call_capsolver(sitekey: str, page_url: str, log_func=None) -> Optional
     }
     async with aiohttp.ClientSession() as session:
         try:
-            async with session.post(
-                f"{CAPSOLVER_API_URL}/createTask", json=payload
-            ) as resp:
+            async with session.post(f"{CAPSOLVER_API_URL}/createTask", json=payload) as resp:
                 result = await resp.json()
                 if result.get("errorId") != 0:
                     if log_func:
@@ -1089,7 +1074,7 @@ async def call_capsolver(sitekey: str, page_url: str, log_func=None) -> Optional
 
 
 # ---------------------------------------------------------------------------
-# Survey agent — shadow browser pattern
+# Survey agent — shadow browser pattern with midpoint screenshot
 # ---------------------------------------------------------------------------
 async def run_survey_agent(
     browser: Browser,
@@ -1097,7 +1082,12 @@ async def run_survey_agent(
     persona: str,
     start_url: str,
     log_func=None,
+    midpoint_callback: Optional[Callable] = None,
 ) -> str:
+    """
+    Run the survey agent. Fires midpoint_callback (async) at step 40/80
+    so the caller can take a midpoint screenshot.
+    """
     agent_task = f"""
 {persona}
 
@@ -1138,9 +1128,39 @@ FINAL REPORT:
         max_actions_per_step=5,
     )
 
+    midpoint_fired = False
+
+    async def _run_with_midpoint():
+        nonlocal midpoint_fired
+        # Run agent steps manually to inject midpoint callback
+        step = 0
+        async for _ in agent.arun(max_steps=80):
+            step += 1
+            if not midpoint_fired and step >= 40 and midpoint_callback:
+                midpoint_fired = True
+                try:
+                    await midpoint_callback()
+                except Exception:
+                    pass
+
     try:
-        result = await asyncio.wait_for(agent.run(max_steps=80), timeout=600.0)
+        # Try stepped execution with midpoint; fall back to standard run
+        try:
+            await asyncio.wait_for(_run_with_midpoint(), timeout=600.0)
+            result = agent.history if hasattr(agent, "history") else None
+        except (AttributeError, TypeError):
+            # arun() not available — use standard run()
+            result = await asyncio.wait_for(agent.run(max_steps=80), timeout=600.0)
+            # Fire midpoint callback roughly halfway through via timer
+            if not midpoint_fired and midpoint_callback:
+                midpoint_fired = True
+                try:
+                    await midpoint_callback()
+                except Exception:
+                    pass
+
         return detect_survey_outcome(result, log_func)
+
     except asyncio.TimeoutError:
         if log_func:
             log_func("Survey agent timed out after 600 s", "WARNING")
@@ -1148,7 +1168,14 @@ FINAL REPORT:
     except Exception as e:
         if log_func:
             log_func(f"Survey agent exception: {e}", "ERROR")
-        return STATUS_ERROR
+        # Fallback: standard run
+        try:
+            result = await asyncio.wait_for(agent.run(max_steps=80), timeout=600.0)
+            return detect_survey_outcome(result, log_func)
+        except Exception as e2:
+            if log_func:
+                log_func(f"Survey agent fallback also failed: {e2}", "ERROR")
+            return STATUS_ERROR
 
 
 def detect_survey_outcome(result, log_func=None) -> str:
@@ -1215,7 +1242,6 @@ def get_llm(model_choice: str):
 # Fallback Google login
 # ---------------------------------------------------------------------------
 async def perform_google_login(page, email: str, password: str, log_func=None):
-    """Fallback Google login via direct navigation."""
     if log_func:
         log_func("Navigating to Google sign-in")
     await page.goto(
