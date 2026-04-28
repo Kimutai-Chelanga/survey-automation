@@ -5,17 +5,20 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import logging
+import os
 
 from src.core.database.postgres import accounts as pg_accounts
 from src.core.database.postgres.connection import get_postgres_connection
 from psycopg2.extras import RealDictCursor
 from ..base_page import BasePage
 
-# Import our custom UI component and db helpers
+# Import custom UI components and DB helpers
 from src.streamlit.ui.pages.generate_manual_workflows.ui_components import display_batch_details
 from src.streamlit.ui.pages.generate_manual_workflows.db_utils import (
-    load_accounts, load_survey_sites, get_batches_for_account_site, load_screening_results
+    load_accounts, load_survey_sites, get_batches_for_account_site, load_screening_results,
+    get_batch_logs, get_batch_screenshots
 )
+from src.streamlit.ui.pages.generate_manual_workflows.collage_utils import create_collage, build_screenshot_flow
 
 logger = logging.getLogger(__name__)
 
@@ -75,11 +78,11 @@ class DashboardPage(BasePage):
         st.markdown("---")
         st.markdown("## 📜 Run History (by Account & Site)")
 
-        # Run History section: filter by account & site
+        # Run History section: filter by account & site, show batch logs, screenshots, collage
         self._render_run_history()
 
     # ----------------------------------------------------------------------
-    # Data loading methods (unchanged from original)
+    # Data loading methods (unchanged)
     # ----------------------------------------------------------------------
     def _load_accounts_data(self) -> pd.DataFrame:
         try:
@@ -194,7 +197,7 @@ class DashboardPage(BasePage):
             return pd.DataFrame()
 
     # ----------------------------------------------------------------------
-    # Rendering methods (unchanged from original)
+    # Rendering methods (unchanged)
     # ----------------------------------------------------------------------
     def _render_top_metrics(self, accounts_df: pd.DataFrame, questions_df: pd.DataFrame, answers_df: pd.DataFrame):
         col1, col2, col3, col4, col5 = st.columns(5)
@@ -333,15 +336,14 @@ class DashboardPage(BasePage):
         st.plotly_chart(fig, use_container_width=True)
 
     # ----------------------------------------------------------------------
-    # NEW METHOD: Run History with logs & screenshots
+    # UPDATED: Run History with DB logs, screenshots, and collage
     # ----------------------------------------------------------------------
     def _render_run_history(self):
-        """Allow user to select account and site, then view batches and their details."""
         accounts_list = load_accounts()
         sites_list = load_survey_sites()
 
         if not accounts_list:
-            st.warning("No accounts found. Please create an account first.")
+            st.warning("No accounts found.")
             return
         if not sites_list:
             st.warning("No survey sites found.")
@@ -376,30 +378,46 @@ class DashboardPage(BasePage):
         selected_batch = st.selectbox("Select a batch to view details", batch_ids, key="selected_batch")
 
         if selected_batch:
-            # Check if this batch exists in current session state (i.e., it was run in this session)
-            batches_state = st.session_state.get("batches", {})
-            if selected_batch in batches_state:
-                # Display logs and screenshots using the existing component
-                st.markdown(f"### Details for batch `{selected_batch}`")
-                display_batch_details(
-                    selected_batch,
-                    batches_state,
-                    key_suffix=f"_dashboard_{selected_batch}"
-                )
+            # Fetch logs and screenshots from DB (persisted across sessions)
+            logs = get_batch_logs(selected_batch)
+            screenshots = get_batch_screenshots(selected_batch)
+
+            st.markdown(f"### Details for batch `{selected_batch}`")
+            if logs:
+                st.markdown("#### 📝 Logs")
+                log_text = "\n".join([f"[{l['created_at'].strftime('%H:%M:%S')}] {l['log_level']}: {l['message']}" for l in logs])
+                st.code(log_text, language="log")
+                st.download_button("⬇️ Download logs", log_text, f"logs_{selected_batch}.txt")
             else:
-                st.warning(
-                    "Logs and screenshots are only available for batches that were run "
-                    "in the current session. However, you can see the survey attempts below."
-                )
-                # Show the screening results for this batch
-                results = load_screening_results(account_id, site_id)
-                batch_results = [r for r in results if r.get("batch_id") == selected_batch]
-                if batch_results:
-                    st.markdown("#### Survey attempts in this batch")
-                    for r in batch_results:
-                        icon = {"complete": "✅", "passed": "🟡", "failed": "❌", "error": "⚠️"}.get(r["status"], "❓")
-                        st.write(f"{icon} **{r['survey_name']}** – {r['status']} – {r['started_at']}")
-                        if r.get("notes"):
-                            st.caption(r["notes"])
-                else:
-                    st.info("No detailed survey attempts found.")
+                st.info("No logs found in database for this batch.")
+
+            if screenshots:
+                st.markdown("#### 📸 Screenshots")
+                for shot in screenshots:
+                    img_path = shot["file_path"]
+                    if os.path.exists(img_path):
+                        st.image(img_path, use_container_width=True, caption=f"{shot['label']} (Survey #{shot['survey_num']})")
+                    else:
+                        st.warning(f"Missing: {shot['file_path']}")
+
+                # Collage generation
+                st.markdown("#### 🖼️ Flow Collage")
+                if st.button(f"Generate collage for {selected_batch}"):
+                    shot_paths = build_screenshot_flow(screenshots)
+                    if len(shot_paths) >= 2:
+                        collage_path = create_collage(shot_paths)
+                        if collage_path and os.path.exists(collage_path):
+                            st.image(collage_path, use_container_width=True)
+                            with open(collage_path, "rb") as f:
+                                st.download_button(
+                                    "⬇️ Download collage",
+                                    f.read(),
+                                    f"collage_{selected_batch}.png",
+                                    mime="image/png"
+                                )
+                        else:
+                            st.error("Collage generation failed.")
+                    else:
+                        st.warning("Need at least 2 screenshots to create a flow collage.")
+            else:
+                st.info("No screenshots found for this batch.")

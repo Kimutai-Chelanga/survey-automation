@@ -10,7 +10,7 @@ import traceback
 import json
 from src.core.database.postgres import accounts as pg_accounts
 from src.streamlit.ui.pages.accounts.chrome_session_manager import ChromeSessionManager
-from src.streamlit.ui.pages.accounts.cookie_manager import CookieManager   # ← NEW
+from src.streamlit.ui.pages.accounts.cookie_manager import CookieManager
 import os
 import logging
 import tempfile
@@ -32,7 +32,6 @@ class AccountsPage:
         self.db_manager = db_manager
 
         # ── CookieManager — shared instance used across all cookie operations ──
-        # Wraps db_manager into the context-manager interface CookieManager expects.
         self._cookie_manager = self._build_cookie_manager()
 
         # ── Session-state defaults ─────────────────────────────────────────────
@@ -77,16 +76,14 @@ class AccountsPage:
         self._ensure_demographic_columns()
         self._ensure_account_urls_table()
         self._ensure_question_columns()
-        self._ensure_cookie_manager_schema()   # ← NEW: ensure domain-based columns
+        self._ensure_cookie_manager_schema()
+        self._ensure_only_top_surveys()          # ← NEW: restrict to Top Surveys
+        self._ensure_default_top_surveys_url()   # ← NEW: set default URL for all accounts
 
     # ── CookieManager factory ─────────────────────────────────────────────────
-
     def _build_cookie_manager(self) -> Optional[CookieManager]:
         """
-        Return a CookieManager backed by self.db_manager.
-
-        CookieManager needs a zero-arg callable that returns a context manager
-        yielding a psycopg2 connection.  We adapt db_manager here.
+        Return a CookieManager wrapped around self.db_manager.
         """
         db = self.db_manager
 
@@ -115,18 +112,11 @@ class AccountsPage:
             logger.warning(f"Could not build CookieManager: {e}")
             return None
 
-    # ── Schema migration for CookieManager table ──────────────────────────────
-
+    # =========================================================================
+    # Schema migration for CookieManager table
+    # =========================================================================
     def _ensure_cookie_manager_schema(self):
-        """
-        Ensure account_cookies supports both the legacy schema (is_active /
-        cookie_data columns) and the CookieManager schema (domain / cookies_json
-        columns with a UNIQUE(account_id, domain) constraint).
-
-        The two schemas can coexist: legacy rows have domain=NULL / cookies_json=NULL,
-        new rows have the domain-based columns filled.  We add the missing columns
-        and index only if they don't already exist.
-        """
+        """Ensure account_cookies has domain and cookies_json columns."""
         try:
             additions = [
                 ("domain",       "VARCHAR(255)"),
@@ -143,7 +133,7 @@ class AccountsPage:
                     )
                     logger.info(f"✅ Added {col} column to account_cookies")
 
-            # Add unique constraint only if it doesn't exist
+            # Add unique constraint
             check_constraint = """
             SELECT constraint_name FROM information_schema.table_constraints
             WHERE table_name='account_cookies'
@@ -159,10 +149,8 @@ class AccountsPage:
                     """)
                     logger.info("✅ Added UNIQUE(account_id, domain) to account_cookies")
                 except Exception:
-                    # Constraint may already exist under a different name — ignore
                     pass
 
-            # Index
             self.db_manager.execute_query("""
                 CREATE INDEX IF NOT EXISTS idx_account_cookies_account_id
                 ON account_cookies(account_id)
@@ -171,9 +159,52 @@ class AccountsPage:
             logger.error(f"Failed to ensure CookieManager schema: {e}")
 
     # =========================================================================
-    # Database schema migration helpers (unchanged from original)
+    # Force Top Surveys only + default URL
     # =========================================================================
+    def _ensure_only_top_surveys(self):
+        """Delete all survey sites except 'Top Surveys'."""
+        try:
+            self.db_manager.execute_query(
+                "DELETE FROM survey_sites WHERE site_name != 'Top Surveys'"
+            )
+            self.db_manager.execute_query("""
+                INSERT INTO survey_sites (site_name, description, is_active)
+                SELECT 'Top Surveys', 'High‑paying survey platform', TRUE
+                WHERE NOT EXISTS (SELECT 1 FROM survey_sites WHERE site_name = 'Top Surveys')
+            """)
+            logger.info("Survey sites cleaned – only 'Top Surveys' kept")
+        except Exception as e:
+            logger.error(f"Failed to enforce only Top Surveys: {e}")
 
+    def _ensure_default_top_surveys_url(self):
+        """Ensure each account has the default Top Surveys URL."""
+        try:
+            site_id_res = self.db_manager.execute_query(
+                "SELECT site_id FROM survey_sites WHERE site_name = 'Top Surveys'", fetch=True
+            )
+            if not site_id_res:
+                return
+            site_id = site_id_res[0][0] if isinstance(site_id_res[0], tuple) else site_id_res[0]['site_id']
+
+            accounts = self.db_manager.execute_query("SELECT account_id FROM accounts", fetch=True)
+            if not accounts:
+                return
+
+            for acc in accounts:
+                acc_id = acc[0] if isinstance(acc, tuple) else acc['account_id']
+                self.db_manager.execute_query("""
+                    INSERT INTO account_urls (account_id, site_id, url, is_default, is_used, notes)
+                    VALUES (%s, %s, 'https://app.topsurveys.app/', TRUE, FALSE, 'Default Top Surveys URL')
+                    ON CONFLICT (account_id, site_id, url) DO UPDATE
+                    SET is_default = TRUE, is_used = FALSE, notes = EXCLUDED.notes, updated_at = CURRENT_TIMESTAMP
+                """, (acc_id, site_id))
+            logger.info("Default Top Surveys URL ensured for all accounts")
+        except Exception as e:
+            logger.error(f"Failed to set default URL: {e}")
+
+    # =========================================================================
+    # Database schema migration helpers (unchanged)
+    # =========================================================================
     def _ensure_survey_columns(self):
         try:
             check_country = """
@@ -311,7 +342,6 @@ class AccountsPage:
     # =========================================================================
     # Helper methods
     # =========================================================================
-
     def _clear_account_creation_state(self, keep_message=False):
         st.session_state.show_add_account     = False
         st.session_state.creating_account     = False
@@ -349,13 +379,7 @@ class AccountsPage:
     # =========================================================================
     # Cookie operations — all delegated to CookieManager
     # =========================================================================
-
     def _store_account_cookies(self, account_id, cookies_json, username) -> Dict[str, Any]:
-        """
-        Store cookies for an account.
-        Delegates to CookieManager.save() which upserts per domain.
-        Falls back to legacy SQL if CookieManager is unavailable.
-        """
         try:
             if hasattr(account_id, 'item') or isinstance(account_id, (np.integer, np.int64)):
                 account_id = int(account_id)
@@ -375,15 +399,12 @@ class AccountsPage:
                 if missing:
                     return {'success': False, 'error': f"Cookie #{i} missing: {missing}"}
 
-            # ── Use CookieManager (preferred) ─────────────────────────────────
             if self._cookie_manager:
-                # Determine primary domain from the cookies themselves
                 domains = list({
                     ck.get('domain', '').lstrip('.')
                     for ck in cookies
                     if ck.get('domain')
                 })
-                # Deduplicate to registered domain (last two parts)
                 canonical_domains = list({
                     '.'.join(d.split('.')[-2:]) for d in domains if d
                 } or {'google.com'})
@@ -397,7 +418,6 @@ class AccountsPage:
                     else:
                         self.add_log(f"⚠️ CookieManager.save failed for domain: {domain}", "WARNING")
 
-                # Keep accounts.has_cookies in sync
                 self.db_manager.execute_query(
                     "UPDATE accounts SET has_cookies=TRUE, cookies_last_updated=CURRENT_TIMESTAMP "
                     "WHERE account_id=%s",
@@ -412,8 +432,6 @@ class AccountsPage:
                     'error':        None if saved_count > 0 else "All domain saves failed",
                 }
 
-            # ── Fallback: legacy SQL ──────────────────────────────────────────
-            self.add_log("CookieManager unavailable — using legacy SQL", "WARNING")
             return self._store_cookies_legacy_sql(account_id, cookies)
 
         except Exception as e:
@@ -422,7 +440,6 @@ class AccountsPage:
             return {'success': False, 'error': error_msg}
 
     def _store_cookies_legacy_sql(self, account_id: int, cookies: list) -> Dict[str, Any]:
-        """Fallback cookie storage when CookieManager is unavailable."""
         try:
             self.db_manager.execute_query(
                 "UPDATE account_cookies SET is_active=FALSE, updated_at=CURRENT_TIMESTAMP "
@@ -453,21 +470,13 @@ class AccountsPage:
             return {'success': False, 'error': str(e)}
 
     def _get_account_cookies(self, account_id) -> Dict[str, Any]:
-        """
-        Retrieve active cookies for an account.
-
-        Tries CookieManager.load() first (loads the 'google.com' domain record
-        or the first domain found).  Falls back to the legacy is_active query.
-        """
         try:
             if hasattr(account_id, 'item') or isinstance(account_id, (np.integer, np.int64)):
                 account_id = int(account_id)
 
-            # ── CookieManager path ────────────────────────────────────────────
             if self._cookie_manager:
                 records = self._cookie_manager.list_records(account_id)
                 if records:
-                    # Use the first record (typically google.com or the primary domain)
                     rec = records[0]
                     domain = rec.get('domain', 'google.com')
                     cookie_data = self._cookie_manager.load(account_id, domain)
@@ -484,7 +493,6 @@ class AccountsPage:
                     }
                 return {'has_cookies': False, 'cookies': None}
 
-            # ── Fallback: legacy SQL ──────────────────────────────────────────
             result = self.db_manager.execute_query("""
                 SELECT cookie_id, cookie_data::text, cookie_count,
                        uploaded_at, updated_at, cookie_source, notes
@@ -527,7 +535,6 @@ class AccountsPage:
             return {'has_cookies': False, 'error': str(e)}
 
     def _check_cookie_validity(self, account_id) -> Dict[str, Any]:
-        """Check if stored cookies are still valid."""
         try:
             if hasattr(account_id, 'item') or isinstance(account_id, (np.integer, np.int64)):
                 account_id = int(account_id)
@@ -564,9 +571,8 @@ class AccountsPage:
             return {'valid': False, 'reason': f'Validation error: {e}', 'needs_capture': True}
 
     # =========================================================================
-    # Account URL management methods (unchanged)
+    # Account URL management methods
     # =========================================================================
-
     def _get_account_urls(self, account_id: int, site_id: Optional[int] = None,
                           show_used: bool = False) -> List[Dict[str, Any]]:
         try:
@@ -657,26 +663,12 @@ class AccountsPage:
             return {'success': False, 'error': str(e)}
 
     def _get_default_url_for_account(self, account_id, site_id):
-        try:
-            result = self.db_manager.execute_query(
-                "SELECT url FROM account_urls WHERE account_id=%s AND site_id=%s AND is_default=TRUE LIMIT 1",
-                (account_id, site_id), fetch=True,
-            )
-            if result:
-                return result[0][0] if isinstance(result[0], tuple) else result[0]['url']
-            result = self.db_manager.execute_query(
-                "SELECT url FROM account_urls WHERE account_id=%s AND site_id=%s AND (is_used=FALSE OR is_used IS NULL) ORDER BY created_at DESC LIMIT 1",
-                (account_id, site_id), fetch=True,
-            )
-            return (result[0][0] if isinstance(result[0], tuple) else result[0]['url']) if result else None
-        except Exception as e:
-            self.add_log(f"Error getting default URL: {e}", "ERROR")
-            return None
+        # Always return the fixed Top Surveys URL
+        return "https://app.topsurveys.app/"
 
     # =========================================================================
-    # Account creation / deletion (unchanged)
+    # Account creation / deletion
     # =========================================================================
-
     def _create_account_in_postgres_minimal(self, username, country=None, demographic_data=None):
         try:
             current_time = datetime.now()
@@ -848,9 +840,8 @@ class AccountsPage:
             st.rerun()
 
     # =========================================================================
-    # Survey Sites (unchanged)
+    # Survey Sites (only Top Surveys)
     # =========================================================================
-
     @st.cache_data(ttl=300)
     def load_survey_sites_data(_self) -> pd.DataFrame:
         try:
@@ -873,6 +864,9 @@ class AccountsPage:
             return pd.DataFrame()
 
     def _add_or_update_survey_site(self, site_name, description="", site_id=None):
+        # Block any site other than Top Surveys
+        if site_name != "Top Surveys":
+            return {'success': False, 'error': 'Only "Top Surveys" is allowed.'}
         try:
             if site_id:
                 result = self.db_manager.execute_query(
@@ -897,6 +891,14 @@ class AccountsPage:
             return {'success': False, 'error': str(e)}
 
     def _delete_survey_site(self, site_id):
+        # Prevent deletion of Top Surveys
+        res = self.db_manager.execute_query(
+            "SELECT site_name FROM survey_sites WHERE site_id=%s", (site_id,), fetch=True
+        )
+        if res:
+            site_name = res[0][0] if isinstance(res[0], tuple) else res[0]['site_name']
+            if site_name == "Top Surveys":
+                return {'success': False, 'error': 'Cannot delete Top Surveys site.'}
         try:
             result = self.db_manager.execute_query(
                 "SELECT COUNT(*) FROM account_urls WHERE site_id=%s", (site_id,), fetch=True
@@ -910,23 +912,12 @@ class AccountsPage:
             return {'success': False, 'error': str(e)}
 
     def _get_survey_url_for_account(self, account_id, site_name):
-        try:
-            result = self.db_manager.execute_query(
-                "SELECT site_id FROM survey_sites WHERE site_name=%s", (site_name,), fetch=True
-            )
-            if not result:
-                return "https://example-survey.com"
-            site_id = result[0][0] if isinstance(result[0], tuple) else result[0]['site_id']
-            url = self._get_default_url_for_account(account_id, site_id)
-            return url or "https://example-survey.com"
-        except Exception as e:
-            self.add_log(f"Error fetching survey URL: {e}", "ERROR")
-            return "https://example-survey.com"
+        # Always return the fixed default URL
+        return "https://app.topsurveys.app/"
 
     # =========================================================================
     # Data loading
     # =========================================================================
-
     @st.cache_data(ttl=300)
     def load_accounts_data(_self) -> pd.DataFrame:
         try:
@@ -989,7 +980,6 @@ class AccountsPage:
     # =========================================================================
     # Rendering
     # =========================================================================
-
     def _render_quick_stats(self):
         try:
             result = self.db_manager.execute_query("""
@@ -1024,12 +1014,6 @@ class AccountsPage:
         st.dataframe(display_df, use_container_width=True)
 
     def _render_account_details_view(self, df):
-        """
-        Render detailed account view.
-        Cookie management is now handled by CookieManager.render_account_cookie_panel()
-        which provides status badge, export, delete, and manual import — all in one.
-        The legacy manual-paste text area is kept as a quick-add alternative above the panel.
-        """
         for _, row in df.iterrows():
             with st.expander(f"🏷️ {row['username']} (ID: {row['account_id']})", expanded=False):
                 col1, col2, col3, col4 = st.columns(4)
@@ -1084,11 +1068,9 @@ class AccountsPage:
                         else:
                             st.error(f"Failed: {result_s.get('error')}")
 
-                # ── Cookie panel — rendered by CookieManager ──────────────────
                 st.markdown("---")
 
                 if self._cookie_manager:
-                    # CookieManager renders status, export, delete and manual import
                     self._cookie_manager.render_account_cookie_panel(
                         account_id=int(row['account_id']),
                         account_email=row.get('username', ''),
@@ -1096,7 +1078,6 @@ class AccountsPage:
                         key_prefix=f"acct_{row['account_id']}",
                     )
                 else:
-                    # Fallback: legacy manual paste (shown when CookieManager is unavailable)
                     st.write("**🍪 Upload / Update Cookies**")
                     cookies_json_input = st.text_area(
                         "Paste EditThisCookie JSON",
@@ -1143,7 +1124,6 @@ class AccountsPage:
                 st.plotly_chart(fig2, use_container_width=True)
 
     # ── Add Account Modal ──────────────────────────────────────────────────────
-
     def render_add_account_modal(self):
         if not st.session_state.get('show_add_account', False):
             return
@@ -1294,7 +1274,6 @@ class AccountsPage:
                     st.rerun()
 
     # ── Delete Account Modal ───────────────────────────────────────────────────
-
     def render_delete_account_modal(self, accounts_df):
         if not st.session_state.get('show_delete_account', False):
             return
@@ -1363,11 +1342,10 @@ class AccountsPage:
     # =========================================================================
     # Local Chrome tab
     # =========================================================================
-
     def _render_local_chrome_tab(self, accounts_df):
         st.subheader("🖥️ Local Chrome Session Management")
         st.info("✓ Free • ✓ Persistent profiles • ✓ Auto cookie sync on stop • ✓ Custom start URLs")
-        st.info("ℹ️ Default URL: `https://mylocation.org/` if no custom URL is selected.")
+        st.info("ℹ️ Default URL: `https://app.topsurveys.app/` (fixed).")
 
         if accounts_df.empty:
             st.warning("No accounts available.")
@@ -1430,29 +1408,10 @@ class AccountsPage:
 
                 st.info(f"**👤 {username}**")
 
-                # URL selection
-                url_map     = {"Default: https://mylocation.org/": "https://mylocation.org/"}
-                url_options = ["Default: https://mylocation.org/"]
-                urls_by_site: Dict[str, list] = {}
-                for u in self._get_account_urls(account_id, show_used=False):
-                    urls_by_site.setdefault(u.get('site_name', 'Other'), []).append(u)
-                for site_name, urls in urls_by_site.items():
-                    for u in urls:
-                        label = f"{'⭐ ' if u.get('is_default') else ''}{site_name}: {u['url'][:50]}..."
-                        url_map[label] = u['url']
-                        url_options.append(label)
-                url_options.append("Custom URL...")
+                # Fixed URL – no selection
+                start_url = "https://app.topsurveys.app/"
+                st.info(f"🔗 Start URL: `{start_url}` (fixed for Top Surveys)")
 
-                selected_url_opt = st.selectbox("Start URL:", url_options,
-                                                 key="start_url_select")
-                start_url = None
-                if selected_url_opt == "Custom URL...":
-                    start_url = st.text_input("Custom URL:", placeholder="https://example.com",
-                                               key="custom_url_input")
-                elif selected_url_opt in url_map:
-                    start_url = url_map[selected_url_opt]
-
-                # Profile / cookie status
                 profile_path = self.chrome_manager.get_profile_path(username)
                 if os.path.exists(os.path.join(profile_path, 'Default')):
                     st.success("✓ Existing profile — state preserved")
@@ -1464,10 +1423,6 @@ class AccountsPage:
                     st.success(f"✓ {cookie_info['cookie_count']} cookies stored")
                 else:
                     st.warning("⚠️ No cookies stored")
-
-                effective_url = (start_url if start_url and start_url.strip()
-                                 else "https://mylocation.org/")
-                st.info(f"🔗 Will open: {effective_url}")
 
                 if st.button("▶️ Start Chrome Session", type="primary",
                              use_container_width=True, key=f"start_local_{account_id}"):
@@ -1483,13 +1438,12 @@ class AccountsPage:
                             st.error(f"Failed: {res.get('error')}")
 
     # =========================================================================
-    # Chrome session lifecycle (accounts_page side)
+    # Chrome session lifecycle
     # =========================================================================
-
     def _start_local_chrome_session(self, profile_id, account_id, account_username, start_url=None):
         try:
             self.add_log(f"Starting LOCAL Chrome session for: {account_username}")
-            DEFAULT = "https://mylocation.org/"
+            DEFAULT = "https://app.topsurveys.app/"
             if not start_url or start_url.strip() == "":
                 start_url = DEFAULT
             if hasattr(account_id, 'item') or isinstance(account_id, (np.integer, np.int64)):
@@ -1514,7 +1468,6 @@ class AccountsPage:
             debug_port = result.get("debug_port", 9222)
             self.add_log(f"✓ Chrome started — debug port {debug_port}, URL: {start_url}")
 
-            # Store in MongoDB
             if self.chrome_manager.mongo_client:
                 try:
                     db = self.chrome_manager.mongo_client["messages_db"]
@@ -1538,7 +1491,6 @@ class AccountsPage:
                 except Exception as e:
                     self.add_log(f"⚠ MongoDB storage failed: {e}", "WARNING")
 
-            # Store in session state
             st.session_state.local_chrome_sessions[session_id] = {
                 "session_id":       session_id,
                 "session_type":     "local_chrome",
@@ -1575,11 +1527,6 @@ class AccountsPage:
             session_info = local_sessions[session_id]
             profile_path = session_info.get('profile_path', 'Unknown')
 
-            # ChromeSessionManager.stop_session handles:
-            # 1. Graceful Chrome shutdown
-            # 2. Cookie extraction from the Chrome profile SQLite DB
-            # 3. CookieManager.save() per domain (or fallback SQL)
-            # 4. MongoDB session update
             result = self.chrome_manager.stop_session(session_id)
 
             if result.get('success'):
@@ -1587,10 +1534,8 @@ class AccountsPage:
             else:
                 self.add_log(f"⚠️ Stop had issues: {result.get('error')}", "WARNING")
 
-            # Remove from session state
             st.session_state.local_chrome_sessions.pop(session_id, None)
 
-            # Belt-and-suspenders MongoDB update (chrome_manager already does this)
             if self.chrome_manager.mongo_client:
                 try:
                     db = self.chrome_manager.mongo_client['messages_db']
@@ -1608,7 +1553,6 @@ class AccountsPage:
             return {'success': False, 'error': error_msg}
 
     def _ensure_account_cookie_script(self, account_id, username):
-        """Generate clipboard-copy script for the account's cookies if cookies exist."""
         try:
             if hasattr(account_id, 'item') or isinstance(account_id, (np.integer, np.int64)):
                 account_id = int(account_id)
@@ -1665,7 +1609,6 @@ echo "✅ Cookies copied to clipboard — paste in EditThisCookie in VNC"
             return {'success': False, 'error': str(e)}
 
     def _sync_cookies_to_session_file(self, account_id, username):
-        """Sync cookies from PostgreSQL / CookieManager to session_data.json."""
         try:
             if hasattr(account_id, 'item') or isinstance(account_id, (np.integer, np.int64)):
                 account_id = int(account_id)
@@ -1719,7 +1662,6 @@ echo "✅ Cookies copied to clipboard — paste in EditThisCookie in VNC"
     # =========================================================================
     # Log rendering
     # =========================================================================
-
     def render_creation_logs(self):
         if st.session_state.get('account_creation_logs'):
             with st.expander("🔍 Creation Logs", expanded=True):
@@ -1740,7 +1682,6 @@ echo "✅ Cookies copied to clipboard — paste in EditThisCookie in VNC"
     # =========================================================================
     # Main render
     # =========================================================================
-
     def render(self):
         st.title("👥 Accounts Management")
         self._render_quick_stats()
@@ -1752,10 +1693,14 @@ echo "✅ Cookies copied to clipboard — paste in EditThisCookie in VNC"
             accounts_df     = self.load_accounts_data()
             survey_sites_df = self.load_survey_sites_data()
 
-        with tab1: self._render_overview_tab(accounts_df)
-        with tab2: self._render_local_chrome_tab(accounts_df)
-        with tab3: self._render_analytics_tab(accounts_df)
-        with tab4: self._render_survey_sites_tab(survey_sites_df)
+        with tab1:
+            self._render_overview_tab(accounts_df)
+        with tab2:
+            self._render_local_chrome_tab(accounts_df)
+        with tab3:
+            self._render_analytics_tab(accounts_df)
+        with tab4:
+            self._render_survey_sites_tab(survey_sites_df)
 
     def _render_overview_tab(self, accounts_df):
         st.subheader("Accounts Overview")
@@ -1844,178 +1789,36 @@ echo "✅ Cookies copied to clipboard — paste in EditThisCookie in VNC"
 
     def _render_survey_sites_tab(self, survey_sites_df):
         st.subheader("🌐 Survey Sites Management")
-        st.info("Manage survey sites and per-account URLs here.")
+        st.info("Only **Top Surveys** is available. The default URL is fixed: `https://app.topsurveys.app/`")
 
-        with st.expander("➕ Add New Survey Site"):
-            with st.form("add_survey_site_form"):
-                col1, _ = st.columns([2, 1])
-                with col1:
-                    site_name = st.text_input("Site Name *", placeholder="e.g., Top Surveys")
-                description = st.text_area("Description")
-                if st.form_submit_button("✅ Add Survey Site", type="primary"):
-                    if not site_name.strip():
-                        st.error("Site name is required!")
-                    else:
-                        res = self._add_or_update_survey_site(site_name.strip(), description.strip())
-                        if res['success']:
-                            st.success(f"✅ Added '{site_name}'")
-                            st.cache_data.clear(); time.sleep(1); st.rerun()
-                        else:
-                            st.error(f"❌ {res.get('error')}")
-
-        if not survey_sites_df.empty:
-            st.markdown("---")
-            st.subheader("🔗 Manage Account URLs")
-            accounts_df = self.load_accounts_data()
-            if not accounts_df.empty:
-                col1, col2 = st.columns(2)
-                with col1:
-                    acc_map = {f"{r['username']} (ID: {r['account_id']})": r['account_id']
-                               for _, r in accounts_df.iterrows()}
-                    selected_acc = st.selectbox("Select Account:", list(acc_map.keys()), key="url_account_select")
-                    account_id   = acc_map[selected_acc]
-                with col2:
-                    site_map = {r['site_name']: r['site_id'] for _, r in survey_sites_df.iterrows()}
-                    selected_site = st.selectbox("Select Survey Site:", list(site_map.keys()), key="url_site_select")
-                    site_id = site_map[selected_site]
-
-                account_urls = self._get_account_urls(account_id, site_id, show_used=True)
-                unused_urls  = [u for u in account_urls if not u.get('is_used')]
-                used_urls    = [u for u in account_urls if u.get('is_used')]
-
-                if unused_urls:
-                    st.markdown(f"**✅ Available URLs ({len(unused_urls)}):**")
-                    for u in unused_urls:
-                        c1, c2, c3, c4, c5 = st.columns([3,1,1,1,1])
-                        with c1:
-                            st.write(f"{'⭐ ' if u.get('is_default') else ''}{u['url']}")
-                            if u.get('notes'): st.caption(u['notes'])
-                        with c2:
-                            if st.button("✏️", key=f"edit_url_{u['url_id']}"):
-                                st.session_state[f'editing_url_{u["url_id"]}'] = True
-                        with c3:
-                            if not u.get('is_default'):
-                                if st.button("⭐", key=f"def_url_{u['url_id']}"):
-                                    self._update_account_url(u['url_id'], u['url'], True, u.get('notes',''))
-                                    st.rerun()
-                        with c4:
-                            if st.button("✅", key=f"used_{u['url_id']}"):
-                                self._mark_url_used(u['url_id']); st.rerun()
-                        with c5:
-                            if st.button("🗑️", key=f"del_url_{u['url_id']}"):
-                                st.session_state[f'confirm_del_url_{u["url_id"]}'] = True
-
-                        if st.session_state.get(f'editing_url_{u["url_id"]}'):
-                            with st.form(f"edit_url_form_{u['url_id']}"):
-                                new_url    = st.text_input("URL", value=u['url'])
-                                is_default = st.checkbox("Default", value=u.get('is_default',False))
-                                notes      = st.text_area("Notes", value=u.get('notes',''))
-                                sc, cc = st.columns(2)
-                                with sc:
-                                    if st.form_submit_button("💾 Save"):
-                                        res = self._update_account_url(u['url_id'], new_url, is_default, notes)
-                                        if res['success']:
-                                            del st.session_state[f'editing_url_{u["url_id"]}']
-                                            st.rerun()
-                                        else: st.error(res.get('error'))
-                                with cc:
-                                    if st.form_submit_button("Cancel"):
-                                        del st.session_state[f'editing_url_{u["url_id"]}']
-                                        st.rerun()
-
-                        if st.session_state.get(f'confirm_del_url_{u["url_id"]}'):
-                            st.warning("Delete this URL?")
-                            y, n = st.columns(2)
-                            with y:
-                                if st.button("✅ Yes", key=f"yes_del_url_{u['url_id']}"):
-                                    self._delete_account_url(u['url_id'])
-                                    del st.session_state[f'confirm_del_url_{u["url_id"]}']
-                                    st.rerun()
-                            with n:
-                                if st.button("❌ No", key=f"no_del_url_{u['url_id']}"):
-                                    del st.session_state[f'confirm_del_url_{u["url_id"]}']
-                                    st.rerun()
-                        st.divider()
-
-                if used_urls:
-                    with st.expander(f"📋 Used URLs ({len(used_urls)})"):
-                        for u in used_urls:
-                            c1, c2, c3 = st.columns([3,1,1])
-                            with c1:
-                                st.write(f"~~{u['url']}~~")
-                                if u.get('used_at'):
-                                    st.caption(f"Used: {u['used_at'].strftime('%Y-%m-%d %H:%M')}")
-                            with c2:
-                                if st.button("↩️", key=f"reset_{u['url_id']}"):
-                                    self._mark_url_unused(u['url_id']); st.rerun()
-                            with c3:
-                                if st.button("🗑️", key=f"del_used_{u['url_id']}"):
-                                    self._delete_account_url(u['url_id']); st.rerun()
-
-                with st.expander("➕ Add New URL", expanded=not bool(account_urls)):
-                    with st.form("add_account_url_form"):
-                        new_url    = st.text_input("URL *", placeholder="https://example.com/survey")
-                        is_default = st.checkbox("Set as Default")
-                        notes      = st.text_area("Notes (optional)")
-                        if st.form_submit_button("✅ Add URL", type="primary"):
-                            if not new_url.strip():
-                                st.error("URL is required!")
-                            else:
-                                res = self._add_account_url(account_id, site_id, new_url.strip(), is_default, notes)
-                                if res['success']:
-                                    st.success("✅ URL added!")
-                                    st.cache_data.clear(); st.rerun()
-                                else:
-                                    st.error(f"❌ {res.get('error')}")
-
-        # Existing sites list
         if survey_sites_df.empty:
-            st.info("No survey sites yet.")
-        else:
+            st.warning("Top Surveys not found – will be created automatically.")
+            # Force creation
+            self._ensure_only_top_surveys()
+            self._ensure_default_top_surveys_url()
+            st.rerun()
+            return
+
+        # Show read‑only info
+        for _, row in survey_sites_df.iterrows():
+            st.markdown(f"**Site:** {row['site_name']}")
+            st.write(row.get('description', ''))
+            st.caption(f"Added: {row.get('created_at', 'unknown')}")
+
+        # Show account URLs for Top Surveys
+        accounts_df = self.load_accounts_data()
+        if not accounts_df.empty:
             st.markdown("---")
-            st.subheader(f"Existing Sites ({len(survey_sites_df)})")
-            for _, row in survey_sites_df.iterrows():
-                with st.expander(f"🌐 {row['site_name']}"):
-                    c1, c2, c3 = st.columns([3,1,1])
-                    with c1:
-                        st.write(f"**{row['site_name']}**")
-                        if row.get('description'): st.write(row['description'])
-                        if row.get('created_at'):  st.caption(f"Added: {row['created_at'].strftime('%Y-%m-%d %H:%M')}")
-                    with c2:
-                        if st.button("✏️ Edit", key=f"edit_site_{row['site_id']}"):
-                            st.session_state[f'editing_site_{row["site_id"]}'] = True
-                    with c3:
-                        if st.button("🗑️ Delete", key=f"del_site_{row['site_id']}"):
-                            st.session_state[f'confirm_del_site_{row["site_id"]}'] = True
-
-                    if st.session_state.get(f'editing_site_{row["site_id"]}'):
-                        with st.form(f"edit_site_{row['site_id']}"):
-                            new_name = st.text_input("Site Name", value=row['site_name'])
-                            new_desc = st.text_area("Description", value=row.get('description',''))
-                            sc, cc   = st.columns(2)
-                            with sc:
-                                if st.form_submit_button("💾 Save"):
-                                    res = self._add_or_update_survey_site(new_name.strip(), new_desc.strip(), site_id=row['site_id'])
-                                    if res['success']:
-                                        del st.session_state[f'editing_site_{row["site_id"]}']
-                                        st.cache_data.clear(); st.rerun()
-                                    else: st.error(res.get('error'))
-                            with cc:
-                                if st.form_submit_button("Cancel"):
-                                    del st.session_state[f'editing_site_{row["site_id"]}']
-                                    st.rerun()
-
-                    if st.session_state.get(f'confirm_del_site_{row["site_id"]}'):
-                        st.warning(f"Delete '{row['site_name']}'?")
-                        y, n = st.columns(2)
-                        with y:
-                            if st.button("✅ Yes, Delete", key=f"yes_del_site_{row['site_id']}"):
-                                res = self._delete_survey_site(row['site_id'])
-                                if res['success']:
-                                    del st.session_state[f'confirm_del_site_{row["site_id"]}']
-                                    st.cache_data.clear(); st.rerun()
-                                else: st.error(res.get('error'))
-                        with n:
-                            if st.button("❌ No", key=f"no_del_site_{row['site_id']}"):
-                                del st.session_state[f'confirm_del_site_{row["site_id"]}']
-                                st.rerun()
+            st.subheader("🔗 Account URLs (Top Surveys only)")
+            for _, acc_row in accounts_df.iterrows():
+                with st.expander(f"{acc_row['username']} (ID: {acc_row['account_id']})"):
+                    site_id = survey_sites_df.iloc[0]['site_id'] if not survey_sites_df.empty else None
+                    if site_id:
+                        urls = self._get_account_urls(acc_row['account_id'], site_id, show_used=True)
+                        st.code("https://app.topsurveys.app/", language=None)
+                        if urls:
+                            st.write("**Stored URL entry:**")
+                            for u in urls:
+                                st.write(f"- {u['url']} (default: {u['is_default']}, used: {u['is_used']})")
+                        else:
+                            st.info("No URL entry – will be created automatically on first use.")

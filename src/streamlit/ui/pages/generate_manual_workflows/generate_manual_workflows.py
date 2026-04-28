@@ -27,7 +27,8 @@ from .constants import (
 )
 from .db_utils import (
     ensure_tables, load_accounts, load_survey_sites, load_prompts, get_urls,
-    record_survey_attempt, verify_status_constraint
+    record_survey_attempt, verify_status_constraint, save_batch_log, save_batch_screenshot,
+    get_batches_filtered, get_batch_logs, get_batch_screenshots
 )
 from .cookie_utils import (
     load_cookies_from_db, save_cookies_to_db, delete_cookies_from_db, get_all_cookie_records
@@ -40,12 +41,13 @@ from .screenshot_utils import take_screenshot
 from .persona_utils import build_persona_system_message
 from .agent_utils import (
     create_undetected_browser, extract_surveys_with_crawl4ai, run_survey_agent,
-    get_llm, solve_captcha_if_present
+    get_llm, solve_captcha_if_present, dismiss_popups
 )
 from .ui_components import (
     display_batch_details, display_results, display_screening_results_tab,
     display_cookie_status
 )
+from .collage_utils import create_collage, build_screenshot_flow
 from src.streamlit.ui.pages.accounts.chrome_session_manager import ChromeSessionManager
 
 logger = logging.getLogger(__name__)
@@ -156,7 +158,7 @@ class GenerateManualWorkflowsPage:
                 st.session_state[k] = v
 
     # ----------------------------------------------------------------------
-    # Logging
+    # Logging (now saves to DB)
     # ----------------------------------------------------------------------
     def log(self, msg: str, level: str = "INFO", batch_id: Optional[str] = None):
         ts = datetime.now().strftime("%H:%M:%S")
@@ -168,6 +170,10 @@ class GenerateManualWorkflowsPage:
             st.session_state.batches[batch_id].setdefault("logs", []).append(entry)
             if len(st.session_state.batches[batch_id]["logs"]) > 500:
                 st.session_state.batches[batch_id]["logs"] = st.session_state.batches[batch_id]["logs"][-500:]
+            # Save to database if we have account_id and site_id
+            batch_data = st.session_state.batches[batch_id]
+            if "account_id" in batch_data and "site_id" in batch_data:
+                save_batch_log(batch_id, batch_data["account_id"], batch_data["site_id"], level, msg)
         getattr(logger, level.lower(), logger.info)(msg)
 
     # ----------------------------------------------------------------------
@@ -181,6 +187,8 @@ class GenerateManualWorkflowsPage:
             "logs": [], "screenshots": [],
             "timestamp": datetime.now().isoformat(),
             "account": acct["username"], "site": site["site_name"],
+            "account_id": acct["account_id"],   # for DB logging
+            "site_id": site["site_id"],         # for DB logging
         }
         self.log(f"═══ Batch {batch_id} ═══  {acct['username']} / {site['site_name']}", batch_id=batch_id)
         st.session_state.generation_in_progress = True
@@ -220,7 +228,7 @@ class GenerateManualWorkflowsPage:
             page, _ = await _get_live_page(browser, log_func=self.log, batch_id=batch_id)
 
             # Screenshot 1: browser launched (blank/new tab)
-            await take_screenshot(page, "browser_launched", batch_id, log_func=self.log)
+            await take_screenshot(page, "browser_launched", batch_id, acct["account_id"], site["site_id"], log_func=self.log)
 
             # Navigate with retry and error screenshots
             max_retries = 3
@@ -228,18 +236,21 @@ class GenerateManualWorkflowsPage:
                 try:
                     await page.goto(start_url, wait_until="domcontentloaded", timeout=30000)
                     # Screenshot 2: dashboard loaded (actual page)
-                    await take_screenshot(page, "dashboard_loaded", batch_id, log_func=self.log)
+                    await take_screenshot(page, "dashboard_loaded", batch_id, acct["account_id"], site["site_id"], log_func=self.log)
                     break
                 except Exception as e:
                     self.log(f"Navigation attempt {attempt+1} failed: {e}", "WARNING", batch_id=batch_id)
-                    await take_screenshot(page, "navigation_error", batch_id, survey_num=0, log_func=self.log)
+                    await take_screenshot(page, "navigation_error", batch_id, acct["account_id"], site["site_id"], survey_num=0, log_func=self.log)
                     if attempt == max_retries - 1:
-                        await take_screenshot(page, "navigation_error_final", batch_id, survey_num=0, log_func=self.log)
+                        await take_screenshot(page, "navigation_error_final", batch_id, acct["account_id"], site["site_id"], survey_num=0, log_func=self.log)
                         raise
                     await asyncio.sleep(2)
                     page, _ = await _get_live_page(browser, log_func=self.log, batch_id=batch_id)
 
             await page.wait_for_timeout(9000)
+
+            # Dismiss onboarding popups (e.g., Top Surveys "Select Devices")
+            await dismiss_popups(page, log_func=self.log, batch_id=batch_id)
 
             # Attempt Google OAuth (only if the profile isn't already logged in)
             self.log("🔍 Looking for 'Continue with Google' button…", batch_id=batch_id)
@@ -312,20 +323,19 @@ class GenerateManualWorkflowsPage:
                                 self.log(f"Could not click survey via '{survey_card.link_url}', falling back", "WARNING", batch_id=batch_id)
 
                     # Screenshot 3: start of survey
-                    await take_screenshot(page, "start_survey", batch_id, survey_num, log_func=self.log)
+                    await take_screenshot(page, "start_survey", batch_id, acct["account_id"], site["site_id"], survey_num, log_func=self.log)
 
                     # Solve any CAPTCHA on survey start page
                     await solve_captcha_if_present(page, log_func=self.log, batch_id=batch_id)
 
-                    # --- Midpoint screenshot timer ---
-                    # We'll run the agent and simultaneously wait 45 seconds to take a midpoint screenshot
+                    # --- Midpoint screenshot timer (45 seconds) ---
                     async def capture_midpoint():
                         nonlocal midpoint_captured
                         await asyncio.sleep(45)  # Adjust seconds as needed
                         if not midpoint_captured:
                             midpoint_captured = True
                             fresh_page, _ = await _get_live_page(browser, log_func=self.log, batch_id=batch_id)
-                            await take_screenshot(fresh_page, "midpoint_survey", batch_id, survey_num, log_func=self.log)
+                            await take_screenshot(fresh_page, "midpoint_survey", batch_id, acct["account_id"], site["site_id"], survey_num, log_func=self.log)
 
                     midpoint_task = asyncio.create_task(capture_midpoint())
 
@@ -343,7 +353,7 @@ class GenerateManualWorkflowsPage:
 
                     # Screenshot 4: after completion (thank you page)
                     fresh_page, _ = await _get_live_page(browser, log_func=self.log, batch_id=batch_id)
-                    await take_screenshot(fresh_page, "after_completion", batch_id, survey_num, log_func=self.log)
+                    await take_screenshot(fresh_page, "after_completion", batch_id, acct["account_id"], site["site_id"], survey_num, log_func=self.log)
 
                 except Exception as e:
                     self.log(f"Survey {survey_num} exception: {e}", "ERROR", batch_id=batch_id)
@@ -436,20 +446,9 @@ class GenerateManualWorkflowsPage:
         si = next((s for s in avail_sites if s["site_name"] == site["site_name"]), {})
         st.caption(f"Extractor v{si.get('extractor_version','?')} | Creator v{si.get('creator_version','?')}")
 
-        # Survey URL
-        urls = get_urls(acct["account_id"], site["site_id"])
-        if not urls:
-            st.warning("⚠️ No URLs configured for this account/site.")
-            return None, None, None, None, None, None, None, None
-        url_map = {}
-        for u in urls:
-            label = f"{'⭐ ' if u.get('is_default') else ''}{u['url']}{'  [used]' if u.get('is_used') else ''}"
-            url_map[label] = u
-        selected_label = st.selectbox("Dashboard / Survey URL", list(url_map), key="settings_url")
-        start_url = url_map[selected_label]["url"].strip()
-        if start_url and not start_url.startswith(("http://", "https://")):
-            start_url = "https://" + start_url
-            st.info(f"URL normalised to: {start_url}")
+        # Survey URL – we fix to Top Surveys default
+        start_url = "https://app.topsurveys.app/"
+        st.info(f"Survey URL: `{start_url}` (fixed for Top Surveys)")
 
         # Model & survey count
         available_models = [k for k, v in MODEL_ENV_KEYS.items() if os.environ.get(v)]
@@ -619,30 +618,103 @@ class GenerateManualWorkflowsPage:
                     _delete_all_batches()
                     st.rerun()
 
-        all_batches = sorted(st.session_state.batches.keys(), reverse=True)
-        if not all_batches:
-            st.info("No runs yet. Run some surveys first.")
+        # Load accounts and sites for filters
+        accounts = load_accounts()
+        survey_sites = load_survey_sites()
+
+        col_f1, col_f2, col_f3 = st.columns(3)
+        with col_f1:
+            account_filter = st.selectbox("Filter by Account", options=["All"] + [a["username"] for a in accounts], key="hist_acct_filter")
+        with col_f2:
+            site_filter = st.selectbox("Filter by Site", options=["All"] + [s["site_name"] for s in survey_sites], key="hist_site_filter")
+        with col_f3:
+            batch_id_filter = st.text_input("Filter by Batch ID (partial)", key="hist_batch_filter")
+
+        # Map username to account_id
+        account_id = None
+        if account_filter != "All":
+            acct = next((a for a in accounts if a["username"] == account_filter), None)
+            if acct:
+                account_id = acct["account_id"]
+
+        site_id = None
+        if site_filter != "All":
+            site_obj = next((s for s in survey_sites if s["site_name"] == site_filter), None)
+            if site_obj:
+                site_id = site_obj["site_id"]
+
+        batch_id_pattern = batch_id_filter.strip() if batch_id_filter else None
+
+        # Fetch batches from DB
+        batches = get_batches_filtered(account_id=account_id, site_id=site_id, limit=200)
+
+        # Apply manual batch_id pattern filter (if any)
+        if batch_id_pattern:
+            batches = [b for b in batches if batch_id_pattern in b["batch_id"]]
+
+        if not batches:
+            st.info("No batches found matching the filters.")
             return
 
-        for batch_id in all_batches:
-            batch_data = st.session_state.batches[batch_id]
-            # Display batch header with delete button
+        for batch in batches:
+            batch_id = batch["batch_id"]
             with st.container():
                 cols = st.columns([5, 1])
                 with cols[0]:
-                    st.markdown(f"**{batch_id}**  –  {batch_data.get('account', '?')} / {batch_data.get('site', '?')}  –  {batch_data.get('timestamp', '')[:19]}")
+                    # ✅ FIX: convert datetime to string before slicing
+                    first_seen = batch.get("first_seen")
+                    if isinstance(first_seen, datetime):
+                        first_seen_str = first_seen.strftime("%Y-%m-%d %H:%M:%S")
+                    else:
+                        first_seen_str = str(first_seen)[:19] if first_seen else "unknown"
+                    st.markdown(f"**{batch_id}**  –  {batch['username']} / {batch['site_name']}  –  {first_seen_str}")
                 with cols[1]:
                     if st.button("❌ Delete", key=f"del_{batch_id}"):
                         _delete_batch(batch_id)
                         st.rerun()
-                # Show details expander
+
                 with st.expander(f"📄 Details for {batch_id}"):
-                    display_batch_details(
-                        batch_id,
-                        st.session_state.batches,
-                        SCREENSHOT_LABELS,
-                        key_suffix=f"_{batch_id}",
-                    )
+                    # Show logs and screenshots from DB
+                    logs = get_batch_logs(batch_id)
+                    if logs:
+                        log_text = "\n".join([f"[{l['created_at'].strftime('%H:%M:%S')}] {l['log_level']}: {l['message']}" for l in logs])
+                        st.code(log_text, language="log")
+                    else:
+                        st.info("No logs in DB for this batch.")
+
+                    screenshots = get_batch_screenshots(batch_id)
+                    if screenshots:
+                        st.markdown("**Screenshots**")
+                        for shot in screenshots:
+                            st.caption(f"{shot['label']} (Survey #{shot['survey_num']}) - {shot['created_at'].strftime('%H:%M:%S')}")
+                            if os.path.exists(shot['file_path']):
+                                st.image(shot['file_path'], use_container_width=True)
+                            else:
+                                st.warning(f"File missing: {shot['file_path']}")
+
+                        # Collage generation
+                        st.markdown("---")
+                        st.subheader("📸 Flow Collage")
+                        if st.button(f"Generate Collage for {batch_id}", key=f"collage_{batch_id}"):
+                            shot_paths = build_screenshot_flow(screenshots)
+                            if len(shot_paths) >= 2:
+                                collage_path = create_collage(shot_paths)
+                                if collage_path and os.path.exists(collage_path):
+                                    st.image(collage_path, use_container_width=True)
+                                    with open(collage_path, "rb") as f:
+                                        st.download_button(
+                                            "⬇️ Download Collage",
+                                            f.read(),
+                                            f"collage_{batch_id}.png",
+                                            mime="image/png",
+                                            key=f"dl_collage_{batch_id}"
+                                        )
+                                else:
+                                    st.error("Failed to generate collage.")
+                            else:
+                                st.warning("Need at least 2 screenshots to create a collage.")
+                    else:
+                        st.info("No screenshots in DB for this batch.")
             st.divider()
 
         # Global logs

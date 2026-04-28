@@ -232,3 +232,114 @@ def get_batches_for_account_site(account_id: int, site_id: int) -> List[Dict[str
     except Exception as e:
         logger.error(f"get_batches_for_account_site: {e}")
         return []
+
+
+# ========== NEW: Batch logs & screenshots persistence ==========
+
+def save_batch_log(batch_id: str, account_id: int, site_id: int, level: str, message: str):
+    """Save a log line to the database."""
+    try:
+        with get_postgres() as conn:
+            with conn.cursor() as c:
+                c.execute("""
+                    INSERT INTO batch_logs (batch_id, account_id, site_id, log_level, message)
+                    VALUES (%s, %s, %s, %s, %s)
+                """, (batch_id, account_id, site_id, level, message[:2000]))
+                conn.commit()
+    except Exception as e:
+        logger.error(f"save_batch_log: {e}")
+
+
+def save_batch_screenshot(batch_id: str, account_id: int, site_id: int,
+                          survey_num: int, stage: str, label: str, file_path: str):
+    """Save screenshot metadata to the database."""
+    try:
+        with get_postgres() as conn:
+            with conn.cursor() as c:
+                c.execute("""
+                    INSERT INTO batch_screenshots (batch_id, account_id, site_id, survey_num, stage, label, file_path)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """, (batch_id, account_id, site_id, survey_num, stage, label, file_path))
+                conn.commit()
+    except Exception as e:
+        logger.error(f"save_batch_screenshot: {e}")
+
+
+def get_batches_filtered(account_id: int = None, site_id: int = None,
+                         batch_id: str = None, limit: int = 100) -> List[Dict]:
+    """
+    Retrieve distinct batch records with optional filters.
+    Returns list of dicts with batch_id, account_id, username, site_id, site_name, first_seen, log_count, screenshot_count.
+    """
+    query = """
+        SELECT DISTINCT
+            br.batch_id,
+            br.account_id,
+            a.username,
+            br.site_id,
+            ss.site_name,
+            MIN(br.created_at) as first_seen,
+            COUNT(DISTINCT bl.log_id) as log_count,
+            COUNT(DISTINCT bs.screenshot_id) as screenshot_count
+        FROM batch_logs br
+        JOIN accounts a ON br.account_id = a.account_id
+        JOIN survey_sites ss ON br.site_id = ss.site_id
+        LEFT JOIN batch_logs bl ON bl.batch_id = br.batch_id
+        LEFT JOIN batch_screenshots bs ON bs.batch_id = br.batch_id
+        WHERE 1=1
+    """
+    params = []
+    if account_id:
+        query += " AND br.account_id = %s"
+        params.append(account_id)
+    if site_id:
+        query += " AND br.site_id = %s"
+        params.append(site_id)
+    if batch_id:
+        query += " AND br.batch_id = %s"
+        params.append(batch_id)
+    query += " GROUP BY br.batch_id, br.account_id, a.username, br.site_id, ss.site_name ORDER BY first_seen DESC LIMIT %s"
+    params.append(limit)
+
+    try:
+        with get_postgres() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as c:
+                c.execute(query, params)
+                return [dict(row) for row in c.fetchall()]
+    except Exception as e:
+        logger.error(f"get_batches_filtered: {e}")
+        return []
+
+
+def get_batch_logs(batch_id: str) -> List[Dict]:
+    """Retrieve all logs for a specific batch."""
+    try:
+        with get_postgres() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as c:
+                c.execute("""
+                    SELECT log_id, log_level, message, created_at
+                    FROM batch_logs
+                    WHERE batch_id = %s
+                    ORDER BY created_at ASC
+                """, (batch_id,))
+                return [dict(row) for row in c.fetchall()]
+    except Exception as e:
+        logger.error(f"get_batch_logs: {e}")
+        return []
+
+
+def get_batch_screenshots(batch_id: str) -> List[Dict]:
+    """Retrieve all screenshots for a specific batch, ordered by created_at."""
+    try:
+        with get_postgres() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as c:
+                c.execute("""
+                    SELECT screenshot_id, survey_num, stage, label, file_path, created_at
+                    FROM batch_screenshots
+                    WHERE batch_id = %s
+                    ORDER BY created_at ASC
+                """, (batch_id,))
+                return [dict(row) for row in c.fetchall()]
+    except Exception as e:
+        logger.error(f"get_batch_screenshots: {e}")
+        return []

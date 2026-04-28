@@ -9,43 +9,41 @@ import os
 from datetime import datetime
 
 from .constants import SCREENSHOT_LABELS, STATUS_COMPLETE, STATUS_PASSED, STATUS_FAILED, STATUS_PENDING, STATUS_ERROR
+from .db_utils import get_batches_filtered, get_batch_logs, get_batch_screenshots
+from .collage_utils import create_collage, build_screenshot_flow
 
 
 def display_batch_details(batch_id: str, batches_state: dict, screenshot_labels: dict = None, key_suffix: str = ""):
-    """Display logs and screenshots for a given batch."""
-    batch = batches_state.get(batch_id)
-    if not batch:
-        st.info("No data recorded for this batch yet.")
-        return
+    """Display logs and screenshots for a given batch using DB data."""
     labels = screenshot_labels or SCREENSHOT_LABELS
-    st.caption(f"🕐 {batch.get('timestamp','?')}  |  👤 {batch.get('account','?')}  |  🌐 {batch.get('site','?')}")
-    shot_count = len(batch.get("screenshots", []))
-    tab_logs, tab_shots = st.tabs([f"📝 Logs", f"📸 Screenshots ({shot_count})"])
+    
+    # Fetch logs and screenshots from DB
+    logs = get_batch_logs(batch_id)
+    screenshots = get_batch_screenshots(batch_id)
+    
+    st.caption(f"🕐 Batch ID: {batch_id}")
+    shot_count = len(screenshots)
+    tab_logs, tab_shots = st.tabs([f"📝 Logs ({len(logs)})", f"📸 Screenshots ({shot_count})"])
+    
     with tab_logs:
-        logs = batch.get("logs", [])
         if logs:
-            st.code("\n".join(logs), language="log")
+            log_text = "\n".join([f"[{l['created_at'].strftime('%H:%M:%S')}] {l['log_level']}: {l['message']}" for l in logs])
+            st.code(log_text, language="log")
             st.download_button(
                 "⬇️ Download logs",
-                "\n".join(logs),
+                log_text,
                 f"logs_{batch_id}.txt",
                 key=f"dl_log_{batch_id}{key_suffix}_ui",
             )
         else:
             st.info("No logs stored for this batch.")
+    
     with tab_shots:
-        shots = batch.get("screenshots", [])
-        if shots:
-            for i, shot in enumerate(shots):
-                if isinstance(shot, dict):
-                    img_path = shot.get("path", "")
-                    stage = shot.get("stage", "")
-                    display_label = shot.get("label") or labels.get(stage, stage)
-                else:
-                    _, img_path, stage = shot
-                    display_label = labels.get(stage, stage)
-
-                st.markdown(f"**{display_label}**")
+        if screenshots:
+            for shot in screenshots:
+                img_path = shot["file_path"]
+                display_label = shot["label"]
+                st.markdown(f"**{display_label}** (Survey #{shot['survey_num'] if shot['survey_num'] > 0 else 'pre'})")
                 if os.path.exists(img_path):
                     st.image(img_path, use_container_width=True)
                     with open(img_path, "rb") as f:
@@ -53,9 +51,9 @@ def display_batch_details(batch_id: str, batches_state: dict, screenshot_labels:
                     st.download_button(
                         f"⬇️ {display_label}.png",
                         img_bytes,
-                        f"ss_{batch_id}_{i}_{stage}.png",
+                        f"ss_{batch_id}_{shot['screenshot_id']}.png",
                         mime="image/png",
-                        key=f"dl_ss_{batch_id}{key_suffix}_ui_{i}",
+                        key=f"dl_ss_{batch_id}{key_suffix}_ui_{shot['screenshot_id']}",
                     )
                 else:
                     st.warning(f"Screenshot file missing: {img_path}")
